@@ -1,0 +1,11 @@
+# files
+*.pyc
+*.ipynb_checkpoints
+.DS_Store
+.env
+
+# folders
+.pytest_cache/
+.vscode/
+_build/
+_pycache_/
