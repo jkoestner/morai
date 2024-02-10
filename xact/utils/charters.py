@@ -60,6 +60,7 @@ def chart(
     -------
     fig : Figure
         The chart
+
     """
     # heatmap sum values are color rather than y_axis
     if type == "heatmap":
@@ -154,6 +155,7 @@ def compare_rates(
     -------
     fig : Figure
         The chart
+
     """
     # Group and calculate weighted means
     grouped_df = (
@@ -228,6 +230,7 @@ def histogram(df, cols=1, features=None, sum_var=None):
     -------
     fig : Figure
         The chart
+
     """
     # get the features for the plot
     if features is None:
@@ -281,6 +284,7 @@ def pdp(model, X, feature, mapping=None):
     -------
     fig : Figure
         The chart
+
     """
     logger.info(f"Creating partial dependence plot for {feature}")
     # get values that variable has
@@ -312,6 +316,8 @@ def pdp(model, X, feature, mapping=None):
     if mapping and feature in mapping:
         reversed_mapping = {v: k for k, v in mapping[feature].items()}
         plot_df[feature] = plot_df[feature].map(reversed_mapping)
+
+    plot_df = plot_df.sort_values(by=feature)
 
     # Create the plot using Plotly Express
 
@@ -348,6 +354,7 @@ def scatter(df, target, numeric=True, sample_nbr=100, cols=3):
     -------
     fig : Figure
         The chart
+
     """
     if sample_nbr:
         sample_amt = sample_nbr / len(df)
@@ -402,6 +409,7 @@ def target(df, features=None, target=None, cols=3):
     -------
     fig : Figure
         The chart
+
     """
     if features is None:
         features = df.columns
@@ -457,6 +465,7 @@ def _weighted_mean(values, weights):
     -------
     weighted_mean : float
         The weighted mean
+
     """
     if np.sum(weights) == 0:
         return np.nan

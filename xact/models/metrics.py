@@ -33,6 +33,7 @@ def smape(y_true, y_pred, epsilon=1e-10):
     -------
     smape : float
         The sMAPE
+
     """
     denominator = (y_true.abs() + y_pred.abs()) / 2 + epsilon
     return np.mean((y_true - y_pred).abs() / denominator)
@@ -66,6 +67,7 @@ def get_metrics(y_true, y_pred, metrics, **kwargs):
     -------
     metric_dict : dict
         The metric dictionary
+
     """
     metric_dict = {}
     for metric in metrics:
