@@ -36,6 +36,7 @@ class GLM:
             The target
         weights : pd.Series, optional
             The weights
+
         """
         logger.info("initialzed GLM and add constant to X")
         self.X = sm.add_constant(X)
@@ -55,6 +56,7 @@ class GLM:
             The family
         kwargs : dict
             Additional keyword arguments
+
         """
         X = self.X
         y = self.y
@@ -87,6 +89,7 @@ class GLM:
         -------
         odds_ratio : pd.DataFrame
             The odds ratio
+
         """
         if self.model is None:
             raise ValueError("model is not fitted use get_model method")
@@ -99,15 +102,16 @@ class GLM:
         # displaying chart of odds ratio
         if display:
             coef_df = pd.DataFrame(
-                {"Feature": model.params.index[1:], "Coefficient": model.params[1:]}
+                {"feature": model.params.index[1:], "coefficient": model.params[1:]}
             )
+            coef_df = coef_df.sort_values("coefficient", ascending=False)
 
             odds_ratio = px.bar(
                 coef_df,
-                x="Feature",
-                y="Coefficient",
+                x="feature",
+                y="coefficient",
                 title="Feature Importance",
-                labels={"Coefficient": "Coefficient Value", "Feature": "Features"},
+                labels={"coefficient": "Coefficient Value", "feature": "Features"},
             )
 
         return odds_ratio
@@ -141,6 +145,7 @@ class LeeCarter:
             The column name for the actual values
         expose_col : str, optional
             The column name for the exposure values
+
         """
         logger.info("initialized LeeCarter")
         self.age_col = age_col
@@ -148,12 +153,13 @@ class LeeCarter:
         self.actual_col = actual_col
         self.expose_col = expose_col
         # calculations
-        self.crude_df = None
         self.a_x = None
         self.k_t = None
         self.b_x = None
         self.b_x_k_t = None
         self.lc_df = None
+        # forecast
+        self.k_t_i = None
 
     def structure_df(
         self,
@@ -162,8 +168,8 @@ class LeeCarter:
         """
         Structure the data for the Lee Carter model.
 
-        The Lee Carter model requires the data to be the mortality rates with
-        the columns as the attained age and the rows as the observation year.
+        The Lee Carter model requires the data to be grouped by the attained
+        age and observation year. The mortality rates are then calculated.
 
         Parameters
         ----------
@@ -172,11 +178,12 @@ class LeeCarter:
 
         Returns
         -------
-        crude_df : pd.DataFrame
-            lee carter data frame
+        lc_df : pd.DataFrame
+            lee carter data frame with qx_raw rates
+
         """
         logger.info("grouping data by age and year")
-        crude_df = (
+        lc_df = (
             df.groupby([self.age_col, self.year_col], observed=True)[
                 [self.actual_col, self.expose_col]
             ]
@@ -184,28 +191,28 @@ class LeeCarter:
             .reset_index()
         )
         logger.info("calculating qx_raw rates")
-        crude_df["qx_raw"] = np.where(
-            crude_df[self.actual_col] == 0,
+        lc_df["qx_raw"] = np.where(
+            lc_df[self.actual_col] == 0,
             0,
-            crude_df[self.actual_col] / crude_df[self.expose_col],
+            lc_df[self.actual_col] / lc_df[self.expose_col],
         )
         logger.info(
-            f"there were {len(crude_df[crude_df['qx_raw']>1])} rates "
+            f"there were {len(lc_df[lc_df['qx_raw']>1])} rates "
             f"over 1 that were capped."
         )
-        crude_df["qx_raw"] = crude_df["qx_raw"].clip(upper=1)
-        self.crude_df = crude_df
-        logger.info(f"crude_df shape: {self.crude_df.shape}")
+        lc_df["qx_raw"] = lc_df["qx_raw"].clip(upper=1)
+        self.lc_df = lc_df
+        logger.info(f"crude_df shape: {self.lc_df.shape}")
 
-        return self.crude_df
+        return self.lc_df
 
-    def get_forecast(self, crude_df):
+    def fit(self, lc_df):
         """
-        Get the forecasted mortality rates.
+        Fit the LeeCarter model from a crude_df which will add the qx_lc rates.
 
         Parameters
         ----------
-        crude_df : pd.DataFrame
+        lc_df : pd.DataFrame
             A DataFrame containing crude mortality rates for a given population.
             - rows: year
             - columns: age
@@ -213,12 +220,16 @@ class LeeCarter:
         Returns
         -------
         lc_df : pd.DataFrame
-            A DataFrame containing the forecasted mortality rates.
-            - rows: year
-            - columns: age
+            A DataFrame containing the LeeCarter mortality rates.
+
         """
+        # checks if models have data needed
+        if self.year_col not in lc_df.columns or self.age_col not in lc_df.columns:
+            raise ValueError(f"{self.age_col} and {self.year_col} are required")
+
+        # initialize the variables
         logger.info("creating Lee Carter model with qx_raw rates...")
-        crude_pivot = crude_df.pivot(
+        crude_pivot = lc_df.pivot(
             index=self.year_col, columns=self.age_col, values="qx_raw"
         )
 
@@ -267,10 +278,10 @@ class LeeCarter:
         )
         qx_lc = np.exp(qx_log_lc)
 
-        # adding predictions to crude_df
-        logger.info("adding qx_lc to crude_df")
+        # adding predictions to lc_df
+        logger.info("adding qx_lc to lc_df")
         lc_df = pd.merge(
-            crude_df,
+            lc_df,
             qx_lc.reset_index().melt(
                 id_vars=self.year_col, var_name=self.age_col, value_name="qx_lc"
             ),
@@ -278,6 +289,110 @@ class LeeCarter:
             how="left",
         ).astype({self.age_col: "int32", self.year_col: "int32"})
         self.lc_df = lc_df
+
+        return lc_df
+
+    def forecast(self, years):
+        """
+        Forecast the mortality rates using deterministic random walk.
+
+        Parameters
+        ----------
+        years : int
+            The amount of years to forecast LeeCarter model
+
+        Returns
+        -------
+        lcf_df : pd.DataFrame
+            A DataFrame containing the forecasted LeeCarter mortality rates.
+
+        """
+        # checks if models have data needed
+        if self.lc_df is None:
+            raise ValueError(
+                "model is not fitted use fit method please use fit() method"
+            )
+
+        # initialize the variables
+        variance = 0
+        year_cols = list(range(self.k_t.index[-1] + 1, self.k_t.index[-1] + years + 1))
+
+        logger.info("forecasting qx_lc using deterministic random walk...")
+        # average change in k_t
+        mu = (self.k_t.iloc[-1] - self.k_t.iloc[0]) / len(self.k_t)
+
+        # random walk
+        rng = np.random.default_rng()
+        k_t_i = (
+            self.k_t.iloc[-1]
+            + mu * np.arange(1, years + 1)
+            + rng.normal(scale=variance, size=years)
+        )
+        self.k_t_i = k_t_i
+
+        # qx_lc forecast
+        b_x_k_t_i = pd.DataFrame(np.outer(self.b_x, k_t_i))
+        b_x_k_t_i = b_x_k_t_i.transpose()
+        qx_log_lc = self.a_x.values + b_x_k_t_i.values
+        qx_lc = np.exp(qx_log_lc)
+
+        lcf_df = pd.DataFrame(
+            qx_lc,
+            index=year_cols,
+            columns=self.b_x_k_t.columns,
+        )
+        lcf_df.index.name = self.year_col
+        lcf_df.reset_index().melt(
+            id_vars=self.year_col, var_name=self.age_col, value_name="qx_lc"
+        )
+
+        return lcf_df
+
+    def map(self, df, age_col=None, year_col=None):
+        """
+        Map the mortality rates from the Lee Carter model.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            A DataFrame containing the data to predict.
+        age_col : str, optional
+            The column name for the attained age
+        year_col : str, optional
+            The column name for the observation year
+
+        Returns
+        -------
+        lc_df : pd.DataFrame
+            A DataFrame containing the predicted mortality rates.
+
+        """
+        if age_col is None:
+            age_col = self.age_col
+        if year_col is None:
+            year_col = self.year_col
+        lc_df = self.lc_df
+
+        # checks if models have data needed
+        if lc_df is None:
+            raise ValueError(
+                "model is not fitted use fit method please use fit() method"
+            )
+        if year_col not in lc_df.columns or age_col not in lc_df.columns:
+            raise ValueError(f"{age_col} and {year_col} are required")
+
+        # map rates to df
+        logger.info("mapping qx_lc to df")
+        lc_df = lc_df.rename(columns={self.age_col: age_col, self.year_col: year_col})
+        lc_df = pd.merge(
+            df,
+            lc_df[[age_col, year_col, "qx_lc"]],
+            on=[age_col, year_col],
+            how="left",
+            suffixes=("old", ""),
+        )
+        if "qx_lc_old" in lc_df.columns:
+            lc_df.drop(columns=["qx_lc_old"], inplace=True)
 
         return lc_df
 
@@ -310,6 +425,7 @@ class CBD:
             The column name for the actual values
         expose_col : str, optional
             The column name for the exposure values
+
         """
         logger.info("initialized CBD")
         self.age_col = age_col
@@ -342,6 +458,7 @@ class CBD:
         -------
         crude_df : pd.DataFrame
             lee carter data frame
+
         """
         logger.info("grouping data by age and year")
         crude_df = (
@@ -384,6 +501,7 @@ class CBD:
             A DataFrame containing the forecasted mortality rates.
             - rows: year
             - columns: age
+
         """
         logger.info("creating CBD model with qx_raw rates...")
         crude_pivot = crude_df.pivot(
@@ -462,5 +580,6 @@ class CBD:
         -------
         logit : float
             The logit value
+
         """
         return np.log(a / (1 - a))

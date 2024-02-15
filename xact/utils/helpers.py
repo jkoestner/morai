@@ -1,9 +1,17 @@
 """Collection of helpers."""
 import logging
+import os
 from pathlib import Path
+
+import numpy as np
 
 ROOT_PATH = Path(__file__).resolve().parent.parent.parent
 TESTS_PATH = ROOT_PATH / "tests" / "files"
+
+logging.config.fileConfig(
+    os.path.join(ROOT_PATH, "logging.ini"),
+)
+logger = logging.getLogger(__name__)
 
 
 def set_log_level(new_level):
@@ -44,9 +52,37 @@ def clean_df(df, lowercase=True, underscore=True):
     -------
     df : pd.DataFrame
         The cleaned DataFrame.
+
     """
     if lowercase:
+        logger.info("lowercasing the column names")
         df.columns = df.columns.str.lower()
     if underscore:
+        logger.info("replacing spaces with underscores in the column names")
         df.columns = df.columns.str.replace(" ", "_")
     return df
+
+
+def _weighted_mean(values, weights):
+    """
+    Calculate the weighted mean.
+
+    Parameters
+    ----------
+    values : list, numpy array
+        The values to use.
+    weights : list, numpy array, or None
+        The weights to use.
+
+    Returns
+    -------
+    weighted_mean : float
+        The weighted mean
+
+    """
+    if weights is None:
+        return np.mean(values)
+    if np.sum(weights) == 0:
+        return np.nan
+    else:
+        return np.average(values, weights=weights)

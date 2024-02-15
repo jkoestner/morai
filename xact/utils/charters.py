@@ -24,9 +24,8 @@ def chart(
     y_axis=None,
     color=None,
     type="line",
-    actual=None,
-    expected=None,
-    exposure=None,
+    numerator=None,
+    denominator=None,
     title=None,
     **kwargs,
 ):
@@ -41,16 +40,15 @@ def chart(
         The column name to use for the x-axis.
     y_axis : str
         The column name to use for the y-axis.
+        "ratio" is a special value that will calculate the ratio of two columns.
     color : str, optional (default=None)
         The column name to use for the color.
     type : str, optional (default="line")
         The type of chart to create. Options are "line" or "bar".
-    actual : str
-        The column name to use for the actual values.
-    expected : str
+    numerator : str, optional (default=None)
+        The column name to use for the numerator values.
+    denominator : str, optional (default=None)
         The column name to use for the expected values.
-    exposure : str
-        The column name to use for the exposure values.
     title : str
         The title of the chart.
     **kwargs : dict
@@ -72,7 +70,8 @@ def chart(
         y_axis = _color
 
     # getting the columns to sum by
-    sum_col_dict = {"ae": [actual, expected], "qx": [actual, exposure]}
+    # columns will be y_axis is not the special "ratio" values
+    sum_col_dict = {"ratio": [numerator, denominator]}
     sum_cols = sum_col_dict.get(y_axis, y_axis)
 
     # groupby by the x_axis and color
@@ -86,8 +85,8 @@ def chart(
 
     # calculating fields
     if y_axis in sum_col_dict:
-        actual, expected = sum_col_dict[y_axis]
-        grouped_data[y_axis] = grouped_data[actual] / grouped_data[expected]
+        numerator, denominator = sum_col_dict[y_axis]
+        grouped_data[y_axis] = grouped_data[numerator] / grouped_data[denominator]
 
     # Selecting the plot type based on the 'chart_type' parameter
     if type == "line":
@@ -132,24 +131,27 @@ def compare_rates(
     df,
     variable,
     rates,
-    weights="amount_exposed",
-    secondary="policies_exposed",
+    weights=None,
+    secondary=None,
 ):
     """
     Compare rates by a variable.
+
+    When using qx the weight should be the exposure.
+    When using ae the weight should be the expected.
 
     Parameters
     ----------
     df : pd.DataFrame
         The DataFrame to use.
     variable : str
-        The column name for the variable to compare by.
+        The name for the column to compare by.
     rates : list
-        The column names for the rates to compare.
-    weights : str (default="amount_exposed")
-        The column name for the weights to use.
-    secondary : str (default="policies_exposed")
-        The column name for the secondary y-axis.
+        A list of rates to compare
+    weights : list, optional (default=None)
+        A list of weights to weight the rates by.
+    secondary : str, optional (default=None)
+        The name of the column to have a secondary y-axis for.
 
     Returns
     -------
@@ -157,6 +159,13 @@ def compare_rates(
         The chart
 
     """
+    # Checking if weights list length matches the rates list
+    if weights is not None and len(rates) != len(weights):
+        logger.info(
+            f"The weights list is {len(weights)} long and should "
+            f"be {len(rates)} long. Using the first weight for all weights."
+        )
+        weights = [weights[0]] * len(rates)
     # Group and calculate weighted means
     grouped_df = (
         df.groupby([variable], observed=True)
@@ -164,10 +173,12 @@ def compare_rates(
             lambda x: pd.Series(
                 {
                     **{
-                        rate: _weighted_mean(x[rate], weights=x[weights])
-                        if weights
+                        rate: helpers._weighted_mean(x[rate], weights=x[weight])
+                        if weight
                         else x[rate].mean()
-                        for rate in rates
+                        for rate, weight in zip(
+                            rates, [None] * len(rates) if weights is None else weights
+                        )
                     },
                     **{secondary: x[secondary].sum() if secondary else None},  # noqa: PIE800
                 }
@@ -269,6 +280,8 @@ def pdp(model, X, feature, mapping=None):
     """
     Create a partial dependence plot (PDP) for the DataFrame.
 
+    reference: https://christophm.github.io/interpretable-ml-book/pdp.html
+
     Parameters
     ----------
     model : model
@@ -286,12 +299,27 @@ def pdp(model, X, feature, mapping=None):
         The chart
 
     """
-    logger.info(f"Creating partial dependence plot for {feature}")
+    feature_type = "passthrough"
+    if feature not in X.columns:
+        logger.error(f"Feature [{feature}] not found in X.")
+        raise ValueError(f"Feature [{feature}] not found in X.")
+
     # get values that variable has
+    # mapping stores the weighted mean of the feature
     if mapping and feature in mapping:
-        feature_values = list(mapping[feature].values())
+        feature_type = mapping[feature]["type"]
+        if feature_type == "ohe":
+            # ohe values are in the suffix
+            feature_cols = [col for col in X.columns if col.startswith(feature + "_")]
+            feature_values = [col[len(feature + "_") :] for col in feature_cols]
+        else:
+            feature_values = list(mapping[feature]["values"].values())
+    # if the feature is not OHE or in the mapping, use the min and max values
     else:
         feature_values = np.linspace(X[feature].min(), X[feature].max(), 100)
+    logger.info(
+        f"Creating partial dependence plot for [{feature}] type: [{feature_type}]"
+    )
 
     # average value of features
     X_avg = X.mean()
@@ -300,11 +328,18 @@ def pdp(model, X, feature, mapping=None):
     preds = []
     for value in feature_values:
         X_temp = X_avg.copy()
-        X_temp[feature] = value
-        # Ensure X_temp is a DataFrame
+        if feature_type == "ohe":
+            # reset all OHE columns to 0 and make the target OHE column 1
+            for col in feature_cols:
+                X_temp[col] = 0
+            X_temp[feature + "_" + value] = 1
+        else:
+            X_temp[feature] = value
+
+        # ensure X_temp is a DataFrame
         if isinstance(X_temp, pd.Series):
             X_temp = X_temp.to_frame().T
-        # X_temp["const"] = 1
+
         pred = model.predict(X_temp)[0]
         preds.append(pred)
 
@@ -313,8 +348,8 @@ def pdp(model, X, feature, mapping=None):
     plot_df = pd.DataFrame({feature: feature_values, "%_diff": percent_diff_from_mean})
 
     # use mapping to get the original feature values
-    if mapping and feature in mapping:
-        reversed_mapping = {v: k for k, v in mapping[feature].items()}
+    if mapping and feature in mapping and feature_type != "ohe":
+        reversed_mapping = {v: k for k, v in mapping[feature]["values"].items()}
         plot_df[feature] = plot_df[feature].map(reversed_mapping)
 
     plot_df = plot_df.sort_values(by=feature)
@@ -333,7 +368,7 @@ def pdp(model, X, feature, mapping=None):
     return fig
 
 
-def scatter(df, target, numeric=True, sample_nbr=100, cols=3):
+def scatter(df, target, features, sample_nbr=100, cols=3):
     """
     Create scatter plots for the DataFrame.
 
@@ -343,8 +378,8 @@ def scatter(df, target, numeric=True, sample_nbr=100, cols=3):
         The DataFrame to use.
     target : str
         The target variable.
-    numeric : bool, optional
-        Whether to use numeric features.
+    features : list
+        Features to create scatter plots for.
     sample_nbr : float, optional
         The sample amount to use.
     cols : int, optional
@@ -359,12 +394,6 @@ def scatter(df, target, numeric=True, sample_nbr=100, cols=3):
     if sample_nbr:
         sample_amt = sample_nbr / len(df)
         df = df.sample(frac=sample_amt)
-    # Finding features
-    numeric_dtypes = ["int16", "int32", "int64", "float16", "float32", "float64"]
-    if numeric:
-        features = [i for i in df.columns if df[i].dtype in numeric_dtypes]
-    else:
-        features = [i for i in df.columns if df[i].dtype not in numeric_dtypes]
 
     # Number of rows for the subplot grid
     num_plots = len(features)
@@ -390,7 +419,7 @@ def scatter(df, target, numeric=True, sample_nbr=100, cols=3):
     return fig
 
 
-def target(df, features=None, target=None, cols=3):
+def target(df, target, features=None, cols=3):
     """
     Create multiplot showing variable relationship with target.
 
@@ -398,10 +427,10 @@ def target(df, features=None, target=None, cols=3):
     ----------
     df : pd.DataFrame
         The DataFrame to use.
-    features : list, optional
-        The features to use for the plot. Default is to use all features.
     target : str
         The target variable.
+    features : list, optional
+        The features to use for the plot. Default is to use all features.
     cols : int, optional
         The number of columns to use for the subplots.
 
@@ -413,9 +442,11 @@ def target(df, features=None, target=None, cols=3):
     """
     if features is None:
         features = df.columns
+    if target == "qx":
+        actual = "death_claim_count"
+        exposure = "policies_exposed"
     actual = "death_claim_amount"
     exposure = "amount_exposed"
-    target = "target"
 
     # Number of rows for the subplot grid
     num_plots = len(features)
@@ -429,10 +460,17 @@ def target(df, features=None, target=None, cols=3):
         row = (i - 1) // cols + 1
         col = (i - 1) % cols + 1
 
-        grouped_data = (
-            df.groupby(feature, observed=True)[[actual, exposure]].sum().reset_index()
-        )
-        grouped_data["target"] = grouped_data[actual] / grouped_data[exposure]
+        if target == "qx":
+            grouped_data = (
+                df.groupby(feature, observed=True)[[actual, exposure]]
+                .sum()
+                .reset_index()
+            )
+            grouped_data[target] = grouped_data[actual] / grouped_data[exposure]
+        else:
+            grouped_data = (
+                df.groupby(feature, observed=True)[target].mean().reset_index()
+            )
         fig.add_trace(
             go.Scatter(
                 x=grouped_data[feature],
@@ -448,25 +486,3 @@ def target(df, features=None, target=None, cols=3):
     fig.update_layout(height=300 * num_rows, title_text="Target Plots")
 
     return fig
-
-
-def _weighted_mean(values, weights):
-    """
-    Calculate the weighted mean.
-
-    Parameters
-    ----------
-    values : list
-        The values to use.
-    weights : list
-        The weights to use.
-
-    Returns
-    -------
-    weighted_mean : float
-        The weighted mean
-
-    """
-    if np.sum(weights) == 0:
-        return np.nan
-    return np.average(values, weights=weights)

@@ -1,4 +1,4 @@
 # removing the following files from github's language stats
-
 docs/* linguist-vendored
-notebook/* linguist-vendored
+notebooks/* linguist-vendored
+*.ipynb filter=lfs diff=lfs merge=lfs -text
