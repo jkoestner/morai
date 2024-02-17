@@ -1,20 +1,13 @@
 """Creates models for forecasting mortality rates."""
-import logging
-import logging.config
-import os
-
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
-from xact.utils import helpers
+from xact.utils import custom_logger
 
-logging.config.fileConfig(
-    os.path.join(helpers.ROOT_PATH, "logging.ini"),
-)
-logger = logging.getLogger(__name__)
+logger = custom_logger.setup_logging()
 
 
 class GLM:
@@ -680,18 +673,22 @@ class CBD:
             + mu[0] * np.arange(1, years + 1)
             + rng.normal(scale=variance, size=years)
         )
+        k_1_f = pd.Series(data=k_1_f, index=year_cols)
+        k_1_f.index.name = self.year_col
         k_2_f = (
             self.k_t_2.iloc[-1]
             + mu[1] * np.arange(1, years + 1)
             + rng.normal(scale=variance, size=years)
         )
+        k_2_f = pd.Series(data=k_2_f, index=year_cols)
+        k_2_f.index.name = self.year_col
         self.k_1_f = k_1_f
         self.k_2_f = k_2_f
 
         # qx_logit
         logger.debug("calculating qx_logit_cbd = k_t_1 + (age - age_mean) * k_t_2")
-        qx_logit_cbd = k_1_f[:, np.newaxis] + (
-            self.age_diff.values * k_2_f[:, np.newaxis]
+        qx_logit_cbd = k_1_f.values[:, np.newaxis] + (
+            self.age_diff.values * k_2_f.values[:, np.newaxis]
         )
         qx_logit_cbd = pd.DataFrame(qx_logit_cbd, index=year_cols, columns=self.ages)
 

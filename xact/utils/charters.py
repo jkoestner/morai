@@ -1,8 +1,5 @@
 """Collection of visualization tools."""
-import logging
-import logging.config
 import math
-import os
 
 import numpy as np
 import pandas as pd
@@ -10,12 +7,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from xact.utils import helpers
+from xact.utils import custom_logger, helpers
 
-logging.config.fileConfig(
-    os.path.join(helpers.ROOT_PATH, "logging.ini"),
-)
-logger = logging.getLogger(__name__)
+logger = custom_logger.setup_logging()
 
 
 def chart(
