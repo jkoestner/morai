@@ -276,7 +276,7 @@ def histogram(df, cols=1, features=None, sum_var=None):
     return fig
 
 
-def pdp(model, X, feature, mapping=None):
+def pdp(model, X, feature, mapping=None, weights=None):
     """
     Create a partial dependence plot (PDP) for the DataFrame.
 
@@ -292,6 +292,8 @@ def pdp(model, X, feature, mapping=None):
         The feature to create the PDP for.
     mapping : dict, optional (default=None)
         The mapping to use for the feature.
+    weights : str, optional (default=None)
+        The weights to use for the feature.
 
     Returns
     -------
@@ -300,12 +302,8 @@ def pdp(model, X, feature, mapping=None):
 
     """
     feature_type = "passthrough"
-    if feature not in X.columns:
-        logger.error(f"Feature [{feature}] not found in X.")
-        raise ValueError(f"Feature [{feature}] not found in X.")
 
-    # get values that variable has
-    # mapping stores the weighted mean of the feature
+    # extract the feature values
     if mapping and feature in mapping:
         feature_type = mapping[feature]["type"]
         if feature_type == "ohe":
@@ -322,9 +320,12 @@ def pdp(model, X, feature, mapping=None):
     )
 
     # average value of features
-    X_avg = X.mean()
+    X_avg = X.apply(lambda x: helpers._weighted_mean(x, weights=weights))
+    if isinstance(X_avg.dtype, pd.SparseDtype):
+        X_avg = X_avg.sparse.to_dense()
 
-    # calculate predictions
+    # calculate predictions of feature by looping through the feature values
+    # and using the average of the other features
     preds = []
     for value in feature_values:
         X_temp = X_avg.copy()
@@ -419,7 +420,7 @@ def scatter(df, target, features, sample_nbr=100, cols=3):
     return fig
 
 
-def target(df, target, features=None, cols=3):
+def target(df, target, features=None, cols=3, numerator=None, denominator=None):
     """
     Create multiplot showing variable relationship with target.
 
@@ -433,6 +434,10 @@ def target(df, target, features=None, cols=3):
         The features to use for the plot. Default is to use all features.
     cols : int, optional
         The number of columns to use for the subplots.
+    numerator : str, optional
+        The column name to use for the numerator values.
+    denominator : str, optional
+        The column name to use for the expected values.
 
     Returns
     -------
@@ -440,13 +445,13 @@ def target(df, target, features=None, cols=3):
         The chart
 
     """
+    if target != "ratio" and target not in df.columns:
+        raise ValueError(
+            f"Target '{target}' needs to be in DataFrame columns or 'ratio'"
+        )
+    # features to use for the plot
     if features is None:
         features = df.columns
-    if target == "qx":
-        actual = "death_claim_count"
-        exposure = "policies_exposed"
-    actual = "death_claim_amount"
-    exposure = "amount_exposed"
 
     # Number of rows for the subplot grid
     num_plots = len(features)
@@ -460,13 +465,13 @@ def target(df, target, features=None, cols=3):
         row = (i - 1) // cols + 1
         col = (i - 1) % cols + 1
 
-        if target == "qx":
+        if target == "ratio":
             grouped_data = (
-                df.groupby(feature, observed=True)[[actual, exposure]]
+                df.groupby(feature, observed=True)[[numerator, denominator]]
                 .sum()
                 .reset_index()
             )
-            grouped_data[target] = grouped_data[actual] / grouped_data[exposure]
+            grouped_data[target] = grouped_data[numerator] / grouped_data[denominator]
         else:
             grouped_data = (
                 df.groupby(feature, observed=True)[target].mean().reset_index()

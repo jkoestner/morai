@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import statsmodels.api as sm
+import statsmodels.formula.api as smf
 
 from xact.utils import helpers
 
@@ -24,6 +25,8 @@ class GLM:
         X,
         y,
         weights=None,
+        r_style=True,
+        mapping=None,
     ):
         """
         Initialize the model.
@@ -36,6 +39,10 @@ class GLM:
             The target
         weights : pd.Series, optional
             The weights
+        r_style : bool, optional
+            Whether to use R-style formulas
+        mapping : dict, optional
+            The mapping of the features to the encoding
 
         """
         logger.info("initialzed GLM and add constant to X")
@@ -43,6 +50,8 @@ class GLM:
         self.y = y
         self.weights = weights
         self.model = None
+        self.r_style = r_style
+        self.mapping = mapping
 
     def fit_model(self, family=None, **kwargs):
         """
@@ -64,17 +73,76 @@ class GLM:
         if family is None:
             family = sm.families.Binomial()
         logger.info(f"fitting GLM model with statsmodels and {family} family...")
-        model = sm.GLM(
-            y,
-            X,
-            family=sm.families.Binomial(),
-            freq_weights=weights,
-            **kwargs,
-        ).fit()
+
+        # using either r-style or python-style formula
+        if self.r_style:
+            model_data = pd.concat([y, X], axis=1)
+            formula = self.get_formula()
+            model = smf.glm(
+                formula=formula,
+                data=model_data,
+                family=family,
+                freq_weights=weights,
+                **kwargs,
+            ).fit()
+        else:
+            model = sm.GLM(
+                endog=y,
+                exog=X,
+                family=sm.families.Binomial(),
+                freq_weights=weights,
+                **kwargs,
+            ).fit()
 
         self.model = model
 
         return model
+
+    def get_formula(self):
+        """
+        Get the formula for the GLM model.
+
+        Returns
+        -------
+        formula : str
+            The formula
+
+        """
+        y = self.y
+        X = self.X
+        # creating formula that uses categories and passthrough
+        if self.mapping:
+            cat_pass_keys = {
+                key: value
+                for key, value in self.mapping.items()
+                if value["type"] == "cat_pass"
+            }
+            other_keys = {
+                key: value
+                for key, value in self.mapping.items()
+                if value["type"] != "cat_pass"
+            }
+            non_categorical_part = " + ".join(other_keys) if other_keys else ""
+            categorical_part = (
+                " + ".join([f"C({key})" for key in cat_pass_keys])
+                if cat_pass_keys
+                else ""
+            )
+
+            if non_categorical_part and categorical_part:
+                formula = f"{y.name} ~ {non_categorical_part} + {categorical_part}"
+            elif non_categorical_part:
+                formula = f"{y.name} ~ {non_categorical_part}"
+            elif categorical_part:
+                formula = f"{y.name} ~ {categorical_part}"
+            else:
+                formula = f"{y.name} ~ 1"
+        else:
+            formula = f"{y.name} ~ {' + '.join(X.columns)}"
+
+        logger.info(f"using R-style formula: {formula}")
+
+        return formula
 
     def get_odds(self, display=False):
         """
@@ -336,6 +404,7 @@ class LeeCarter:
         qx_log_lc = self.a_x.values + b_x_k_t_i.values
         qx_lc = np.exp(qx_log_lc)
 
+        # dataframe with forecast
         lcf_df = pd.DataFrame(
             qx_lc,
             index=year_cols,
@@ -389,7 +458,7 @@ class LeeCarter:
             lc_df[[age_col, year_col, "qx_lc"]],
             on=[age_col, year_col],
             how="left",
-            suffixes=("old", ""),
+            suffixes=("_old", ""),
         )
         if "qx_lc_old" in lc_df.columns:
             lc_df.drop(columns=["qx_lc_old"], inplace=True)
@@ -433,11 +502,14 @@ class CBD:
         self.actual_col = actual_col
         self.expose_col = expose_col
         # calculations
-        self.crude_df = None
-        self.x_bar = None
+        self.age_diff = None
+        self.ages = None
         self.k_t_1 = None
         self.k_t_2 = None
         self.cbd_df = None
+        # forecast
+        self.k_1_f = None
+        self.k_2_f = None
 
     def structure_df(
         self,
@@ -456,12 +528,12 @@ class CBD:
 
         Returns
         -------
-        crude_df : pd.DataFrame
-            lee carter data frame
+        cbd_df : pd.DataFrame
+            CBD data frame
 
         """
         logger.info("grouping data by age and year")
-        crude_df = (
+        cbd_df = (
             df.groupby([self.age_col, self.year_col], observed=True)[
                 [self.actual_col, self.expose_col]
             ]
@@ -469,31 +541,29 @@ class CBD:
             .reset_index()
         )
         logger.info("calculating qx_raw rates")
-        crude_df["qx_raw"] = np.where(
-            crude_df[self.actual_col] == 0,
+        cbd_df["qx_raw"] = np.where(
+            cbd_df[self.actual_col] == 0,
             0,
-            crude_df[self.actual_col] / crude_df[self.expose_col],
+            cbd_df[self.actual_col] / cbd_df[self.expose_col],
         )
         logger.info(
-            f"there were {len(crude_df[crude_df['qx_raw']>1])} rates "
+            f"there were {len(cbd_df[cbd_df['qx_raw']>1])} rates "
             f"over 1 that were capped."
         )
-        crude_df["qx_raw"] = crude_df["qx_raw"].clip(upper=1)
-        self.crude_df = crude_df
-        logger.info(f"crude_df shape: {self.crude_df.shape}")
+        cbd_df["qx_raw"] = cbd_df["qx_raw"].clip(upper=1)
+        self.cbd_df = cbd_df
+        logger.info(f"cbd_df shape: {self.cbd_df.shape}")
 
-        return self.crude_df
+        return self.cbd_df
 
-    def get_forecast(self, crude_df):
+    def fit(self, cbd_df):
         """
         Get the forecasted mortality rates.
 
         Parameters
         ----------
-        crude_df : pd.DataFrame
+        cbd_df : pd.DataFrame
             A DataFrame containing crude mortality rates for a given population.
-            - rows: year
-            - columns: age
 
         Returns
         -------
@@ -504,13 +574,14 @@ class CBD:
 
         """
         logger.info("creating CBD model with qx_raw rates...")
-        crude_pivot = crude_df.pivot(
+        crude_pivot = cbd_df.pivot(
             index=self.year_col, columns=self.age_col, values="qx_raw"
         )
 
         year_start = crude_pivot.index.min()
         year_end = crude_pivot.index.max()
         ages = crude_pivot.columns
+        self.ages = ages
         age_start = int(ages.min())
         age_end = int(ages.max())
         age_mean = ages.to_series().mean()
@@ -535,6 +606,7 @@ class CBD:
             "e2 = Σ((age - age_mean)^2)"
         )
         age_diff = ages - age_mean
+        self.age_diff = age_diff
         e1 = (age_diff * qx_logit).sum(axis=1)
         e2 = (age_diff.values**2).sum()
         k_t_2 = e1 / e2
@@ -553,10 +625,10 @@ class CBD:
         logger.debug("calculating qx_cbd = exp(qx_logit_cbd) / (1 + exp(qx_logit_cbd))")
         qx_cbd = np.exp(qx_logit_cbd) / (1 + np.exp(qx_logit_cbd))
 
-        # adding predictions to crude_df
-        logger.info("adding qx_cbd to crude_df")
+        # adding predictions to cbd_df
+        logger.info("adding qx_cbd to cbd_df")
         cbd_df = pd.merge(
-            crude_df,
+            cbd_df,
             qx_cbd.reset_index().melt(
                 id_vars=self.year_col, var_name=self.age_col, value_name="qx_cbd"
             ),
@@ -564,6 +636,127 @@ class CBD:
             how="left",
         ).astype({self.age_col: "int32", self.year_col: "int32"})
         self.cbd_df = cbd_df
+
+        return cbd_df
+
+    def forecast(self, years):
+        """
+        Forecast the mortality rates using deterministic random walk.
+
+        Parameters
+        ----------
+        years : int
+            The amount of years to forecast CBD model
+
+        Returns
+        -------
+        cbd_df : pd.DataFrame
+            A DataFrame containing the forecasted CBD mortality rates.
+
+        """
+        # checks if models have data needed
+        if self.cbd_df is None:
+            raise ValueError(
+                "model is not fitted use fit method please use fit() method"
+            )
+
+        # initialize the variables
+        variance = 0
+        year_cols = list(
+            range(self.k_t_1.index[-1] + 1, self.k_t_1.index[-1] + years + 1)
+        )
+
+        logger.info("forecasting qx_cbd using deterministic random walk...")
+        # average change in k_t_1 and k_t_2
+        mu = [
+            (self.k_t_1.iloc[-1] - self.k_t_1.iloc[0]) / len(self.k_t_1),
+            (self.k_t_2.iloc[-1] - self.k_t_2.iloc[0]) / len(self.k_t_2),
+        ]
+
+        # random walk
+        rng = np.random.default_rng()
+        k_1_f = (
+            self.k_t_1.iloc[-1]
+            + mu[0] * np.arange(1, years + 1)
+            + rng.normal(scale=variance, size=years)
+        )
+        k_2_f = (
+            self.k_t_2.iloc[-1]
+            + mu[1] * np.arange(1, years + 1)
+            + rng.normal(scale=variance, size=years)
+        )
+        self.k_1_f = k_1_f
+        self.k_2_f = k_2_f
+
+        # qx_logit
+        logger.debug("calculating qx_logit_cbd = k_t_1 + (age - age_mean) * k_t_2")
+        qx_logit_cbd = k_1_f[:, np.newaxis] + (
+            self.age_diff.values * k_2_f[:, np.newaxis]
+        )
+        qx_logit_cbd = pd.DataFrame(qx_logit_cbd, index=year_cols, columns=self.ages)
+
+        # qx_cbd
+        logger.debug("calculating qx_cbd = exp(qx_logit_cbd) / (1 + exp(qx_logit_cbd))")
+        qx_cbd = np.exp(qx_logit_cbd) / (1 + np.exp(qx_logit_cbd))
+
+        # dataframe with forecast
+        cbdf_df = pd.DataFrame(
+            qx_cbd,
+            index=year_cols,
+            columns=self.ages,
+        )
+        cbdf_df.index.name = self.year_col
+        cbdf_df.reset_index().melt(
+            id_vars=self.year_col, var_name=self.age_col, value_name="qx_cbd"
+        )
+
+        return cbdf_df
+
+    def map(self, df, age_col=None, year_col=None):
+        """
+        Map the mortality rates from the CBD model.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            A DataFrame containing the data to predict.
+        age_col : str, optional
+            The column name for the attained age
+        year_col : str, optional
+            The column name for the observation year
+
+        Returns
+        -------
+        cbd_df : pd.DataFrame
+            A DataFrame containing the predicted mortality rates.
+
+        """
+        if age_col is None:
+            age_col = self.age_col
+        if year_col is None:
+            year_col = self.year_col
+        cbd_df = self.cbd_df
+
+        # checks if models have data needed
+        if cbd_df is None:
+            raise ValueError(
+                "model is not fitted use fit method please use fit() method"
+            )
+        if year_col not in cbd_df.columns or age_col not in cbd_df.columns:
+            raise ValueError(f"{age_col} and {year_col} are required")
+
+        # map rates to df
+        logger.info("mapping qx_cbd to df")
+        cbd_df = cbd_df.rename(columns={self.age_col: age_col, self.year_col: year_col})
+        cbd_df = pd.merge(
+            df,
+            cbd_df[[age_col, year_col, "qx_cbd"]],
+            on=[age_col, year_col],
+            how="left",
+            suffixes=("_old", ""),
+        )
+        if "qx_cbd_old" in cbd_df.columns:
+            cbd_df.drop(columns=["qx_cbd_old"], inplace=True)
 
         return cbd_df
 

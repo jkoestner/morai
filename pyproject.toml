@@ -115,6 +115,9 @@ ignore = [
     # ignore == False vs is False due to pandas series
     "E712",
     "ISC001",
+    # ruff too many branches and too many statements
+    "PLR0912",
+    "PLR0915",
 ]
 
 [tool.ruff.lint]
