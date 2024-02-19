@@ -10,10 +10,10 @@ from xact.utils import custom_logger
 ROOT_PATH = Path(__file__).resolve().parent.parent.parent
 TESTS_PATH = ROOT_PATH / "tests" / "files"
 
-logger = custom_logger.setup_logging()
+logger = custom_logger.setup_logging(__name__)
 
 
-def clean_df(df, lowercase=True, underscore=True):
+def clean_df(df, lowercase=True, underscore=True, update_cat=True):
     """
     Clean the DataFrame.
 
@@ -25,6 +25,8 @@ def clean_df(df, lowercase=True, underscore=True):
         Whether to lowercase the column names.
     underscore : bool, optional (default=True)
         Whether to replace spaces with underscores in the column names.
+    update_cat : bool, optional (default=False)
+        Whether to remove unused categories.
 
     Returns
     -------
@@ -35,9 +37,23 @@ def clean_df(df, lowercase=True, underscore=True):
     if lowercase:
         logger.info("lowercasing the column names")
         df.columns = df.columns.str.lower()
+
     if underscore:
         logger.info("replacing spaces with underscores in the column names")
         df.columns = df.columns.str.replace(" ", "_")
+
+    if update_cat:
+        logger.info("removed unused categories and reorder")
+        for column in df.select_dtypes(include=["category"]).columns:
+            df[column] = df[column].cat.remove_unused_categories()
+            df[column] = df[column].cat.reorder_categories(
+                sorted(df[column].unique()), ordered=True
+            )
+
+    logger.info("update index to int32")
+    df.index = df.index.astype("int32")
+    logger.info(f"dataFrame shape: {df.shape}")
+
     return df
 
 

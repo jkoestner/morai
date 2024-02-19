@@ -9,7 +9,7 @@ from plotly.subplots import make_subplots
 
 from xact.utils import custom_logger, helpers
 
-logger = custom_logger.setup_logging()
+logger = custom_logger.setup_logging(__name__)
 
 
 def chart(
@@ -123,22 +123,24 @@ def chart(
 
 def compare_rates(
     df,
-    variable,
+    feature,
     rates,
     weights=None,
     secondary=None,
 ):
     """
-    Compare rates by a variable.
+    Compare rates by a feature.
 
-    When using qx the weight should be the exposure.
-    When using ae the weight should be the expected.
+    Note
+    ----
+      - When using qx the weight should be the exposure.
+      - When using ae the weight should be the expected.
 
     Parameters
     ----------
     df : pd.DataFrame
         The DataFrame to use.
-    variable : str
+    feature : str
         The name for the column to compare by.
     rates : list
         A list of rates to compare
@@ -153,16 +155,21 @@ def compare_rates(
         The chart
 
     """
-    # Checking if weights list length matches the rates list
+    # check if feature is in the DataFrame
+    if feature not in df.columns:
+        raise ValueError(f"Variable {feature} is not in the DataFrame.")
+
+    # check if weights list length matches the rates list
     if weights is not None and len(rates) != len(weights):
         logger.info(
             f"The weights list is {len(weights)} long and should "
             f"be {len(rates)} long. Using the first weight for all weights."
         )
         weights = [weights[0]] * len(rates)
-    # Group and calculate weighted means
+
+    # group and calculate weighted means
     grouped_df = (
-        df.groupby([variable], observed=True)
+        df.groupby([feature], observed=True)
         .apply(
             lambda x: pd.Series(
                 {
@@ -187,7 +194,7 @@ def compare_rates(
     # Add the bar chart for policies_exposed first (background)
     fig.add_trace(
         go.Bar(
-            x=grouped_df[variable],
+            x=grouped_df[feature],
             y=grouped_df[secondary],
             name=secondary,
             marker_color="rgba(135, 206, 250, 0.6)",
@@ -199,7 +206,7 @@ def compare_rates(
     for rate in rates:
         fig.add_trace(
             go.Scatter(
-                x=grouped_df[variable],
+                x=grouped_df[feature],
                 y=grouped_df[rate],
                 name=rate,
                 mode="lines+markers",
@@ -208,8 +215,8 @@ def compare_rates(
         )
 
     # Set plot layout
-    fig.update_layout(title_text=f"Comparison of {rates} by {variable}")
-    fig.update_xaxes(title_text=variable)
+    fig.update_layout(title_text=f"Comparison of {rates} by {feature}")
+    fig.update_xaxes(title_text=feature)
     fig.update_yaxes(title_text="Rates", secondary_y=False)
     fig.update_yaxes(title_text=secondary, secondary_y=True)
 
@@ -227,7 +234,7 @@ def histogram(df, cols=1, features=None, sum_var=None):
     cols : int, optional (default=1)
         The number of columns to use for the subplots.
     features : list, optional (default=None)
-        The features to use for the plot. Default is to use all categorical features.
+        The features to use for the plot. Default is to use all non-numeric features.
     sum_var : str, optional (default=None)
         The column name to use for the sum. Default is to use frequency.
 

@@ -7,7 +7,7 @@ import statsmodels.formula.api as smf
 
 from xact.utils import custom_logger
 
-logger = custom_logger.setup_logging()
+logger = custom_logger.setup_logging(__name__)
 
 
 class GLM:
@@ -18,7 +18,7 @@ class GLM:
         X,
         y,
         weights=None,
-        r_style=True,
+        r_style=False,
         mapping=None,
     ):
         """
@@ -35,7 +35,8 @@ class GLM:
         r_style : bool, optional
             Whether to use R-style formulas
         mapping : dict, optional
-            The mapping of the features to the encoding
+            The mapping of the features to the encoding and only needed
+            if r_style is True
 
         """
         logger.info("initialzed GLM and add constant to X")

@@ -5,7 +5,7 @@ import sklearn.metrics as skm
 
 from xact.utils import custom_logger
 
-logger = custom_logger.setup_logging()
+logger = custom_logger.setup_logging(__name__)
 
 
 def smape(y_true, y_pred, epsilon=1e-10):
@@ -92,7 +92,13 @@ def get_metrics(y_true, y_pred, metrics, model=None, **kwargs):
         elif metric == "ae":
             metric_dict[metric] = ae(y_true, y_pred)
         elif metric == "aic":
-            metric_dict[metric] = model.aic if model is not None else None
+            try:
+                metric_dict[metric] = model.aic if model is not None else None
+            except AttributeError:
+                logger.error(
+                    f"Model {model} does not have AIC attribute, returning None"
+                )
+                metric_dict[metric] = None
         else:
             metric_dict[metric] = getattr(skm, metric)(y_true, y_pred, **kwargs)
     return metric_dict
