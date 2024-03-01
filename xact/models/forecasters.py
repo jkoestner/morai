@@ -244,6 +244,17 @@ class LeeCarter:
             lee carter data frame with qx_raw rates
 
         """
+        # check if columns are in the dataframe
+        cols_needed = [self.age_col, self.year_col, self.actual_col, self.expose_col]
+        missing_cols = [col for col in cols_needed if col not in df.columns]
+        if missing_cols:
+            raise ValueError(
+                f"Missing columns in DataFrame: {', '.join(missing_cols)}. "
+                f"Use LeeCarter(age_col, year_col, actual_col, expose_col) "
+                f"to specify columns."
+            )
+
+        # grouping the data
         logger.info("grouping data by age and year")
         lc_df = (
             df.groupby([self.age_col, self.year_col], observed=True)[
@@ -526,6 +537,17 @@ class CBD:
             CBD data frame
 
         """
+        # check if columns are in the dataframe
+        cols_needed = [self.age_col, self.year_col, self.actual_col, self.expose_col]
+        missing_cols = [col for col in cols_needed if col not in df.columns]
+        if missing_cols:
+            raise ValueError(
+                f"Missing columns in DataFrame: {', '.join(missing_cols)}. "
+                f"Use CBD(age_col, year_col, actual_col, expose_col) "
+                f"to specify column names."
+            )
+
+        # grouping the data
         logger.info("grouping data by age and year")
         cbd_df = (
             df.groupby([self.age_col, self.year_col], observed=True)[

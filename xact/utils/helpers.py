@@ -45,6 +45,10 @@ def clean_df(df, lowercase=True, underscore=True, update_cat=True):
     if update_cat:
         logger.info("removed unused categories and reorder")
         for column in df.select_dtypes(include=["category"]).columns:
+            if df[column].isna().any():
+                logger.info(f"{column} has missing values, filling with _NULL_")
+                df[column] = df[column].cat.add_categories("_NULL_").fillna("_NULL_")
+
             df[column] = df[column].cat.remove_unused_categories()
             df[column] = df[column].cat.reorder_categories(
                 sorted(df[column].unique()), ordered=True

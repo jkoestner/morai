@@ -150,7 +150,7 @@ def ae_rank(df, features, actuals, expecteds, exposures):
     rank_df = rank_df.groupby(["attribute", "attribute_value"]).sum().reset_index()
 
     # calculate ranks and sort by rank_combined
-    logger.info(f"the total ae for dataset is {ae}")
+    logger.info(f"The total AE with {expecteds} as E for dataset is {ae:.1f}%")
     rank_df["ae"] = rank_df[actuals] / rank_df[expecteds]
     rank_df["exposure_pct"] = rank_df[exposures] / total_exposure
     rank_df["rank_issue"] = (

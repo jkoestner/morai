@@ -10,14 +10,9 @@ logger = custom_logger.setup_logging(__name__)
 
 def preprocess_data(
     model_data,
-    model_target,
-    passthrough_features=None,
-    cat_pass_features=None,
-    ordinal_features=None,
-    nominal_features=None,
-    ohe_features=None,
-    model_weight=None,
+    feature_dict,
     standardize=False,
+    preset=None,
 ):
     """
     Preprocess the features.
@@ -25,24 +20,16 @@ def preprocess_data(
     Parameters
     ----------
     model_data : pd.DataFrame
-        The dataframe to create feature encodings from.
-    model_target : str
-        The target column name.
-    passthrough_features : list
-        The features that are just passthrough
-    cat_pass_features : list
-        The categorical features that are just passthrough
-    ordinal_features : list
-        The ordinal features to encode.
-    nominal_features : list
-        The nominal features to encode.
-    ohe_features : list
-        The one hot encoded features to encode.
-    model_weight : str
-        The model weights to use in forecasing models. (There is no preprocessing for
-        this, but the weights are included in the returned dictionary.)
+        The model data with the features, target, and weights.
+    feature_dict : dict
+        A feature dictionary with multiple options (passthrough, cat_pass, ordinal,
+        nominal, ohe)
     standardize : bool, optional (default=False)
         Whether to standardize the data, which uses the StandardScaler.
+    preset : str, optional (default=None)
+        There are some preset options that will process the data for features
+        considering the model type so the feature_dict doesn't have to be changed
+        multiple times.
 
     Returns
     -------
@@ -55,42 +42,84 @@ def preprocess_data(
           standardization.
 
     """
-    # make features empty lists if they are None
-    if not passthrough_features:
-        passthrough_features = []
-    if not cat_pass_features:
-        cat_pass_features = []
-    if not ordinal_features:
-        ordinal_features = []
-    if not nominal_features:
-        nominal_features = []
-    if not ohe_features:
-        ohe_features = []
-
     # initializing the variables
     mapping = {}
+    model_target = feature_dict.get("target", [])[0]
+    if not model_target:
+        raise ValueError("model_target not found in the feature_dict")
     logger.info(f"model target: {model_target}")
     y = model_data[model_target].copy()
+
+    model_weight = feature_dict.get("weight", [])[0]
     logger.info(f"model weights: {model_weight}")
     weights = model_data[model_weight].copy() if model_weight else None
     x_features = [
         col for col in model_data.columns if col not in [model_target, model_weight]
     ]
 
-    # get the features based on what's in the model_data
-    passthrough_cols = [col for col in x_features if col in passthrough_features]
-    cat_pass_cols = [col for col in x_features if col in cat_pass_features]
-    ordinal_cols = [col for col in x_features if col in ordinal_features]
-    nominal_cols = [col for col in x_features if col in nominal_features]
-    ohe_cols = [col for col in x_features if col in ohe_features]
-    X = model_data[
-        passthrough_cols + cat_pass_cols + ordinal_cols + nominal_cols + ohe_cols
-    ].copy()
+    # check if the feature_dict has the acceptable categories
+    for cat in feature_dict.keys():
+        acceptable_cats = [
+            "target",
+            "weight",
+            "passthrough",
+            "cat_pass",
+            "ordinal",
+            "nominal",
+            "ohe",
+        ]
+        if cat not in acceptable_cats:
+            logger.warning(f"{cat} not in the acceptable categories")
+
+    # check if the features are in the model_data
+    model_feature_dict = {}
+    for feature_cat, features in feature_dict.items():
+        model_feature_dict[feature_cat] = [col for col in x_features if col in features]
+        missing_features = [
+            col
+            for col in features
+            if col not in [*x_features, model_target, model_weight]
+        ]
+        if missing_features:
+            logger.warning(f"{missing_features} not in the model_data")
+
+    # check for duplicates
+    model_features = []
+    for features in model_feature_dict.values():
+        model_features.extend(features)
+    if len(model_features) != len(set(model_features)):
+        seen = set()
+        duplicates = {x for x in model_features if x in seen or seen.add(x)}
+        raise ValueError(f"duplicates found: {duplicates}")
+
+    # features to preprocess
+    passthrough_cols = model_feature_dict.get("passthrough", [])
+    cat_pass_cols = model_feature_dict.get("cat_pass", [])
+    ordinal_cols = model_feature_dict.get("ordinal", [])
+    nominal_cols = model_feature_dict.get("nominal", [])
+    ohe_cols = model_feature_dict.get("ohe", [])
+
+    if preset == "tree":
+        logger.info(
+            "using 'tree' preset which doesn't need to use 'nominal' "
+            "or 'ohe' and instead uses 'ordinal'"
+        )
+        ordinal_cols = ordinal_cols + nominal_cols + ohe_cols
+        nominal_cols = None
+        ohe_cols = None
+    elif preset == "pass":
+        logger.info("using 'pass' preset which makes all features passthrough")
+        passthrough_cols = model_features
+        cat_pass_cols = None
+        ordinal_cols = None
+        nominal_cols = None
+        ohe_cols = None
+
+    X = model_data[model_features].copy()
 
     # numeric - passthrough
     if passthrough_cols:
         logger.info(f"passthrough - (generally numeric): {passthrough_cols}")
-        X[passthrough_cols] = X[passthrough_cols]
         for col in passthrough_cols:
             mapping[col] = {
                 "values": {k: k for k in X[col].unique()},
@@ -100,7 +129,6 @@ def preprocess_data(
     # cat - passthrough
     if cat_pass_cols:
         logger.info(f"passthrough - (categorical): {cat_pass_cols}")
-        X[cat_pass_cols] = X[cat_pass_cols]
         for col in cat_pass_cols:
             mapping[col] = {
                 "values": {k: k for k in X[col].unique()},
@@ -165,28 +193,30 @@ def preprocess_data(
                     "type": "standardized",
                 }
 
+    # model_data that is encoded
+    md_encoded = pd.concat([model_data.drop(columns=model_features), X], axis=1)
+
     preprocess_dict = {
         "X": X,
         "y": y,
         "weights": weights,
         "mapping": mapping,
+        "md_encoded": md_encoded,
     }
 
     return preprocess_dict
 
 
-def bin_feature(feature, bins, labels):
+def bin_feature(feature, bins):
     """
     Bin a feature.
 
     Parameters
     ----------
     feature : pd.Series
-        The feature to bin.
-    bins : list
-        The bin edges.
-    labels : list
-        The bin labels.
+        The numerical series to bin.
+    bins : int
+        The number of bins to use.
 
     Returns
     -------
@@ -195,14 +225,26 @@ def bin_feature(feature, bins, labels):
 
     Examples
     --------
-    >>> import pandas as pd
-    >>> feature = pd.Series([1, 2, 3, 4, 5])
-    >>> bins = list(range(0, 10, 5))
-    >>> labels = [f"{i}-{i+4}" for i in range(0, 10, 5)]
-    >>> bin_feature(feature, bins, labels)
+    >>> feature = pd.Series([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    >>> bins = 2
+    >>> bin_feature(feature, bins)
 
     """
+    # test if feature is numeric
+    if not pd.api.types.is_numeric_dtype(feature):
+        raise ValueError(f"feature: [{feature.name}] is not numeric")
+    range_min, range_max = (feature.min() - 1), feature.max()
+    bin_edges = np.linspace(range_min, range_max, bins + 1)
+
+    # generate lables for the bins
+    labels = [
+        f"{int(bin_edges[i])+1}-{int(bin_edges[i+1])}"
+        for i in range(len(bin_edges) - 1)
+    ]
+
     # note that the bins are exclusive on the right side by default
     # include_lowest=True makes the first bin inclusive of the left side
-    binned_feature = pd.cut(feature, bins=bins, labels=labels, include_lowest=True)
+    binned_feature = pd.cut(
+        feature, bins=bin_edges, labels=labels, include_lowest=True, right=True
+    )
     return binned_feature

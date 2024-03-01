@@ -18,12 +18,13 @@ dependencies = [
     "lightgbm>=4.3.0",     # only for lightgbm
     "numpy>=1.24.4",
     "pandas>=2.0.3",
-    "plotly>=5.18.0",
+    "plotly>=5.19.0",
     "polars>=0.20.9",
     "pyarrow>=14.0.2",
     "scikit-learn>=1.4",
     "seaborn>=0.13.2",
     "statsmodels>=0.14.1",
+    "xgboost>=2.0.3",      # only for xgboost
 ]
 
 [project.optional-dependencies]
