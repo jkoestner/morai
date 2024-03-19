@@ -23,7 +23,7 @@ class ColoredFormatter(logging.Formatter):
         """Format the specified record as text."""
         record.color = self.colors.get(record.levelname, "")
         record.reset = Style.RESET_ALL
-        record.default_color = Fore.WHITE + Back.LIGHTBLACK_EX
+        record.default_color = Fore.WHITE
 
         return super().format(record)
 
@@ -44,10 +44,10 @@ def setup_logging(name="xact"):
         style="{",
         datefmt="%Y-%m-%d %H:%M:%S",
         colors={
-            "DEBUG": Fore.CYAN + Back.LIGHTBLACK_EX,
-            "INFO": Fore.GREEN + Back.LIGHTBLACK_EX,
-            "WARNING": Fore.YELLOW + Back.LIGHTBLACK_EX,
-            "ERROR": Fore.RED + Back.LIGHTBLACK_EX,
+            "DEBUG": Fore.CYAN,
+            "INFO": Fore.GREEN,
+            "WARNING": Fore.YELLOW,
+            "ERROR": Fore.RED,
             "CRITICAL": Fore.RED + Back.WHITE + Style.BRIGHT,
         },
     )
