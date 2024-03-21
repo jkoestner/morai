@@ -716,24 +716,24 @@ def target(df, target, features=None, cols=3, numerator=None, denominator=None):
                 df.groupby(feature, observed=True)[[numerator, denominator]]
                 .sum()
                 .reset_index()
-            )
+            ).sort_values(by=feature)
             grouped_data[target] = grouped_data[numerator] / grouped_data[denominator]
         elif target == "risk":
             grouped_data = (
                 df.groupby(feature, observed=True)[[numerator, denominator]]
                 .sum()
                 .reset_index()
-            )
+            ).sort_values(by=feature)
             total_target = (
                 grouped_data[numerator].sum() / grouped_data[denominator].sum()
-            )
+            ).sort_values(by=feature)
             grouped_data[target] = (
                 grouped_data[numerator] / grouped_data[denominator]
             ) / total_target
         else:
             grouped_data = (
                 df.groupby(feature, observed=True)[target].mean().reset_index()
-            )
+            ).sort_values(by=feature)
         fig.add_trace(
             go.Scatter(
                 x=grouped_data[feature],
