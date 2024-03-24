@@ -9,3 +9,5 @@
 .vscode/
 _build/
 _pycache_/
+files/
+notebooks/working/

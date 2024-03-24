@@ -726,7 +726,7 @@ def target(df, target, features=None, cols=3, numerator=None, denominator=None):
             ).sort_values(by=feature)
             total_target = (
                 grouped_data[numerator].sum() / grouped_data[denominator].sum()
-            ).sort_values(by=feature)
+            )
             grouped_data[target] = (
                 grouped_data[numerator] / grouped_data[denominator]
             ) / total_target
