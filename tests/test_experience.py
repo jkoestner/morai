@@ -2,19 +2,26 @@
 
 import pandas as pd
 
-from xact.experience import tables
+from xact.experience import experience, tables
 from xact.utils import helpers
 
-test_table_path = helpers.ROOT_PATH / "tests" / "files" / "tables"
+test_experience_path = helpers.ROOT_PATH / "tests" / "files" / "experience"
+experience_df = pd.read_csv(test_experience_path / "simple_normalization.csv")
 
 
 def test_table_build():
     """Checks the soa table builds."""
-    t1683 = pd.read_csv(test_table_path / "t1683.csv", index_col=0)
-    t1683_e = pd.read_csv(test_table_path / "t1683_extend.csv", index_col=0)
-    vbt15 = pd.read_csv(test_table_path / "vbt15.csv", index_col=0)
-    vbt15_e = pd.read_csv(test_table_path / "vbt15_extend.csv", index_col=0)
-    vbt15_j = pd.read_csv(test_table_path / "vbt15_juv.csv", index_col=0)
+    t1683 = pd.read_csv(test_experience_path / "tables" / "t1683.csv", index_col=0)
+    t1683_e = pd.read_csv(
+        test_experience_path / "tables" / "t1683_extend.csv", index_col=0
+    )
+    vbt15 = pd.read_csv(test_experience_path / "tables" / "vbt15.csv", index_col=0)
+    vbt15_e = pd.read_csv(
+        test_experience_path / "tables" / "vbt15_extend.csv", index_col=0
+    )
+    vbt15_j = pd.read_csv(
+        test_experience_path / "tables" / "vbt15_juv.csv", index_col=0
+    )
     MortTable = tables.MortTable()
 
     # ultimate table
@@ -47,3 +54,31 @@ def test_table_build():
     assert test_vbt15.equals(vbt15)
     assert test_vbt15_e.equals(vbt15_e)
     assert test_vbt15_j.equals(vbt15_j)
+
+
+def test_relative_risk():
+    """Tests the relative risk calculation."""
+    test_df = experience.calc_relative_risk(
+        df=experience_df, features=["year"], numerator="year_lob_rate"
+    )
+    total_mean = test_df["year_lob_rate"].mean()
+    year_mean = test_df[test_df["year"] == 2019]["year_lob_rate"].mean()
+    year_risk = round(year_mean / total_mean, 3)
+
+    assert round(test_df[test_df["year"] == 2019]["risk"].iloc[0], 3) == year_risk, (
+        "Expected relative risk to be average rate for feature group divided "
+        "by the average rate for all groups"
+    )
+
+
+def test_normalize():
+    """Tests the normalization calculation."""
+    test_df = experience.normalize(
+        df=experience_df, features=["year"], numerator="year_lob_rate"
+    )
+    test_df = experience.calc_relative_risk(
+        df=test_df, features=["year"], numerator="year_lob_rate_norm"
+    )
+    assert (
+        round(test_df[test_df["year"] == 2019]["risk"].iloc[0], 3) == 1.0
+    ), "The relative risk should be 1.0 for the after normalizing column"

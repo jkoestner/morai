@@ -7,7 +7,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from xact.models import preprocessors
+from xact.experience import experience
+from xact.forecast import preprocessors
 from xact.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
@@ -28,6 +29,7 @@ def chart(
     title=None,
     sort_y=False,
     x_bins=None,
+    display=True,
     **kwargs,
 ):
     """
@@ -64,6 +66,8 @@ def chart(
         Sort the records by the y-axis descending.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
+    display : bool, optional (default=True)
+        Whether to display figure or not.
     **kwargs : dict
         Additional keyword arguments to pass to Plotly Express.
 
@@ -131,17 +135,21 @@ def chart(
             **kwargs,
         )
     elif type == "heatmap":
-        heatmap_data = grouped_data.pivot(index=_y_axis, columns=x_axis, values=_color)
+        grouped_data = grouped_data.pivot(index=_y_axis, columns=x_axis, values=_color)
         if not title:
             title = f"Heatmap of {_color} by {x_axis} and {_y_axis}"
         fig = px.imshow(
-            heatmap_data,
+            grouped_data,
             labels={"x": x_axis, "y": _y_axis, "color": _color},
             title=title,
             **kwargs,
         )
     else:
         raise ValueError("Unsupported type. Use 'line', 'heatmap', or 'bar'.")
+
+    # return the dataframe instead of figure
+    if not display:
+        fig = grouped_data
 
     return fig
 
@@ -417,6 +425,7 @@ def pdp(
         The chart
 
     """
+    df = df.copy()
     # make sure model has prediction function
     if not hasattr(model, "predict"):
         raise ValueError(f"Model: [{model}] does not have a predict function.")
@@ -666,9 +675,15 @@ def scatter(df, target, features, sample_nbr=100, cols=3):
     return fig
 
 
-def target(df, target, features=None, cols=3, numerator=None, denominator=None):
+def target(
+    df, target, features=None, cols=3, numerator=None, denominator=None, normalize=None
+):
     """
     Create multiplot showing variable relationship with target.
+
+    If choosing a column for the target, the target will be the mean of the column for
+    the feature. If choosing "ratio" or "risk" then the numerator and denominator
+    columns are required and the target will be the ratio or risk of the two columns.
 
     Parameters
     ----------
@@ -684,6 +699,8 @@ def target(df, target, features=None, cols=3, numerator=None, denominator=None):
         The column name to use for the numerator values.
     denominator : str, optional
         The column name to use for the expected values.
+    normalize : list, optional
+        The columns to normalize.
 
     Returns
     -------
@@ -691,13 +708,32 @@ def target(df, target, features=None, cols=3, numerator=None, denominator=None):
         The chart
 
     """
+    # default parameters
+    if features is None:
+        features = df.columns
+    if normalize is None:
+        normalize = []
+
+    # validations
     if target not in [*list(df.columns), "ratio", "risk"]:
         raise ValueError(
             f"Target '{target}' needs to be in DataFrame columns, 'ratio', or 'risk'"
         )
-    # features to use for the plot
-    if features is None:
-        features = df.columns
+    if not set(features).issubset(df.columns):
+        missing_features = set(features) - set(df.columns)
+        raise ValueError(f"Features {missing_features} not in DataFrame columns.")
+    if not set(normalize).issubset(df.columns):
+        missing_features = set(normalize) - set(df.columns)
+        raise ValueError(f"Normalize {missing_features} not in DataFrame columns.")
+    if target in ["ratio", "risk"] and (numerator is None or denominator is None):
+        raise ValueError("Numerator/Denominator is required for ratio or risk target.")
+
+    # normalize if requested
+    if normalize:
+        df = experience.normalize(
+            df, features=normalize, numerator=numerator, denominator=denominator
+        )
+        numerator = f"{numerator}_norm"
 
     # Number of rows for the subplot grid
     num_plots = len(features)

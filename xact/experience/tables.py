@@ -198,13 +198,13 @@ class MortTable:
                 )
 
         logger.info(f"Created table that has the following dims: {dims}")
-        logger.debug(f"Table has {len(mort_table)} cells.")
-        logger.debug(f"combinations: {combinations}")
-        logger.debug(f"tables: {table_list}")
+        logger.info(f"Table has {len(mort_table)} cells.")
+        logger.info(f"combinations: {combinations}")
+        logger.info(f"tables: {table_list}")
         if juv_table_id:
-            logger.debug(f"juveniles: {juv_list}")
+            logger.info(f"juveniles: {juv_list}")
         if extend:
-            logger.debug(f"extend: True, filled in {missing} missing values.")
+            logger.info(f"extend: True, filled in {missing} missing values.")
 
         self.df = mort_table
         self.table_list = table_list

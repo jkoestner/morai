@@ -26,7 +26,7 @@ def get_checks(checks_path=None):
 
     """
     if checks_path is None:
-        checks_path = os.path.join(helpers.ROOT_PATH, "xact", "data", "checks.yaml")
+        checks_path = os.path.join(helpers.ROOT_PATH, "files", "checks", "checks.yaml")
     try:
         with open(checks_path, "r") as file:
             logger.info(f"Loading checks from {checks_path}.")
