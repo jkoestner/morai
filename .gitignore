@@ -11,3 +11,6 @@ _build/
 _pycache_/
 files/
 notebooks/working/
+
+# include tests/files/
+!tests/files/
