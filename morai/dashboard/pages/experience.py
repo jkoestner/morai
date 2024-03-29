@@ -6,10 +6,10 @@ import dash_bootstrap_components as dbc
 import polars as pl
 from dash import Input, Output, callback, dcc, html
 
-from xact.dashboard import dashboard_helper as dh
-from xact.experience import charters
-from xact.forecast import metrics
-from xact.utils import helpers
+from morai.dashboard import dashboard_helper as dh
+from morai.experience import charters
+from morai.forecast import metrics
+from morai.utils import helpers
 
 dash.register_page(__name__, path="/")
 

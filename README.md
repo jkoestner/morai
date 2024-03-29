@@ -1,20 +1,18 @@
 
-# Mortality
-Mortality python package
-
 ## Overview
 
-**XAct**
+**Morai**
 
 **📖 Description:**
 
-XAct is a python package that provides experience study tools for actuaries with the 
-goal of being *exact*. There are tools for reviewing mortality as well as tools for 
-reviewing experience.
+[Moirai](https://en.wikipedia.org/wiki/Moirai#:~:text=In%20ancient%20Greek%20religion%20and,Moirai) 
+in greek mythology are known as the fates. They are personifications of destiny.
+The name Morai was chosen as the package is designed to help actuaries review 
+mortality and experience data.
 
 **🔬 Jupyter Notebook:**
 
-- [XAct Example](https://nbviewer.jupyter.org/github/jkoestner/xact/blob/main/notebooks/mortality.ipynb)
+- [Morai Example](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/mortality.ipynb)
 
 ## Installation
 
@@ -35,12 +33,12 @@ To have conda environments work with Jupyter Notebooks a kernel needs to be defi
 in the conda environment.
 
 ```
-python -m ipykernel install --user --name=xact
+python -m ipykernel install --user --name=morai
 ```
 ### Logging
 
 If wanting to get more detail in output of messages the logging can increased
 ```python
-from xact.utils import helpers
+from morai.utils import helpers
 helpers.set_log_level("DEBUG")
 ```

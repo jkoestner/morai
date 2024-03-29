@@ -1,4 +1,4 @@
-"""Top level entry of xact."""
+"""Top level entry of morai."""
 
 # importing modules to be available at the package level namespace
 

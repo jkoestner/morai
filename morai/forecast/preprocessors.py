@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 
-from xact.utils import custom_logger, helpers
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 

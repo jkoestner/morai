@@ -2,8 +2,8 @@
 
 import pandas as pd
 
-from xact.experience import experience, tables
-from xact.utils import helpers
+from morai.experience import experience, tables
+from morai.utils import helpers
 
 test_experience_path = helpers.ROOT_PATH / "tests" / "files" / "experience"
 experience_df = pd.read_csv(test_experience_path / "simple_normalization.csv")

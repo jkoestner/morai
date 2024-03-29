@@ -7,9 +7,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from xact.experience import experience
-from xact.forecast import preprocessors
-from xact.utils import custom_logger, helpers
+from morai.experience import experience
+from morai.forecast import preprocessors
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 

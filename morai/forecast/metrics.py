@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import sklearn.metrics as skm
 
-from xact.utils import custom_logger
+from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 

@@ -5,7 +5,7 @@ import plotly.express as px
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
-from xact.utils import custom_logger
+from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 

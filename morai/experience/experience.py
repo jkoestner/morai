@@ -1,6 +1,6 @@
 """Experience study model."""
 
-from xact.utils import custom_logger
+from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 

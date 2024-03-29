@@ -28,7 +28,7 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-def setup_logging(name="xact"):
+def setup_logging(name="morai"):
     """
     Set up the logging.
 
@@ -61,11 +61,11 @@ def setup_logging(name="xact"):
     root_logger.addHandler(handler)
     root_logger.setLevel(logging.WARNING)
 
-    # xact logger
-    xact_logger = logging.getLogger(name)
-    xact_logger.setLevel(logging.INFO)
+    # morai logger
+    morai_logger = logging.getLogger(name)
+    morai_logger.setLevel(logging.INFO)
 
-    return xact_logger
+    return morai_logger
 
 
 def set_log_level(new_level):
@@ -84,7 +84,7 @@ def set_log_level(new_level):
     # update the log level for all project loggers
     for logger_name, logger in logging.Logger.manager.loggerDict.items():
         # Check if the logger's name starts with the specified prefix
-        if logger_name.startswith("xact"):
+        if logger_name.startswith("morai"):
             if isinstance(logger, logging.Logger):
                 logger.setLevel(new_level)
 

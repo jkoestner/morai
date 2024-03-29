@@ -5,7 +5,7 @@ import pandas as pd
 import polars as pl
 import yaml
 
-from xact.utils import custom_logger, helpers
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 

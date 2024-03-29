@@ -3,7 +3,7 @@ requires = ["setuptools>=62.6"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "xact"
+name = "morai"
 description = "A mortality viewer"
 dynamic = ["version"]
 authors = [{ name = "John Koestner", email = "johnkoestner@outlook.com" }]
@@ -44,8 +44,8 @@ dev = [
 ]
 
 [project.urls]
-homepage = "https://github.com/jkoestner/xact"
-repository = "https://github.com/jkoestner/xact"
+homepage = "https://github.com/jkoestner/morai"
+repository = "https://github.com/jkoestner/morai"
 
 # TODO: Remove after setuptools support is dropped.
 [tool.setuptools]
@@ -55,7 +55,7 @@ include-package-data = true # include files from MANIFEST.in
 exclude = ["tests*"]
 
 [tool.setuptools.dynamic]
-version = { attr = "xact.version.version" }
+version = { attr = "morai.version.version" }
 
 
 [tool.ruff]
