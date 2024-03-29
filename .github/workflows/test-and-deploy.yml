@@ -1,0 +1,33 @@
+name: Test and Deploy
+
+on: 
+  push:
+    branches:
+      - main
+      - dev
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Python 3
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install .
+          pip install .[dev]
+      - name: test imports
+        run: |
+          python -c "
+          from morai.experience import experience, tables
+          from morai.utils import helpers
+          "
+      - name: Run tests with pytest and upload coverage
+        run: pytest --cov=morai --cov-report=xml
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

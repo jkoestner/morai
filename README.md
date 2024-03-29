@@ -1,7 +1,19 @@
 
-## Overview
+<div align="center">
+  <img src="morai/dashboard/assets/morai_logo.jpg"><br>
+</div>
 
-**Morai**
+# Morai
+
+## Table of Contents
+- [Overview](#overview)
+- [Installation](#installation)
+  - [Local Install](#local-install)
+- [Other Tools](#other-tools)
+  - [Jupyter Lab Usage](#jupyter-lab-usage)
+  - [Logging](#logging)
+
+## Overview
 
 **📖 Description:**
 
