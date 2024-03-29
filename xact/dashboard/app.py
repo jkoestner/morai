@@ -34,8 +34,8 @@ app = dash.Dash(
 server = app.server
 app.config.suppress_callback_exceptions = True
 
-app.title = "Xact Dashboard"
-app._favicon = "xact_logo.ico"
+app.title = "Morai Dashboard"
+app._favicon = "morai_logo.ico"
 app.layout = html.Div(
     [
         html.Div(
