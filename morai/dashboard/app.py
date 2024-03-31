@@ -23,11 +23,14 @@ from dash import dcc, html
 #   / ___ \|  __/|  __/
 #  /_/   \_\_|   |_|
 
+dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
+
 app = dash.Dash(
     __name__,
     use_pages=True,
     external_stylesheets=[
         dbc.themes.FLATLY,
+        dbc_css,
         "https://codepen.io/chriddyp/pen/bWLwgP.css",
     ],
 )

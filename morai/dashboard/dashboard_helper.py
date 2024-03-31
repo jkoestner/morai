@@ -4,8 +4,16 @@ Utilities for app.
 Provides functions for common used functions in app.
 """
 
+import os
+
 import dash_bootstrap_components as dbc
+import yaml
 from dash import dcc, html
+
+from morai.utils import helpers
+
+config_path = helpers.ROOT_PATH / "files" / "dashboard_config.yaml"
+dataset_path = helpers.ROOT_PATH / "files" / "dataset"
 
 
 def convert_to_short_number(number):
@@ -127,7 +135,14 @@ def generate_card(df, card_list, title="Data", color="Azure", inverse=False, **k
     return card
 
 
-def generate_selectors(df, dash_dict, actuals_col, exposure_col):
+def generate_selectors(
+    df,
+    dash_dict,
+    default_x_axis,
+    default_y_axis,
+    default_numerator,
+    default_denominator,
+):
     """
     Generate selectors for tool.
 
@@ -137,10 +152,14 @@ def generate_selectors(df, dash_dict, actuals_col, exposure_col):
         Dataframe to generate selectors.
     dash_dict : dict
         Dictionary for the dashboard
-    actuals_col : str
-        Actuals column.
-    exposure_col : str
-        Exposure column.
+    default_x_axis : str
+        default x-axis.
+    default_y_axis : str
+        default y-axis.
+    default_numerator : str
+        default numerator.
+    default_denominator : str
+        default denominator.
 
     Returns
     -------
@@ -164,7 +183,7 @@ def generate_selectors(df, dash_dict, actuals_col, exposure_col):
                 dcc.Dropdown(
                     id={"type": "selector", "index": "x_axis_selector"},
                     options=df.columns,
-                    value="observation_year",
+                    value=default_x_axis,
                     clearable=False,
                     placeholder="Select X-Axis",
                 ),
@@ -177,7 +196,7 @@ def generate_selectors(df, dash_dict, actuals_col, exposure_col):
                 dcc.Dropdown(
                     id={"type": "selector", "index": "y_axis_selector"},
                     options=["ratio", "risk"],
-                    value="ratio",
+                    value=default_y_axis,
                     clearable=False,
                     placeholder="Select Y-Axis",
                 ),
@@ -216,7 +235,7 @@ def generate_selectors(df, dash_dict, actuals_col, exposure_col):
                 dcc.Dropdown(
                     id={"type": "selector", "index": "numerator_selector"},
                     options=dash_dict["num_cols"],
-                    value=actuals_col,
+                    value=default_numerator,
                     placeholder="Select Numerator",
                 ),
             ],
@@ -228,7 +247,7 @@ def generate_selectors(df, dash_dict, actuals_col, exposure_col):
                 dcc.Dropdown(
                     id={"type": "selector", "index": "denominator_selector"},
                     options=dash_dict["num_cols"],
-                    value=exposure_col,
+                    value=default_denominator,
                     placeholder="Select Denominator",
                 ),
             ],
@@ -357,3 +376,49 @@ def _inputs_parse_type(input_list, type_value):
             if input_id.get("type") == type_value:
                 type_list.append(input)
     return type_list
+
+
+def load_config(config_path=config_path):
+    """
+    Load the yaml configuration file.
+
+    Parameters
+    ----------
+    config_path : str
+        Path to the yaml configuration file.
+
+    Returns
+    -------
+    config : dict
+        Configuration dictionary.
+
+    """
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file)
+    return config
+
+
+def list_files(folder_path=dataset_path):
+    """
+    List files in the directory.
+
+    Parameters
+    ----------
+    folder_path : str
+        Path to the folder.
+
+    Returns
+    -------
+    files : list
+        List of files in the folder.
+
+    """
+    # List all entries in the given folder
+    all_entries = os.listdir(folder_path)
+    # Filter out entries that are files
+    files = [
+        entry
+        for entry in all_entries
+        if os.path.isfile(os.path.join(folder_path, entry))
+    ]
+    return files

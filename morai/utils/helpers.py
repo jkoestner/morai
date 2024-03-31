@@ -1,4 +1,5 @@
 """Collection of helpers."""
+
 import sys
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from morai.utils import custom_logger
 
 ROOT_PATH = Path(__file__).resolve().parent.parent.parent
 TESTS_PATH = ROOT_PATH / "tests" / "files"
+FILE_PATH = ROOT_PATH / "files"
 
 logger = custom_logger.setup_logging(__name__)
 

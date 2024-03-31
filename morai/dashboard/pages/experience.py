@@ -22,54 +22,49 @@ from morai.utils import helpers
 
 dash.register_page(__name__, path="/", title="morai - Experience")
 
-# reading in the dataset
-pl_parquet_path = helpers.ROOT_PATH / "files" / "dataset" / "mortality_grouped.parquet"
-pl.enable_string_cache()
-lzdf = pl.scan_parquet(
-    pl_parquet_path,
-)
-mortality_df = lzdf.collect()
-mortality_df = mortality_df.to_pandas()
+# loading config and reading data
+config_general = dh.load_config()
+config_dataset = config_general["datasets"][config_general["general"]["dataset"]]
+config = config_dataset["columns"]
+file_path = helpers.FILE_PATH / "dataset" / config_dataset["filename"]
+if file_path.suffix == ".parquet":
+    pl.enable_string_cache()
+    lzdf = pl.scan_parquet(file_path)
+    mortality_df = lzdf.collect()
+    mortality_df = mortality_df.to_pandas()
 # create dashboard dictionary
 dash_dict = dh.generate_dash_dict(mortality_df)
-# assign columns
-actuals_amt_col = "death_claim_amount"
-exposure_amt_col = "amount_exposed"
-expecteds_amt_col = "exp_amt_vbt15"
-actuals_cnt_col = "death_count"
-exposure_cnt_col = "policies_exposed"
-features = [
-    "observation_year",
-    "sex",
-    "smoker_status",
-    "insurance_plan",
-    "issue_age",
-    "duration",
-    "face_amount_band",
-    "issue_year",
-    "attained_age",
-    "soa_post_lvl_ind",
-    "number_of_pfd_classes",
-    "preferred_class",
-]
+
 # create cards
 card = dh.generate_card(
     df=mortality_df,
-    card_list=[exposure_cnt_col, actuals_cnt_col, exposure_amt_col, actuals_amt_col],
+    card_list=[
+        config["default_exposure_amt"],
+        config["default_actuals_cnt"],
+        config["default_exposure_amt"],
+        config["default_actuals_amt"],
+    ],
     title="Data",
     color="LightSkyBlue",
 )
 filtered_card_default = dh.generate_card(
     df=mortality_df,
-    card_list=[exposure_cnt_col, actuals_cnt_col, exposure_amt_col, actuals_amt_col],
+    card_list=[
+        config["default_exposure_amt"],
+        config["default_actuals_cnt"],
+        config["default_exposure_amt"],
+        config["default_actuals_amt"],
+    ],
     title="Filtered",
     color="LightGreen",
 )
 selectors_default = dh.generate_selectors(
     df=mortality_df,
     dash_dict=dash_dict,
-    actuals_col=actuals_amt_col,
-    exposure_col=exposure_amt_col,
+    default_x_axis="observation_year",
+    default_y_axis="ratio",
+    default_numerator=config["default_actuals_amt"],
+    default_denominator=config["default_exposure_amt"],
 )
 
 
@@ -85,6 +80,7 @@ def layout():
     """Experience layout."""
     return html.Div(
         [
+            dcc.Store(id="user-config", storage_type="session"),
             html.H4(
                 "Experience Analysis",
                 className="bg-primary text-white p-2 mb-2 text-center",
@@ -240,10 +236,10 @@ def update_tab_content(
     filtered_card = dh.generate_card(
         df=filtered_df,
         card_list=[
-            exposure_cnt_col,
-            actuals_cnt_col,
-            exposure_amt_col,
-            actuals_amt_col,
+            config["default_exposure_amt"],
+            config["default_actuals_cnt"],
+            config["default_exposure_amt"],
+            config["default_actuals_amt"],
         ],
         title="Filtered",
         color="LightGreen",
@@ -308,10 +304,10 @@ def update_tab_content(
     elif active_tab == "tab-rank":
         rank = metrics.ae_rank(
             df=filtered_df,
-            features=features,
-            actuals=actuals_amt_col,
-            expecteds=expecteds_amt_col,
-            exposures=exposure_amt_col,
+            features=config["features"],
+            actuals=config["default_actuals_amt"],
+            expecteds=config["default_expecteds_amt"],
+            exposures=config["default_exposure_amt"],
         )
 
         tab_content = dag.AgGrid(
