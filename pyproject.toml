@@ -58,6 +58,19 @@ exclude = ["tests*"]
 [tool.setuptools.dynamic]
 version = { attr = "morai.version.version" }
 
+# coverage config file for pytest-cov coming from
+# https://pytest-cov.readthedocs.io/en/latest/
+# run using pytest --cov=morai --cov-report=html
+[tool.coverage.run]
+data_file = "docs/coverage/.coverage"
+omit = [
+    "morai/dashboard/*", # omit everything in /dashboard
+    "__init__.py",       # omit init files
+]
+
+[tool.coverage.html]
+directory = "docs/coverage/htmlcov"
+
 
 [tool.ruff]
 line-length = 88

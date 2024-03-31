@@ -36,18 +36,44 @@ app.config.suppress_callback_exceptions = True
 
 app.title = "Morai Dashboard"
 app._favicon = "morai_logo.ico"
+
+# creating the navbar
+page_links = [
+    dbc.NavItem(dbc.NavLink(page["name"], href=page["relative_path"]))
+    for page in dash.page_registry.values()
+]
+
+navbar = dbc.Navbar(
+    dbc.Container(
+        [
+            dbc.Row(
+                [
+                    dbc.Col(
+                        html.Img(src=app.get_asset_url("morai_logo.ico"), height="30px")
+                    ),
+                    dbc.Col(dbc.NavbarBrand("morai", className="ms-3 fs-3")),
+                ],
+                align="center",
+                className="g-0",
+            ),
+            dbc.Row(
+                dbc.Nav(
+                    page_links,
+                    className="ms-auto",
+                    navbar=True,
+                ),
+                align="center",
+            ),
+        ],
+        fluid=True,
+    ),
+    color="primary",
+    dark=True,
+)
+
 app.layout = html.Div(
     [
-        html.Div(
-            [
-                html.Div(
-                    dcc.Link(
-                        f"{page['name']} - {page['path']}", href=page["relative_path"]
-                    )
-                )
-                for page in dash.page_registry.values()
-            ]
-        ),
+        navbar,
         dash.page_container,
     ]
 )

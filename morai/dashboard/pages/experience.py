@@ -4,14 +4,23 @@ import dash
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import polars as pl
-from dash import Input, Output, callback, dcc, html
+from dash import (
+    ALL,
+    Input,
+    Output,
+    State,
+    callback,
+    callback_context,
+    dcc,
+    html,
+)
 
 from morai.dashboard import dashboard_helper as dh
 from morai.experience import charters
 from morai.forecast import metrics
 from morai.utils import helpers
 
-dash.register_page(__name__, path="/")
+dash.register_page(__name__, path="/", title="morai - Experience")
 
 # reading in the dataset
 pl_parquet_path = helpers.ROOT_PATH / "files" / "dataset" / "mortality_grouped.parquet"
@@ -76,7 +85,6 @@ def layout():
     """Experience layout."""
     return html.Div(
         [
-            dcc.Location(id="url", refresh=False),
             html.H4(
                 "Experience Analysis",
                 className="bg-primary text-white p-2 mb-2 text-center",
@@ -107,7 +115,7 @@ def layout():
                         [
                             html.Label("tool selector"),
                             dcc.Dropdown(
-                                id="tool_selector",
+                                id="tool-selector",
                                 options=["chart", "compare"],
                                 value="chart",
                                 clearable=False,
@@ -154,7 +162,19 @@ def layout():
                     dbc.Col(
                         html.Div(
                             [
-                                html.H5("Filters"),
+                                html.H5(
+                                    "Filters",
+                                    style={
+                                        "border-bottom": "1px solid black",
+                                        "padding-bottom": "5px",
+                                    },
+                                ),
+                                html.Button(
+                                    "Reset Filters",
+                                    id="reset-filters-button",
+                                    n_clicks=0,
+                                    className="btn btn-primary mt-2 mb-2",
+                                ),
                                 *dash_dict["filters"],
                             ],
                             className="m-1 bg-light border",
@@ -176,49 +196,42 @@ def layout():
 
 
 @callback(
-    Output("tab-content", "children"),
-    Output("filtered-card", "children"),
+    [
+        Output("tab-content", "children"),
+        Output("filtered-card", "children"),
+    ],
     [
         # tools
-        Input("tool_selector", "value"),
+        Input("tool-selector", "value"),
         # selectors
-        Input("x_axis_selector", "value"),
-        Input("y_axis_selector", "value"),
-        Input("color_selector", "value"),
-        Input("numerator_selector", "value"),
-        Input("denominator_selector", "value"),
-        Input({"type": "str-filter", "index": dash.dependencies.ALL}, "value"),
-        Input({"type": "num-filter", "index": dash.dependencies.ALL}, "value"),
-        Input("secondary_selector", "value"),
-        Input("x_bins_selector", "value"),
-        Input("weights_selector", "value"),
-        Input("rates_selector", "value"),
+        Input({"type": "selector", "index": ALL}, "value"),
+        Input({"type": "str-filter", "index": ALL}, "value"),
+        Input({"type": "num-filter", "index": ALL}, "value"),
         # tabs
         Input("tabs", "active_tab"),
     ],
 )
 def update_tab_content(
     tool,
-    x_axis,
-    y_axis,
-    color,
-    numerator,
-    denominator,
+    selectors,
     str_filters,
     num_filters,
-    secondary,
-    x_bins,
-    weights,
-    rates,
     active_tab,
 ):
     """Create chart and table for experience analysis."""
+    print("creating tab content")
+    # inputs
+    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+    x_axis = dh._inputs_parse_id(inputs_info, "x_axis_selector")
+    y_axis = dh._inputs_parse_id(inputs_info, "y_axis_selector")
     # filter the dataset
     filtered_df = mortality_df.copy()
-    for col, str_values in zip(dash_dict["str_cols"], str_filters):
+    for col in dash_dict["str_cols"]:
+        str_values = dh._inputs_parse_id(inputs_info, col)
         if str_values:
             filtered_df = filtered_df[filtered_df[col].isin(str_values)]
-    for col, num_values in zip(dash_dict["num_cols"], num_filters):
+    for col in dash_dict["num_cols"]:
+        num_values = dh._inputs_parse_id(inputs_info, col)
         if num_values:
             filtered_df = filtered_df[
                 (filtered_df[col] >= num_values[0])
@@ -244,21 +257,21 @@ def update_tab_content(
             chart = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=[rates],
-                weights=[weights],
-                secondary=secondary,
-                x_bins=x_bins,
+                rates=[dh._inputs_parse_id(inputs_info, "rates_selector")],
+                weights=[dh._inputs_parse_id(inputs_info, "weights_selector")],
+                secondary=dh._inputs_parse_id(inputs_info, "secondary_selector"),
+                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
             )
         else:
             chart = charters.chart(
                 df=filtered_df,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                color=color,
-                type="line",
-                numerator=numerator,
-                denominator=denominator,
-                x_bins=x_bins,
+                color=dh._inputs_parse_id(inputs_info, "color_selector"),
+                type=dh._inputs_parse_id(inputs_info, "chart_type_selector"),
+                numerator=dh._inputs_parse_id(inputs_info, "numerator_selector"),
+                denominator=dh._inputs_parse_id(inputs_info, "denominator_selector"),
+                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
             )
 
         tab_content = dcc.Graph(figure=chart)
@@ -268,10 +281,10 @@ def update_tab_content(
             table = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=[rates],
-                weights=[weights],
-                secondary=secondary,
-                x_bins=x_bins,
+                rates=[dh._inputs_parse_id(inputs_info, "rates_selector")],
+                weights=[dh._inputs_parse_id(inputs_info, "weights_selector")],
+                secondary=dh._inputs_parse_id(inputs_info, "secondary_selector"),
+                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
                 display=False,
             )
         else:
@@ -279,11 +292,11 @@ def update_tab_content(
                 df=filtered_df,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                color=color,
-                type="line",
-                numerator=numerator,
-                denominator=denominator,
-                x_bins=x_bins,
+                color=dh._inputs_parse_id(inputs_info, "color_selector"),
+                type=dh._inputs_parse_id(inputs_info, "chart_type_selector"),
+                numerator=dh._inputs_parse_id(inputs_info, "numerator_selector"),
+                denominator=dh._inputs_parse_id(inputs_info, "denominator_selector"),
+                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
                 display=False,
             )
 
@@ -313,19 +326,67 @@ def update_tab_content(
 
 
 @callback(
-    Output("selectors", "children"),
-    Input("tool_selector", "value"),
+    [Output({"type": "selector-group", "index": ALL}, "style")],
+    [Input("tool-selector", "value")],
+    [State({"type": "selector-group", "index": ALL}, "id")],
+    prevent_initial_call=True,
 )
-def update_selectors(
-    tool,
-):
-    """Create chart and table for experience analysis."""
-    selectors = dh.generate_selectors(
-        df=mortality_df,
-        dash_dict=dash_dict,
-        actuals_col=actuals_amt_col,
-        exposure_col=exposure_amt_col,
-        tool=tool,
-    )
+def toggle_selectors(tool, all_selectors):
+    """Toggle selectors based on tool."""
+    # if not tool:
+    #     raise PreventUpdate
 
-    return selectors
+    print("toggle selectors")
+    chart_selectors = [
+        "x_axis",
+        "y_axis",
+        "color",
+        "chart_type",
+        "numerator",
+        "denominator",
+        "x_bins",
+    ]
+    compare_selectors = [
+        "x_axis",
+        "rates",
+        "weights",
+        "secondary",
+        "x_bins",
+    ]
+    # determine which selectors to toggle
+    if tool == "chart":
+        show_selectors = chart_selectors
+    elif tool == "compare":
+        show_selectors = compare_selectors
+    else:
+        return [dash.no_update for _ in all_selectors]
+
+    # hide or show selectors
+    style_updates = []
+    for selector_id in all_selectors:
+        selector_key = selector_id["index"]
+        if selector_key in show_selectors:
+            style_updates.append({"display": "block"})
+        else:
+            style_updates.append({"display": "none"})
+
+    return style_updates
+
+
+@callback(
+    [
+        Output({"type": "str-filter", "index": ALL}, "value"),
+        Output({"type": "num-filter", "index": ALL}, "value"),
+    ],
+    [Input("reset-filters-button", "n_clicks")],
+    prevent_initial_call=True,
+)
+def reset_filters(n_clicks):
+    """Reset all filters to default values."""
+    print("resetting filters")
+    str_reset_values = [None] * len(dash_dict["str_cols"])
+    num_reset_values = [
+        [mortality_df[col].min(), mortality_df[col].max()]
+        for col in dash_dict["num_cols"]
+    ]
+    return str_reset_values, num_reset_values

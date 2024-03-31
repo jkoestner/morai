@@ -1,4 +1,5 @@
 """Preprocessors used in the models."""
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
@@ -50,7 +51,9 @@ def preprocess_data(
     logger.info(f"model target: {model_target}")
     y = model_data[model_target].copy()
 
-    model_weight = feature_dict.get("weight", [])[0]
+    model_weight = (
+        feature_dict.get("weight", [])[0] if feature_dict.get("weight") else None
+    )
     logger.info(f"model weights: {model_weight}")
     weights = model_data[model_weight].copy() if model_weight else None
     x_features = [
