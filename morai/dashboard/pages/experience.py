@@ -18,55 +18,50 @@ from dash import (
 from morai.dashboard import dashboard_helper as dh
 from morai.experience import charters
 from morai.forecast import metrics
-from morai.utils import helpers
+from morai.utils import custom_logger, helpers
 
-dash.register_page(__name__, path="/", title="morai - Experience")
+logger = custom_logger.setup_logging(__name__)
 
-# loading config and reading data
-config_general = dh.load_config()
-config_dataset = config_general["datasets"][config_general["general"]["dataset"]]
-config = config_dataset["columns"]
+
+dash.register_page(__name__, path="/experience", title="morai - Experience")
+
+# load config
+config = dh.load_config()
+config_dataset = config["datasets"][config["general"]["dataset"]]
+# load dataset
 file_path = helpers.FILE_PATH / "dataset" / config_dataset["filename"]
 if file_path.suffix == ".parquet":
     pl.enable_string_cache()
     lzdf = pl.scan_parquet(file_path)
     mortality_df = lzdf.collect()
     mortality_df = mortality_df.to_pandas()
-# create dashboard dictionary
-dash_dict = dh.generate_dash_dict(mortality_df)
-
+# create filters
+filter_dict = dh.generate_filters(mortality_df)
+# create selectors
+selectors_default = dh.generate_selectors(
+    df=mortality_df,
+    filter_dict=filter_dict,
+    config=config,
+)
 # create cards
+card_list = [
+    config_dataset["columns"]["exposure_amt"],
+    config_dataset["columns"]["actuals_cnt"],
+    config_dataset["columns"]["exposure_amt"],
+    config_dataset["columns"]["actuals_amt"],
+]
 card = dh.generate_card(
     df=mortality_df,
-    card_list=[
-        config["default_exposure_amt"],
-        config["default_actuals_cnt"],
-        config["default_exposure_amt"],
-        config["default_actuals_amt"],
-    ],
-    title="Data",
+    card_list=card_list,
+    title="All Data",
     color="LightSkyBlue",
 )
 filtered_card_default = dh.generate_card(
     df=mortality_df,
-    card_list=[
-        config["default_exposure_amt"],
-        config["default_actuals_cnt"],
-        config["default_exposure_amt"],
-        config["default_actuals_amt"],
-    ],
-    title="Filtered",
+    card_list=card_list,
+    title="Filtered Data",
     color="LightGreen",
 )
-selectors_default = dh.generate_selectors(
-    df=mortality_df,
-    dash_dict=dash_dict,
-    default_x_axis="observation_year",
-    default_y_axis="ratio",
-    default_numerator=config["default_actuals_amt"],
-    default_denominator=config["default_exposure_amt"],
-)
-
 
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
@@ -81,11 +76,22 @@ def layout():
     return html.Div(
         [
             dcc.Store(id="user-config", storage_type="session"),
+            # -----------------------------------------------------
             html.H4(
                 "Experience Analysis",
                 className="bg-primary text-white p-2 mb-2 text-center",
             ),
-            html.P(),
+            dbc.Row(
+                html.P(
+                    [
+                        "Dataset: ",
+                        html.Span(
+                            f"{config_dataset['filename']}",
+                            style={"fontWeight": "bold"},
+                        ),
+                    ],
+                ),
+            ),
             dbc.Row(
                 [
                     dbc.Col(card, width="auto"),
@@ -104,7 +110,6 @@ def layout():
                     ),
                 ],
             ),
-            html.P(),
             dbc.Row(
                 dbc.Col(
                     html.Div(
@@ -171,7 +176,7 @@ def layout():
                                     n_clicks=0,
                                     className="btn btn-primary mt-2 mb-2",
                                 ),
-                                *dash_dict["filters"],
+                                *filter_dict["filters"],
                             ],
                             className="m-1 bg-light border",
                         ),
@@ -215,18 +220,18 @@ def update_tab_content(
     active_tab,
 ):
     """Create chart and table for experience analysis."""
-    print("creating tab content")
+    logger.debug("creating tab content")
     # inputs
     inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
     x_axis = dh._inputs_parse_id(inputs_info, "x_axis_selector")
     y_axis = dh._inputs_parse_id(inputs_info, "y_axis_selector")
     # filter the dataset
     filtered_df = mortality_df.copy()
-    for col in dash_dict["str_cols"]:
+    for col in filter_dict["str_cols"]:
         str_values = dh._inputs_parse_id(inputs_info, col)
         if str_values:
             filtered_df = filtered_df[filtered_df[col].isin(str_values)]
-    for col in dash_dict["num_cols"]:
+    for col in filter_dict["num_cols"]:
         num_values = dh._inputs_parse_id(inputs_info, col)
         if num_values:
             filtered_df = filtered_df[
@@ -235,12 +240,7 @@ def update_tab_content(
             ]
     filtered_card = dh.generate_card(
         df=filtered_df,
-        card_list=[
-            config["default_exposure_amt"],
-            config["default_actuals_cnt"],
-            config["default_exposure_amt"],
-            config["default_actuals_amt"],
-        ],
+        card_list=card_list,
         title="Filtered",
         color="LightGreen",
     )
@@ -253,8 +253,8 @@ def update_tab_content(
             chart = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=[dh._inputs_parse_id(inputs_info, "rates_selector")],
-                weights=[dh._inputs_parse_id(inputs_info, "weights_selector")],
+                rates=dh._inputs_parse_id(inputs_info, "rates_selector"),
+                weights=dh._inputs_parse_id(inputs_info, "weights_selector"),
                 secondary=dh._inputs_parse_id(inputs_info, "secondary_selector"),
                 x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
             )
@@ -277,8 +277,8 @@ def update_tab_content(
             table = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=[dh._inputs_parse_id(inputs_info, "rates_selector")],
-                weights=[dh._inputs_parse_id(inputs_info, "weights_selector")],
+                rates=dh._inputs_parse_id(inputs_info, "rates_selector"),
+                weights=dh._inputs_parse_id(inputs_info, "weights_selector"),
                 secondary=dh._inputs_parse_id(inputs_info, "secondary_selector"),
                 x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
                 display=False,
@@ -304,10 +304,10 @@ def update_tab_content(
     elif active_tab == "tab-rank":
         rank = metrics.ae_rank(
             df=filtered_df,
-            features=config["features"],
-            actuals=config["default_actuals_amt"],
-            expecteds=config["default_expecteds_amt"],
-            exposures=config["default_exposure_amt"],
+            features=config_dataset["columns"]["features"],
+            actuals=config_dataset["columns"]["actuals_amt"],
+            expecteds=config_dataset["columns"]["expecteds_amt"],
+            exposures=config_dataset["columns"]["exposure_amt"],
         )
 
         tab_content = dag.AgGrid(
@@ -322,17 +322,14 @@ def update_tab_content(
 
 
 @callback(
-    [Output({"type": "selector-group", "index": ALL}, "style")],
+    Output({"type": "selector-group", "index": ALL}, "style"),
     [Input("tool-selector", "value")],
     [State({"type": "selector-group", "index": ALL}, "id")],
     prevent_initial_call=True,
 )
 def toggle_selectors(tool, all_selectors):
     """Toggle selectors based on tool."""
-    # if not tool:
-    #     raise PreventUpdate
-
-    print("toggle selectors")
+    logger.debug("toggle selectors")
     chart_selectors = [
         "x_axis",
         "y_axis",
@@ -379,10 +376,10 @@ def toggle_selectors(tool, all_selectors):
 )
 def reset_filters(n_clicks):
     """Reset all filters to default values."""
-    print("resetting filters")
-    str_reset_values = [None] * len(dash_dict["str_cols"])
+    logger.debug("resetting filters")
+    str_reset_values = [None] * len(filter_dict["str_cols"])
     num_reset_values = [
         [mortality_df[col].min(), mortality_df[col].max()]
-        for col in dash_dict["num_cols"]
+        for col in filter_dict["num_cols"]
     ]
     return str_reset_values, num_reset_values

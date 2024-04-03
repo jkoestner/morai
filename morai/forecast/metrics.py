@@ -1,4 +1,5 @@
 """Metrics used in the models."""
+
 import numpy as np
 import pandas as pd
 import sklearn.metrics as skm
@@ -100,7 +101,11 @@ def get_metrics(y_true, y_pred, metrics, model=None, **kwargs):
                 )
                 metric_dict[metric] = None
         else:
-            metric_dict[metric] = getattr(skm, metric)(y_true, y_pred, **kwargs)
+            try:
+                metric_dict[metric] = getattr(skm, metric)(y_true, y_pred, **kwargs)
+            except AttributeError:
+                logger.error(f"Metric {metric} not found in sklearn.metrics")
+                metric_dict[metric] = None
     return metric_dict
 
 
@@ -167,3 +172,198 @@ def ae_rank(df, features, actuals, expecteds, exposures):
     rank_df = rank_df.sort_values(by="rank_combined")
 
     return rank_df
+
+
+class ModelResults:
+    """
+    Class to store model results.
+
+    The class will hold the model information and the scorecard.
+
+    Parameters
+    ----------
+    scorecard_cols : list
+        The scorecard columns
+
+    """
+
+    def __init__(self, scorecard_cols=None):
+        self.model = pd.DataFrame(
+            columns=[
+                "model_name",
+                "model_data_shape",
+                "feature_dict",
+                "date_added",
+            ]
+        )
+        self.scorecard_cols = scorecard_cols
+        self.scorecard = pd.DataFrame(columns=["model_name", *scorecard_cols])
+
+    def add_model(
+        self,
+        model_name,
+        model_data,
+        feature_dict,
+        y_true,
+        y_pred,
+        model=None,
+        **kwargs,
+    ):
+        """
+        Add the model.
+
+        Parameters
+        ----------
+        model_name : str
+            The model name
+        model_data : pd.DataFrame
+            The model data
+        feature_dict : dict
+            The feature dictionary
+        y_true : series
+            The columns to create metrics on (actuals)
+        y_pred : series
+            The columns to create metrics on (predicted)
+        model : model, optional (default=None)
+            The model that has metrics to use
+        kwargs : dict
+            The keyword arguments for the metrics
+
+        Returns
+        -------
+        None
+
+        """
+        logger.info(f"Adding model '{model_name}'")
+        if self.check_duplicate_name(model_name):
+            logger.error(
+                f"Model name {model_name} already exists, not adding model. "
+                f"Please use a different name."
+            )
+            return
+
+        # adding model and scorecard rows
+        model_row = pd.DataFrame(
+            [
+                {
+                    "model_name": model_name,
+                    "model_data_shape": model_data.shape,
+                    "feature_dict": feature_dict,
+                    "date_added": pd.Timestamp.now(),
+                }
+            ]
+        ).dropna(axis="columns", how="all")
+        scorecard_row = pd.DataFrame(
+            [
+                {
+                    "model_name": model_name,
+                    **self.get_metrics(
+                        y_true=y_true,
+                        y_pred=y_pred,
+                        model=model,
+                        metrics=None,
+                        **kwargs,
+                    ),
+                }
+            ]
+        ).dropna(axis="columns", how="all")
+
+        if self.model.empty or self.scorecard.empty:
+            self.model = model_row
+            self.scorecard = scorecard_row
+        else:
+            self.model = pd.concat([self.model, model_row], ignore_index=True)
+            self.scorecard = pd.concat(
+                [self.scorecard, scorecard_row], ignore_index=True
+            )
+
+    def remove_model(self, model_name):
+        """
+        Remove the model.
+
+        Parameters
+        ----------
+        model_name : str
+            The model name
+
+        Returns
+        -------
+        None
+
+        """
+        logger.info(f"Removing model '{model_name}'")
+        self.model = self.model[self.model["model_name"] != model_name]
+        self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
+
+    def get_metrics(self, y_true, y_pred, metrics=None, model=None, **kwargs):
+        """
+        Get the metrics.
+
+        In general a higher score indicates better performance. Metrics that
+        are better with lower score are:
+        - smape
+        - mean_squared_error
+        - mean_absolute_error
+
+        To get a list of possible metrics:
+        - https://scikit-learn.org/stable/modules/model_evaluation.html
+
+        Parameters
+        ----------
+        y_true : series
+            The actual column name
+        y_pred : series
+            The predicted column name
+        model : model
+            there are some models that provide metrics which we can use
+        metrics : list
+            list of metrics to use
+        kwargs : dict
+            The keyword arguments for the metrics
+
+        Returns
+        -------
+        metric_dict : dict
+            The metric dictionary
+
+        """
+        if metrics is None:
+            metrics = self.scorecard_cols
+        metric_dict = {}
+        for metric in metrics:
+            if metric == "smape":
+                metric_dict[metric] = smape(y_true, y_pred)
+            elif metric == "ae":
+                metric_dict[metric] = ae(y_true, y_pred)
+            elif metric == "aic":
+                try:
+                    metric_dict[metric] = model.aic if model is not None else None
+                except AttributeError:
+                    logger.error(
+                        f"Model {model} does not have AIC attribute, returning None"
+                    )
+                    metric_dict[metric] = None
+            else:
+                try:
+                    metric_dict[metric] = getattr(skm, metric)(y_true, y_pred, **kwargs)
+                except AttributeError:
+                    logger.error(f"Metric {metric} not found in sklearn.metrics")
+                    metric_dict[metric] = None
+        return metric_dict
+
+    def check_duplicate_name(self, model_name):
+        """
+        Check if the model name already exists.
+
+        Parameters
+        ----------
+        model_name : str
+            The model name
+
+        Returns
+        -------
+        bool
+            True if the model name already exists
+
+        """
+        return model_name in self.model["model_name"].values

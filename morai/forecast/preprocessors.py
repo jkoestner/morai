@@ -41,6 +41,8 @@ def preprocess_data(
         - weights : the weights column (no processing)
         - mapping : the mapping of the features to the encoding. this includes after
           standardization.
+        - md_encoded : the model_data with the encoded features
+        - features : the features that were used in the model
 
     """
     # initializing the variables
@@ -205,6 +207,7 @@ def preprocess_data(
         "weights": weights,
         "mapping": mapping,
         "md_encoded": md_encoded,
+        "features": model_features,
     }
 
     return preprocess_dict

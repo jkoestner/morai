@@ -14,7 +14,9 @@ from dash import (
 )
 
 from morai.dashboard import dashboard_helper as dh
-from morai.utils import helpers
+from morai.utils import custom_logger, helpers
+
+logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/input", title="morai - Input")
 
@@ -32,55 +34,48 @@ def layout():
     return html.Div(
         [
             dcc.Store(id="user-config", storage_type="session"),
+            # -----------------------------------------------------
             dbc.Row(
-                dbc.Col(
-                    html.H4(
-                        "Data Input",
-                        className="bg-primary text-white p-2 mb-2 text-center",
-                    ),
-                    width=12,
+                html.H4(
+                    "Data Input",
+                    className="bg-primary text-white p-2 mb-2 text-center",
                 )
             ),
             dbc.Row(
-                dbc.Col(
-                    html.P(
-                        [
-                            "This page is used to load the configuration file "
-                            "and display the configuration.",
-                            html.Br(),
-                            "The configuration file should be located in: ",
-                            html.Span(
-                                f"{helpers.FILE_PATH!s}",
-                                style={"fontWeight": "bold"},
-                            ),
-                            html.Br(),
-                            "The name should be: ",
-                            html.Span(
-                                "dashboard_config.yaml", style={"fontWeight": "bold"}
-                            ),
-                        ],
-                    ),
-                    width=12,
-                )
+                html.P(
+                    [
+                        "This page is used to load the configuration file "
+                        "and display the configuration.",
+                        html.Br(),
+                        "The configuration file should be located in: ",
+                        html.Span(
+                            f"{helpers.FILE_PATH!s}",
+                            style={"fontWeight": "bold"},
+                        ),
+                        html.Br(),
+                        "The name should be: ",
+                        html.Span(
+                            "dashboard_config.yaml", style={"fontWeight": "bold"}
+                        ),
+                    ],
+                ),
             ),
             dbc.Container(
                 [
                     dbc.Row(
-                        [
-                            html.Div(
-                                html.H5(
-                                    "Select File",
-                                    style={
-                                        "border-bottom": "1px solid black",
-                                        "padding-bottom": "5px",
-                                    },
-                                ),
+                        html.Div(
+                            html.H5(
+                                "Select File",
                                 style={
-                                    "width": "fit-content",
-                                    "padding": "0px",
+                                    "border-bottom": "1px solid black",
+                                    "padding-bottom": "5px",
                                 },
                             ),
-                        ]
+                            style={
+                                "width": "fit-content",
+                                "padding": "0px",
+                            },
+                        ),
                     ),
                     dbc.Row(
                         [
@@ -158,12 +153,13 @@ def layout():
 )
 def load_config(n_clicks, file):
     """Load the configuration file."""
-    print("load config")
+    logger.debug("load config")
     if n_clicks:
         config = dh.load_config()
         for dataset in config["datasets"]:
             if config["datasets"][dataset]["filename"] == file:
                 config["general"]["dataset"] = dataset
+        dh.write_config(config)
 
         return config
 
@@ -178,7 +174,7 @@ def load_config(n_clicks, file):
 )
 def display_general_config(config_data):
     """Display the configuration file."""
-    print("display config")
+    logger.debug("display config")
     general_dict = config_data["general"]
     general_json = json.dumps(general_dict, indent=2)
     general_config_str = f"```json\n{general_json}\n```"

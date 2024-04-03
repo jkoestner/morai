@@ -15,7 +15,9 @@ with "standard font"
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import dcc, html
+from dash import html
+
+from morai.dashboard import dashboard_helper as dh
 
 #      _    ____  ____
 #     / \  |  _ \|  _ \
@@ -83,4 +85,4 @@ app.layout = html.Div(
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host="0.0.0.0")
+    app.run_server(debug=True, host=dh.host)

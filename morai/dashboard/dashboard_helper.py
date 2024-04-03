@@ -14,6 +14,7 @@ from morai.utils import helpers
 
 config_path = helpers.ROOT_PATH / "files" / "dashboard_config.yaml"
 dataset_path = helpers.ROOT_PATH / "files" / "dataset"
+host = "0.0.0.0"
 
 
 def convert_to_short_number(number):
@@ -38,7 +39,7 @@ def convert_to_short_number(number):
     return f"{number:.1f}T"
 
 
-def generate_dash_dict(df):
+def generate_filters(df):
     """
     Generate a dictionary of dashboard options from dataframe.
 
@@ -49,7 +50,7 @@ def generate_dash_dict(df):
 
     Returns
     -------
-    dash_dict : dict
+    filter_dict : dict
         Dictionary for the dashboard including following keys:
             - filters: list of filters
             - str_cols: list of string columns
@@ -88,9 +89,9 @@ def generate_dash_dict(df):
             num_cols.append(col)
         filters.append(html.Label(col))
         filters.append(filter)
-        dash_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
+        filter_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
 
-    return dash_dict
+    return filter_dict
 
 
 def generate_card(df, card_list, title="Data", color="Azure", inverse=False, **kwargs):
@@ -137,11 +138,8 @@ def generate_card(df, card_list, title="Data", color="Azure", inverse=False, **k
 
 def generate_selectors(
     df,
-    dash_dict,
-    default_x_axis,
-    default_y_axis,
-    default_numerator,
-    default_denominator,
+    filter_dict,
+    config,
 ):
     """
     Generate selectors for tool.
@@ -150,16 +148,10 @@ def generate_selectors(
     ----------
     df : pd.DataFrame
         Dataframe to generate selectors.
-    dash_dict : dict
-        Dictionary for the dashboard
-    default_x_axis : str
-        default x-axis.
-    default_y_axis : str
-        default y-axis.
-    default_numerator : str
-        default numerator.
-    default_denominator : str
-        default denominator.
+    filter_dict : dict
+        Dictionary for the filters
+    config : dict
+        Configuration dictionary.
 
     Returns
     -------
@@ -167,6 +159,7 @@ def generate_selectors(
         List of selectors.
 
     """
+    config_dataset = config["datasets"][config["general"]["dataset"]]
     selectors = [
         # selectors
         html.H5(
@@ -182,8 +175,8 @@ def generate_selectors(
                 html.Label("X-Axis"),
                 dcc.Dropdown(
                     id={"type": "selector", "index": "x_axis_selector"},
-                    options=df.columns,
-                    value=default_x_axis,
+                    options=config_dataset["columns"]["features"],
+                    value=config["defaults"]["x_axis"],
                     clearable=False,
                     placeholder="Select X-Axis",
                 ),
@@ -195,8 +188,8 @@ def generate_selectors(
                 html.Label("Y-Axis"),
                 dcc.Dropdown(
                     id={"type": "selector", "index": "y_axis_selector"},
-                    options=["ratio", "risk"],
-                    value=default_y_axis,
+                    options=["ratio", "risk"] + config_dataset["columns"]["measures"],
+                    value=config["defaults"]["y_axis"],
                     clearable=False,
                     placeholder="Select Y-Axis",
                 ),
@@ -208,7 +201,7 @@ def generate_selectors(
                 html.Label("Color"),
                 dcc.Dropdown(
                     id={"type": "selector", "index": "color_selector"},
-                    options=df.columns,
+                    options=config_dataset["columns"]["features"],
                     value=None,
                     placeholder="Select Color",
                 ),
@@ -234,8 +227,8 @@ def generate_selectors(
                 html.Label("Numerator"),
                 dcc.Dropdown(
                     id={"type": "selector", "index": "numerator_selector"},
-                    options=dash_dict["num_cols"],
-                    value=default_numerator,
+                    options=config_dataset["columns"]["measures"],
+                    value=config["defaults"]["numerator"],
                     placeholder="Select Numerator",
                 ),
             ],
@@ -246,8 +239,8 @@ def generate_selectors(
                 html.Label("Denominator"),
                 dcc.Dropdown(
                     id={"type": "selector", "index": "denominator_selector"},
-                    options=dash_dict["num_cols"],
-                    value=default_denominator,
+                    options=config_dataset["columns"]["measures"],
+                    value=config["defaults"]["denominator"],
                     placeholder="Select Denominator",
                 ),
             ],
@@ -271,8 +264,8 @@ def generate_selectors(
                 html.Label("Rates"),
                 dcc.Dropdown(
                     id={"type": "selector", "index": "rates_selector"},
-                    options=["ae_vbt15", "ae_glm"],
-                    value="ae_vbt15",
+                    options=config_dataset["columns"]["rates"],
+                    value=config["defaults"]["rates"],
                     clearable=False,
                     multi=True,
                     placeholder="Select Rates",
@@ -286,8 +279,8 @@ def generate_selectors(
                 html.Label("Weights"),
                 dcc.Dropdown(
                     id={"type": "selector", "index": "weights_selector"},
-                    options=["exp_amt_vbt15", "exp_amt_glm"],
-                    value=None,
+                    options=config_dataset["columns"]["measures"],
+                    value=config["defaults"]["weights"],
                     multi=True,
                     placeholder="Select Weights",
                 ),
@@ -300,7 +293,7 @@ def generate_selectors(
                 html.Label("Secondary"),
                 dcc.Dropdown(
                     id={"type": "selector", "index": "secondary_selector"},
-                    options=dash_dict["num_cols"],
+                    options=config_dataset["columns"]["measures"],
                     value=None,
                     placeholder="Select Secondary",
                 ),
@@ -396,6 +389,23 @@ def load_config(config_path=config_path):
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
     return config
+
+
+def write_config(config, config_path=config_path):
+    """
+    Write the yaml configuration file.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration dictionary.
+    config_path : str
+        Path to the yaml configuration file.
+
+
+    """
+    with open(config_path, "w") as file:
+        yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
 
 def list_files(folder_path=dataset_path):
