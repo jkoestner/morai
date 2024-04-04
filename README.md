@@ -58,3 +58,10 @@ If wanting to get more detail in output of messages the logging can increased
 from morai.utils import helpers
 helpers.set_log_level("DEBUG")
 ```
+
+### Coverage
+
+To see the test coverage the following command is run in the root directory.
+```
+pytest --cov=morai --cov-report=html
+```

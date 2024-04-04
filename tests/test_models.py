@@ -1,5 +1,5 @@
 """
-Tests the experience.
+Tests the models.
 
 These tests are meant to ensure the models are producing
 results that are similar to what has been provided in the past. Libraries
@@ -19,8 +19,9 @@ from morai.utils import helpers
 
 test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast"
 simple_data = pd.read_csv(test_forecast_path / "simple_data.csv")
+seed = 42
 
-# preprocess the data
+# preprocess metadata for models
 feature_dict = {
     "target": ["rate"],
     "weight": [],
@@ -34,6 +35,22 @@ preprocess_dict = preprocessors.preprocess_data(
 X = preprocess_dict["X"]
 y = preprocess_dict["y"]
 weights = preprocess_dict["weights"]
+
+# loading in usa mortality data for lee-carter and cbd
+# https://www.mortality.org/Country/Country?cntr=USA
+colspecs = [(2, 7), (15, 20), (31, 40), (46, 56), (62, 72)]
+colnames = ["observation_year", "attained_age", "female", "male", "qx_raw"]
+hmd_usa_df = pd.read_fwf(
+    "tests/files/forecast/hmd_usa_qx.txt",
+    skiprows=3,
+    colspecs=colspecs,
+    names=colnames,
+)
+hmd_usa_df = hmd_usa_df[["observation_year", "attained_age", "qx_raw"]]
+excluded_ages = [str(age) for age in range(101, 111)] + ["110+"]
+hmd_usa_df = hmd_usa_df[~hmd_usa_df["attained_age"].isin(excluded_ages)]
+hmd_usa_df["attained_age"] = hmd_usa_df["attained_age"].astype(int)
+hmd_usa_df["qx_raw"] = hmd_usa_df["qx_raw"].astype(float)
 
 
 def test_glm():
@@ -80,7 +97,7 @@ def test_rf():
         min_samples_split=5,
         min_samples_leaf=5,
         oob_score=True,
-        random_state=42,
+        random_state=seed,
     )
     rf_fit = rf.fit(X, y, sample_weight=weights)
     predictions = rf_fit.predict(X)
@@ -102,6 +119,7 @@ def test_lgb():
         "feature_fraction": 0.5,
         "bagging_fraction": 0.8,
         "bagging_freq": 5,
+        "seed": seed,
     }
     train_data = lgb.Dataset(X, label=y, weight=weights, categorical_feature="auto")
     bst = lgb.train(params, train_data)
@@ -121,9 +139,46 @@ def test_xg():
         subsample=0.8,
         colsample_bytree=0.5,
         enable_categorical=True,
+        random_state=seed,
     )
     bst.fit(X, y, sample_weight=weights)
     predictions = bst.predict(X)
 
-    assert predictions.mean() == approx(0.0527, abs=1e-4), "xgboost mean is off"
-    assert predictions[0] == approx(0.0767, abs=1e-4), "xgboost first value is off"
+    assert predictions.mean() == approx(0.0530, abs=1e-4), "xgboost mean is off"
+    assert predictions[0] == approx(0.0765, abs=1e-4), "xgboost first value is off"
+
+
+def test_lee_carter():
+    """Test the Lee-Carter model."""
+    lc_df = hmd_usa_df.copy()
+    # creating the model
+    lc = models.LeeCarter()
+    # qx values for historical
+    lc_df = lc.fit(lc_df)
+    # qx values for projected
+    lcf_df = lc.forecast(years=5, seed=seed)
+
+    assert lc_df["qx_lc"].mean() == approx(
+        0.0526, abs=1e-4
+    ), "lee-carter historical mean is off"
+    assert lcf_df["qx_lc"].mean() == approx(
+        0.0464, abs=1e-4
+    ), "lee-carter forecasted mean is off"
+
+
+def test_cbd():
+    """Test the CBD model."""
+    cbd_df = hmd_usa_df.copy()
+    # creating the model
+    cbd = models.CBD()
+    # qx values for historical
+    cbd_df = cbd.fit(cbd_df)
+    # qx values for projected
+    cbdf_df = cbd.forecast(years=5, seed=seed)
+
+    assert cbd_df["qx_cbd"].mean() == approx(
+        0.0423, abs=1e-4
+    ), "cbd historical mean is off"
+    assert cbdf_df["qx_cbd"].mean() == approx(
+        0.0370, abs=1e-4
+    ), "cbd forecasted mean is off"

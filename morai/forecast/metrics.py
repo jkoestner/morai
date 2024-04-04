@@ -54,61 +54,6 @@ def ae(y_true, y_pred):
     return y_true.sum() / y_pred.sum()
 
 
-def get_metrics(y_true, y_pred, metrics, model=None, **kwargs):
-    """
-    Get the metrics.
-
-    In general a higher score indicates better performance. Metrics that
-    are better with lower score are:
-       - smape
-       - mean_squared_error
-       - mean_absolute_error
-
-    To get a list of possible metrics:
-       - https://scikit-learn.org/stable/modules/model_evaluation.html
-
-    Parameters
-    ----------
-    y_true : series
-        The actual column name
-    y_pred : series
-        The predicted column name
-    metrics : list
-        list of metrics to use
-    model : model
-        there are some models that provide metrics which we can use
-    kwargs : dict
-        The keyword arguments for the metrics
-
-    Returns
-    -------
-    metric_dict : dict
-        The metric dictionary
-
-    """
-    metric_dict = {}
-    for metric in metrics:
-        if metric == "smape":
-            metric_dict[metric] = smape(y_true, y_pred)
-        elif metric == "ae":
-            metric_dict[metric] = ae(y_true, y_pred)
-        elif metric == "aic":
-            try:
-                metric_dict[metric] = model.aic if model is not None else None
-            except AttributeError:
-                logger.error(
-                    f"Model {model} does not have AIC attribute, returning None"
-                )
-                metric_dict[metric] = None
-        else:
-            try:
-                metric_dict[metric] = getattr(skm, metric)(y_true, y_pred, **kwargs)
-            except AttributeError:
-                logger.error(f"Metric {metric} not found in sklearn.metrics")
-                metric_dict[metric] = None
-    return metric_dict
-
-
 def ae_rank(df, features, actuals, expecteds, exposures):
     """
     Calculate the actual/expected ranking.
