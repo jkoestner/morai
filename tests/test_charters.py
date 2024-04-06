@@ -53,7 +53,7 @@ def test_chart_ratio():
 
 def test_chart_sort():
     """Tests the sorting of the chart."""
-    fig = charters.chart(df, "x_axis", "y_axis", color=None, sort_y=True)
+    fig = charters.chart(df, "x_axis", "y_axis", color=None, y_sort=True)
     assert isinstance(fig, go.Figure)
     assert fig.layout.title.text == "y_axis by x_axis and None"
     # assert fig.data[0].y == [50, 40, 30, 20, 10]

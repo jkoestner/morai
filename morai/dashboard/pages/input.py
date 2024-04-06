@@ -13,7 +13,7 @@ from dash import (
     html,
 )
 
-from morai.dashboard import dashboard_helper as dh
+from morai.dashboard.utils import dashboard_helper as dh
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)

@@ -9,6 +9,7 @@ from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
+# creating presets
 presets = {
     "vbt15": {
         "table_list": [3224, 3234, 3252, 3262],
@@ -341,3 +342,43 @@ class MortTable:
             mort_grid = mort_grid[mort_grid["attained_age"] <= self.max_age]
         mort_grid["vals"] = None
         return mort_grid
+
+
+def compare_tables(table_1, table_2, value_col="vals"):
+    """
+    Compare two tables.
+
+    Parameters
+    ----------
+    table_1 : pd.DataFrame
+        The first table.
+    table_2 : pd.DataFrame
+        The second table.
+    value_col : str, optional
+        The column to compare.
+
+    Returns
+    -------
+    compare_df : pd.DataFrame
+        DataFrame of the comparison with the ratio of the values.
+
+    """
+    if type(table_1) != pd.DataFrame or type(table_2) != pd.DataFrame:
+        raise ValueError("Both tables must be pandas DataFrames.")
+    if value_col not in table_1.columns or value_col not in table_2.columns:
+        raise ValueError(f"Value column: {value_col} not in both tables.")
+
+    keys = [col for col in table_1.columns if col != "vals"]
+    missing_keys = [key for key in keys if key not in table_2.columns]
+    if missing_keys:
+        raise ValueError(f"Table 2 is missing the following keys: {missing_keys}")
+
+    compare_df = table_1.merge(
+        table_2,
+        on=keys,
+        suffixes=("_1", "_2"),
+    )
+    compare_df = compare_df.rename(columns={"vals_1": "table_1", "vals_2": "table_2"})
+    compare_df["ratio"] = compare_df["table_1"] / compare_df["table_2"]
+
+    return compare_df

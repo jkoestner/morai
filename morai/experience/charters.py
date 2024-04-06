@@ -1,4 +1,5 @@
 """Collection of visualization tools."""
+
 import math
 
 import numpy as np
@@ -27,8 +28,9 @@ def chart(
     numerator=None,
     denominator=None,
     title=None,
-    sort_y=False,
+    y_sort=False,
     x_bins=None,
+    y_special=True,
     display=True,
     **kwargs,
 ):
@@ -62,10 +64,12 @@ def chart(
         The column name to use for the expected values.
     title : str
         The title of the chart.
-    sort_y : bool, optional (default=False)
+    y_sort : bool, optional (default=False)
         Sort the records by the y-axis descending.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
+    y_special : bool, optional (default=True)
+        Whether to calculate the y_axis using the numerator and denominator.
     display : bool, optional (default=True)
         Whether to display figure or not.
     **kwargs : dict
@@ -79,18 +83,33 @@ def chart(
     """
     df = df.copy()
     # heatmap sum values are color rather than y_axis
-    if type == "heatmap":
+    if type in ("heatmap", "contour"):
         if not color:
-            raise ValueError("Color parameter is required for heatmap.")
+            raise ValueError("Color parameter is required for heatmap/contour.")
         _y_axis = y_axis
         _color = color
         color = _y_axis
         y_axis = _color
 
     # getting the columns to sum by
-    # columns will be y_axis is not the special "ratio" values
-    sum_col_dict = {"ratio": [numerator, denominator]}
-    sum_cols = sum_col_dict.get(y_axis, y_axis)
+    # columns will be y_axis unless y_axis is "ratio" or "risk"
+    check_cols = [x_axis, y_axis, color, numerator, denominator]
+    if y_special and y_axis in ["ratio", "risk"]:
+        logger.info(f"Calculating {y_axis} using [{numerator}] and [{denominator}]")
+        sum_cols = [numerator, denominator]
+        check_cols.remove(y_axis)
+    else:
+        sum_cols = y_axis
+
+    # check if columns in dataframe
+    missing_columns = [
+        col for col in check_cols if col is not None and col not in df.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            f"The following column(s) are not in the "
+            f"DataFrame: {', '.join(missing_columns)}"
+        )
 
     # groupby by the x_axis and color
     groupby_cols = [x_axis]
@@ -104,11 +123,10 @@ def chart(
     grouped_data = df.groupby(groupby_cols, observed=True)[sum_cols].sum().reset_index()
 
     # calculating fields
-    if y_axis in sum_col_dict:
-        numerator, denominator = sum_col_dict[y_axis]
+    if y_special and y_axis in ["ratio", "risk"]:
         grouped_data[y_axis] = grouped_data[numerator] / grouped_data[denominator]
 
-    if sort_y:
+    if y_sort:
         grouped_data = grouped_data.sort_values(by=y_axis, ascending=False)
 
     # Selecting the plot type based on the 'chart_type' parameter
@@ -144,8 +162,30 @@ def chart(
             title=title,
             **kwargs,
         )
+    elif type == "contour":
+        grouped_data = grouped_data.pivot(index=_y_axis, columns=x_axis, values=_color)
+        if not title:
+            title = f"Contour of {_color} by {x_axis} and {_y_axis}"
+        fig = go.Figure(
+            data=[
+                go.Contour(
+                    z=grouped_data.values,
+                    x=grouped_data.columns,
+                    y=grouped_data.index,
+                    **kwargs,
+                )
+            ]
+        )
+        fig.update_layout(
+            title=title,
+            xaxis_title=x_axis,
+            yaxis_title=_y_axis,
+        )
+
     else:
-        raise ValueError("Unsupported type. Use 'line', 'heatmap', or 'bar'.")
+        raise ValueError(
+            "Unsupported type. Use 'line', 'bar', 'heatmap', or 'contour'."
+        )
 
     # return the dataframe instead of figure
     if not display:
@@ -161,7 +201,7 @@ def compare_rates(
     line_feature=None,
     weights=None,
     secondary=None,
-    log_y=False,
+    y_log=False,
     x_bins=None,
     display=True,
     **kwargs,
@@ -191,7 +231,7 @@ def compare_rates(
         A list of weights to weight the rates by.
     secondary : str, optional (default=None)
         The name of the column to have a secondary y-axis for.
-    log_y : bool, optional (default=False)
+    y_log : bool, optional (default=False)
         Whether to log the y-axis.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
@@ -295,7 +335,7 @@ def compare_rates(
     # Set plot layout
     yaxis_type = "-"
     y_title = "Rates"
-    if log_y:
+    if y_log:
         yaxis_type = "log"
         y_title = "Log Rates"
 
@@ -676,7 +716,14 @@ def scatter(df, target, features, sample_nbr=100, cols=3):
 
 
 def target(
-    df, target, features=None, cols=3, numerator=None, denominator=None, normalize=None
+    df,
+    target,
+    features=None,
+    cols=3,
+    y_special=True,
+    numerator=None,
+    denominator=None,
+    normalize=None,
 ):
     """
     Create multiplot showing variable relationship with target.
@@ -695,6 +742,8 @@ def target(
         The features to use for the plot. Default is to use all features.
     cols : int, optional
         The number of columns to use for the subplots.
+    y_special : bool, optional (default=True)
+        Whether to calculate the y_axis using the numerator and denominator.
     numerator : str, optional
         The column name to use for the numerator values.
     denominator : str, optional
@@ -747,14 +796,14 @@ def target(
         row = (i - 1) // cols + 1
         col = (i - 1) % cols + 1
 
-        if target == "ratio":
+        if y_special and target == "ratio":
             grouped_data = (
                 df.groupby(feature, observed=True)[[numerator, denominator]]
                 .sum()
                 .reset_index()
             ).sort_values(by=feature)
             grouped_data[target] = grouped_data[numerator] / grouped_data[denominator]
-        elif target == "risk":
+        elif y_special and target == "risk":
             grouped_data = (
                 df.groupby(feature, observed=True)[[numerator, denominator]]
                 .sum()

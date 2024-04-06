@@ -17,7 +17,7 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import html
 
-from morai.dashboard import dashboard_helper as dh
+from morai.dashboard.utils import dashboard_helper as dh
 
 #      _    ____  ____
 #     / \  |  _ \|  _ \
@@ -31,9 +31,9 @@ app = dash.Dash(
     __name__,
     use_pages=True,
     external_stylesheets=[
-        dbc.themes.FLATLY,
+        # "https://codepen.io/chriddyp/pen/bWLwgP.css",
         dbc_css,
-        "https://codepen.io/chriddyp/pen/bWLwgP.css",
+        dbc.themes.FLATLY,
     ],
 )
 server = app.server
