@@ -16,6 +16,7 @@ with "standard font"
 import dash
 import dash_bootstrap_components as dbc
 from dash import html
+from dash_extensions.enrich import DashProxy, ServersideOutputTransform
 
 from morai.utils import helpers
 
@@ -27,7 +28,7 @@ from morai.utils import helpers
 
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 
-app = dash.Dash(
+app = DashProxy(
     __name__,
     use_pages=True,
     external_stylesheets=[
@@ -35,6 +36,7 @@ app = dash.Dash(
         dbc_css,
         dbc.themes.FLATLY,
     ],
+    transforms=[ServersideOutputTransform()],
 )
 server = app.server
 app.config.suppress_callback_exceptions = True

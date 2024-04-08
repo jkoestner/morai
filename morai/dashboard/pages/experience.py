@@ -4,10 +4,11 @@ import dash
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import polars as pl
-from dash import (
+from dash_extensions.enrich import (
     ALL,
     Input,
     Output,
+    Serverside,
     State,
     callback,
     callback_context,
@@ -26,26 +27,8 @@ logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/experience", title="morai - Experience")
 
-
 config = dh.load_config()
-
-# load dataset
 config_dataset = config["datasets"][config["general"]["dataset"]]
-file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
-if file_path.suffix == ".parquet":
-    pl.enable_string_cache()
-    lzdf = pl.scan_parquet(file_path)
-    mortality_df = lzdf.collect()
-    mortality_df = mortality_df.to_pandas()
-
-# create filters and selectors
-filter_dict = dh.generate_filters(mortality_df)
-selectors_default = dh.generate_selectors(
-    df=mortality_df,
-    filter_dict=filter_dict,
-    config=config,
-)
-
 # create cards
 card_list = [
     config_dataset["columns"]["exposure_amt"],
@@ -53,19 +36,6 @@ card_list = [
     config_dataset["columns"]["exposure_amt"],
     config_dataset["columns"]["actuals_amt"],
 ]
-card = dh.generate_card(
-    df=mortality_df,
-    card_list=card_list,
-    title="All Data",
-    color="LightSkyBlue",
-)
-filtered_card_default = dh.generate_card(
-    df=mortality_df,
-    card_list=card_list,
-    title="Filtered Data",
-    color="LightGreen",
-)
-
 
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
@@ -80,10 +50,19 @@ def layout():
     return html.Div(
         [
             dcc.Store(id="user-config", storage_type="session"),
+            dcc.Store(id="store", storage_type="session"),
             # -----------------------------------------------------
             html.H4(
                 "Experience Analysis",
                 className="bg-primary text-white p-2 mb-2 text-center",
+            ),
+            dbc.Col(
+                dbc.Button(
+                    "Load Data",
+                    id="load-dataset",
+                    className="btn btn-primary",
+                ),
+                width=1,
             ),
             dbc.Row(
                 html.P(
@@ -98,13 +77,17 @@ def layout():
             ),
             dbc.Row(
                 [
-                    dbc.Col(card, width="auto"),
+                    dbc.Col(
+                        html.Div(
+                            id="card",
+                        ),
+                        width="auto",
+                    ),
                     dbc.Col(
                         dcc.Loading(
                             children=[
                                 html.Div(
                                     id="filtered-card",
-                                    children=filtered_card_default,
                                 ),
                             ],
                             id="loading-card",
@@ -139,7 +122,6 @@ def layout():
                         html.Div(
                             id="selectors",
                             className="m-2 bg-light border p-1",
-                            children=selectors_default,
                         ),
                         width=2,
                     ),
@@ -185,7 +167,9 @@ def layout():
                                     n_clicks=0,
                                     className="btn btn-primary",
                                 ),
-                                *filter_dict["filters"],
+                                html.Div(
+                                    id="filters",
+                                ),
                             ],
                             className="m-2 bg-light border p-1",
                         ),
@@ -207,6 +191,55 @@ def layout():
 
 @callback(
     [
+        Output("store", "dataset"),
+        Output("store", "filter_dict"),
+        Output("selectors", "children"),
+        Output("filters", "children"),
+        Output("card", "children"),
+    ],
+    [Input("load-dataset", "n_clicks")],
+    prevent_initial_call=True,
+)
+def load_data(n_clicks):
+    """Load data and create selectors."""
+    config = dh.load_config()
+    config_dataset = config["datasets"][config["general"]["dataset"]]
+    file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
+    # load dataset
+    if file_path.suffix == ".parquet":
+        pl.enable_string_cache()
+        lzdf = pl.scan_parquet(file_path)
+        dataset = lzdf.collect()
+        dataset = dataset.to_pandas()
+
+    # create filters and selectors
+    filter_dict = dh.generate_filters(dataset)
+    selectors_default = dh.generate_selectors(
+        df=dataset,
+        filter_dict=filter_dict,
+        config=config,
+    )
+    filters = filter_dict["filters"]
+
+    card = dh.generate_card(
+        df=dataset,
+        card_list=card_list,
+        title="All Data",
+        color="LightSkyBlue",
+    )
+
+    return (
+        # setting a key will avoid multiple versions of the same dataset
+        Serverside(dataset),
+        Serverside(filter_dict),
+        selectors_default,
+        filters,
+        card,
+    )
+
+
+@callback(
+    [
         Output("tab-content", "children"),
         Output("filtered-card", "children"),
         Output("chart-secondary", "children"),
@@ -221,6 +254,8 @@ def layout():
         # tabs
         Input("tabs", "active_tab"),
     ],
+    [State("store", "dataset"), State("store", "filter_dict")],
+    prevent_initial_call=True,
 )
 def update_tab_content(
     tool,
@@ -228,6 +263,8 @@ def update_tab_content(
     str_filters,
     num_filters,
     active_tab,
+    dataset,
+    filter_dict,
 ):
     """Create chart and table for experience analysis."""
     logger.debug("creating tab content")
@@ -237,7 +274,7 @@ def update_tab_content(
     y_axis = dh._inputs_parse_id(inputs_info, "y_axis_selector")
     chart_secondary = None
     # filter the dataset
-    filtered_df = mortality_df.copy()
+    filtered_df = dataset.copy()
     for col in filter_dict["str_cols"]:
         str_values = dh._inputs_parse_id(inputs_info, col)
         if str_values:
@@ -351,7 +388,7 @@ def update_tab_content(
     [State({"type": "selector-group", "index": ALL}, "id")],
     prevent_initial_call=True,
 )
-def toggle_selectors(tool, all_selectors):
+def toggle_tool(tool, all_selectors):
     """Toggle selectors based on tool."""
     logger.debug("toggle selectors")
     chart_selectors = [
@@ -398,14 +435,14 @@ def toggle_selectors(tool, all_selectors):
         Output({"type": "num-filter", "index": ALL}, "value"),
     ],
     [Input("reset-filters-button", "n_clicks")],
+    [State("store", "dataset"), State("store", "filter_dict")],
     prevent_initial_call=True,
 )
-def reset_filters(n_clicks):
+def reset_filters(n_clicks, dataset, filter_dict):
     """Reset all filters to default values."""
     logger.debug("resetting filters")
     str_reset_values = [None] * len(filter_dict["str_cols"])
     num_reset_values = [
-        [mortality_df[col].min(), mortality_df[col].max()]
-        for col in filter_dict["num_cols"]
+        [dataset[col].min(), dataset[col].max()] for col in filter_dict["num_cols"]
     ]
     return str_reset_values, num_reset_values
