@@ -17,7 +17,7 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import html
 
-from morai.dashboard.utils import dashboard_helper as dh
+from morai.utils import helpers
 
 #      _    ____  ____
 #     / \  |  _ \|  _ \
@@ -74,6 +74,7 @@ navbar = dbc.Navbar(
     ),
     color="primary",
     dark=True,
+    sticky="top",
 )
 
 app.layout = html.Div(
@@ -85,4 +86,4 @@ app.layout = html.Div(
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host=dh.host)
+    app.run_server(debug=True, host=helpers.HOST)

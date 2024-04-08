@@ -23,7 +23,7 @@ dash.register_page(__name__, path="/explore", title="morai - Explore")
 config = dh.load_config()
 config_dataset = config["datasets"][config["general"]["dataset"]]
 # load dataset
-file_path = helpers.FILE_PATH / "dataset" / config_dataset["filename"]
+file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
 if file_path.suffix == ".parquet":
     pl.enable_string_cache()
     lzdf = pl.scan_parquet(file_path)

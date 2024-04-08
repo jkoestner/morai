@@ -154,7 +154,8 @@ def preprocess_data(
     # nominal - one hot encoded
     if ohe_cols:
         logger.info(f"nominal - one hot encoded: {ohe_cols}")
-        X = pd.get_dummies(X, columns=ohe_cols, dtype="int8", sparse=True)
+        # sparse=True is used to save memory however many models don't support sparse
+        X = pd.get_dummies(X, columns=ohe_cols, dtype="int8", sparse=False)
         for col in ohe_cols:
             mapping[col] = {
                 "values": {k: col + "_" + k for k in sorted(model_data[col].unique())},

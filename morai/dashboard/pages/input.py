@@ -49,7 +49,7 @@ def layout():
                         html.Br(),
                         "The configuration file should be located in: ",
                         html.Span(
-                            f"{helpers.FILE_PATH!s}",
+                            f"{helpers.FILES_PATH!s}",
                             style={"fontWeight": "bold"},
                         ),
                         html.Br(),
@@ -81,12 +81,14 @@ def layout():
                         [
                             dbc.Col(
                                 dcc.Dropdown(
-                                    id="file-dropdown",
+                                    id="dataset-dropdown",
                                     options=[
-                                        {"label": file, "value": file}
-                                        for file in dh.list_files()
+                                        {"label": key, "value": key}
+                                        for key in list(
+                                            dh.load_config()["datasets"].keys()
+                                        )
                                     ],
-                                    placeholder="Select a file",
+                                    placeholder="Select a dataset",
                                 ),
                                 width=3,
                             ),
@@ -148,17 +150,15 @@ def layout():
 @callback(
     Output("user-config", "data"),
     [Input("load-button", "n_clicks")],
-    [State("file-dropdown", "value")],
+    [State("dataset-dropdown", "value")],
     prevent_initial_call=True,
 )
-def load_config(n_clicks, file):
+def load_config(n_clicks, dataset):
     """Load the configuration file."""
     logger.debug("load config")
     if n_clicks:
         config = dh.load_config()
-        for dataset in config["datasets"]:
-            if config["datasets"][dataset]["filename"] == file:
-                config["general"]["dataset"] = dataset
+        config["general"]["dataset"] = dataset
         dh.write_config(config)
 
         return config

@@ -15,6 +15,7 @@ from dash import (
     html,
 )
 
+from morai.dashboard.components import dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters
 from morai.forecast import metrics
@@ -25,24 +26,26 @@ logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/experience", title="morai - Experience")
 
-# load config
+
 config = dh.load_config()
-config_dataset = config["datasets"][config["general"]["dataset"]]
+
 # load dataset
-file_path = helpers.FILE_PATH / "dataset" / config_dataset["filename"]
+config_dataset = config["datasets"][config["general"]["dataset"]]
+file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
 if file_path.suffix == ".parquet":
     pl.enable_string_cache()
     lzdf = pl.scan_parquet(file_path)
     mortality_df = lzdf.collect()
     mortality_df = mortality_df.to_pandas()
-# create filters
+
+# create filters and selectors
 filter_dict = dh.generate_filters(mortality_df)
-# create selectors
 selectors_default = dh.generate_selectors(
     df=mortality_df,
     filter_dict=filter_dict,
     config=config,
 )
+
 # create cards
 card_list = [
     config_dataset["columns"]["exposure_amt"],
@@ -62,6 +65,7 @@ filtered_card_default = dh.generate_card(
     title="Filtered Data",
     color="LightGreen",
 )
+
 
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
@@ -114,7 +118,7 @@ def layout():
                 dbc.Col(
                     html.Div(
                         [
-                            html.Label("tool selector"),
+                            html.Label("tool selector", style={"margin": "10px"}),
                             dcc.Dropdown(
                                 id="tool-selector",
                                 options=["chart", "compare"],
@@ -123,9 +127,9 @@ def layout():
                                 placeholder="Select Tool",
                             ),
                         ],
-                        className="m-1 bg-light border",
+                        className="m-2 bg-light border px-1",
                     ),
-                    width="auto",
+                    width=2,
                 ),
             ),
             dbc.Row(
@@ -134,7 +138,7 @@ def layout():
                     dbc.Col(
                         html.Div(
                             id="selectors",
-                            className="m-1 bg-light border",
+                            className="m-2 bg-light border p-1",
                             children=selectors_default,
                         ),
                         width=2,
@@ -156,6 +160,11 @@ def layout():
                                 type="dot",
                                 children=html.Div(id="tab-content"),
                             ),
+                            dcc.Loading(
+                                id="loading-content",
+                                type="dot",
+                                children=html.Div(id="chart-secondary"),
+                            ),
                         ],
                         width=8,
                     ),
@@ -174,11 +183,11 @@ def layout():
                                     "Reset Filters",
                                     id="reset-filters-button",
                                     n_clicks=0,
-                                    className="btn btn-primary mt-2 mb-2",
+                                    className="btn btn-primary",
                                 ),
                                 *filter_dict["filters"],
                             ],
-                            className="m-1 bg-light border",
+                            className="m-2 bg-light border p-1",
                         ),
                         width=2,
                     ),
@@ -200,6 +209,7 @@ def layout():
     [
         Output("tab-content", "children"),
         Output("filtered-card", "children"),
+        Output("chart-secondary", "children"),
     ],
     [
         # tools
@@ -225,6 +235,7 @@ def update_tab_content(
     inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
     x_axis = dh._inputs_parse_id(inputs_info, "x_axis_selector")
     y_axis = dh._inputs_parse_id(inputs_info, "y_axis_selector")
+    chart_secondary = None
     # filter the dataset
     filtered_df = mortality_df.copy()
     for col in filter_dict["str_cols"]:
@@ -268,7 +279,18 @@ def update_tab_content(
                 numerator=dh._inputs_parse_id(inputs_info, "numerator_selector"),
                 denominator=dh._inputs_parse_id(inputs_info, "denominator_selector"),
                 x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                add_line=dh._inputs_parse_id(inputs_info, "add_line_selector"),
             )
+            if dh._inputs_parse_id(inputs_info, "secondary_selector"):
+                chart_secondary = charters.chart(
+                    df=filtered_df,
+                    x_axis=x_axis,
+                    y_axis=dh._inputs_parse_id(inputs_info, "secondary_selector"),
+                    color=dh._inputs_parse_id(inputs_info, "color_selector"),
+                    type="bar",
+                    x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                )
+                chart_secondary = dcc.Graph(figure=chart_secondary)
 
         tab_content = dcc.Graph(figure=chart)
 
@@ -296,9 +318,10 @@ def update_tab_content(
                 display=False,
             )
 
+        columnDefs = dash_formats.get_column_defs(table)
         tab_content = dag.AgGrid(
             rowData=table.to_dict("records"),
-            columnDefs=[{"field": i} for i in table.columns],
+            columnDefs=columnDefs,
         )
 
     elif active_tab == "tab-rank":
@@ -310,15 +333,16 @@ def update_tab_content(
             exposures=config_dataset["columns"]["exposure_amt"],
         )
 
+        columnDefs = dash_formats.get_column_defs(rank)
         tab_content = dag.AgGrid(
             rowData=rank.to_dict("records"),
-            columnDefs=[{"field": i} for i in rank.columns],
+            columnDefs=columnDefs,
         )
 
     else:
         tab_content = None
 
-    return tab_content, filtered_card
+    return tab_content, filtered_card, chart_secondary
 
 
 @callback(
@@ -337,7 +361,9 @@ def toggle_selectors(tool, all_selectors):
         "chart_type",
         "numerator",
         "denominator",
+        "secondary",
         "x_bins",
+        "add_line",
     ]
     compare_selectors = [
         "x_axis",

@@ -12,10 +12,6 @@ from dash import dcc, html
 
 from morai.utils import helpers
 
-config_path = helpers.ROOT_PATH / "files" / "dashboard_config.yaml"
-dataset_path = helpers.ROOT_PATH / "files" / "dataset"
-host = "0.0.0.0"
-
 
 def convert_to_short_number(number):
     """
@@ -246,6 +242,18 @@ def generate_selectors(
             ],
         ),
         html.Div(
+            id={"type": "selector-group", "index": "secondary"},
+            children=[
+                html.Label("Secondary"),
+                dcc.Dropdown(
+                    id={"type": "selector", "index": "secondary_selector"},
+                    options=config_dataset["columns"]["measures"],
+                    value=None,
+                    placeholder="Select Secondary",
+                ),
+            ],
+        ),
+        html.Div(
             id={"type": "selector-group", "index": "x_bins"},
             children=[
                 html.Label("X Bins"),
@@ -254,6 +262,17 @@ def generate_selectors(
                     type="number",
                     value=None,
                     placeholder="Input X Bins",
+                ),
+            ],
+        ),
+        html.Div(
+            id={"type": "selector-group", "index": "add_line"},
+            children=[
+                html.Label("Y=1 Line"),
+                dbc.Checkbox(
+                    id={"type": "selector", "index": "add_line_selector"},
+                    value=False,
+                    label="select on/off",
                 ),
             ],
         ),
@@ -283,19 +302,6 @@ def generate_selectors(
                     value=config["defaults"]["weights"],
                     multi=True,
                     placeholder="Select Weights",
-                ),
-            ],
-            style={"display": "none"},
-        ),
-        html.Div(
-            id={"type": "selector-group", "index": "secondary"},
-            children=[
-                html.Label("Secondary"),
-                dcc.Dropdown(
-                    id={"type": "selector", "index": "secondary_selector"},
-                    options=config_dataset["columns"]["measures"],
-                    value=None,
-                    placeholder="Select Secondary",
                 ),
             ],
             style={"display": "none"},
@@ -371,7 +377,7 @@ def _inputs_parse_type(input_list, type_value):
     return type_list
 
 
-def load_config(config_path=config_path):
+def load_config(config_path=helpers.CONFIG_PATH):
     """
     Load the yaml configuration file.
 
@@ -391,7 +397,7 @@ def load_config(config_path=config_path):
     return config
 
 
-def write_config(config, config_path=config_path):
+def write_config(config, config_path=helpers.CONFIG_PATH):
     """
     Write the yaml configuration file.
 
@@ -408,7 +414,7 @@ def write_config(config, config_path=config_path):
         yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
 
-def list_files(folder_path=dataset_path):
+def list_files(folder_path):
     """
     List files in the directory.
 

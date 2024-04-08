@@ -1,5 +1,6 @@
 """Collection of helpers."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -10,7 +11,9 @@ from morai.utils import custom_logger
 
 ROOT_PATH = Path(__file__).resolve().parent.parent.parent
 TESTS_PATH = ROOT_PATH / "tests" / "files"
-FILE_PATH = ROOT_PATH / "files"
+CONFIG_PATH = ROOT_PATH / "files" / "dashboard_config.yaml"
+FILES_PATH = ROOT_PATH / "files"
+HOST = "0.0.0.0"
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -114,6 +117,42 @@ def memory_usage_jupyter(globals):
     )
 
     return object_sizes
+
+
+def test_path(path):
+    """
+    Test the path with a few different options and return if it exists.
+
+    Parameters
+    ----------
+    path : str
+        The path to test.
+
+    Returns
+    -------
+    path : pathlib.Path
+        The path as a pathlib.Path.
+
+    """
+    paths_to_try = [
+        path,
+        os.path.join(FILES_PATH / "dataset", path),
+        os.path.join(FILES_PATH / "result", path),
+    ]
+    for path_to_try in paths_to_try:
+        try:
+            with open(path_to_try):
+                break
+        except FileNotFoundError:
+            continue
+    else:
+        paths_str = ", ".join(map(str, paths_to_try))
+        raise FileNotFoundError(
+            f"File not found at any of the following paths: {paths_str}"
+        )
+    path = path_to_try
+
+    return path
 
 
 def _weighted_mean(values, weights=None):

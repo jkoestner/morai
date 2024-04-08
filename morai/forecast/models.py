@@ -21,6 +21,8 @@ class GLM:
         weights=None,
         r_style=False,
         mapping=None,
+        family=None,
+        **kwargs,
     ):
         """
         Initialize the model.
@@ -38,19 +40,23 @@ class GLM:
         mapping : dict, optional
             The mapping of the features to the encoding and only needed
             if r_style is True
+        family : sm.families, optional
+            The family to use for the GLM model
+        kwargs : dict, optional
+            Additional keyword arguments
 
         """
         logger.info("initialzed GLM and add constant to X")
         self.X = sm.add_constant(X)
         self.y = y
         self.weights = weights
-        self.model = None
         self.r_style = r_style
         self.mapping = mapping
+        self.model = self.setup_model(family=family, **kwargs)
 
-    def fit_model(self, family=None, **kwargs):
+    def setup_model(self, family=None, **kwargs):
         """
-        Fit the GLM model.
+        Set up the GLM model.
 
         Returns
         -------
@@ -67,7 +73,7 @@ class GLM:
         weights = self.weights
         if family is None:
             family = sm.families.Binomial()
-        logger.info(f"fitting GLM model with statsmodels and {family} family...")
+        logger.info(f"setup GLM model with statsmodels and {family} family...")
 
         # using either r-style or python-style formula
         if self.r_style:
@@ -79,7 +85,7 @@ class GLM:
                 family=family,
                 freq_weights=weights,
                 **kwargs,
-            ).fit()
+            )
         else:
             model = sm.GLM(
                 endog=y,
@@ -87,8 +93,24 @@ class GLM:
                 family=sm.families.Binomial(),
                 freq_weights=weights,
                 **kwargs,
-            ).fit()
+            )
 
+        self.model = model
+
+        return model
+
+    def fit(self):
+        """
+        Fit the GLM model.
+
+        Returns
+        -------
+        model : GLM
+            The GLM model
+
+        """
+        logger.info("fit the model")
+        model = self.model.fit()
         self.model = model
 
         return model
@@ -272,7 +294,9 @@ class LeeCarter:
             .sum()
             .reset_index()
         )
-        logger.info("calculating qx_raw rates")
+        logger.info(
+            f"calculating qx_raw rates using {self.actual_col} and {self.expose_col}"
+        )
         lc_df["qx_raw"] = np.where(
             lc_df[self.actual_col] == 0,
             0,
@@ -572,7 +596,9 @@ class CBD:
             .sum()
             .reset_index()
         )
-        logger.info("calculating qx_raw rates")
+        logger.info(
+            f"calculating qx_raw rates using {self.actual_col} and {self.expose_col}"
+        )
         cbd_df["qx_raw"] = np.where(
             cbd_df[self.actual_col] == 0,
             0,

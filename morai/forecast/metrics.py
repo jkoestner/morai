@@ -1,10 +1,13 @@
 """Metrics used in the models."""
 
+import json
+from io import StringIO
+
 import numpy as np
 import pandas as pd
 import sklearn.metrics as skm
 
-from morai.utils import custom_logger
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -100,8 +103,9 @@ def ae_rank(df, features, actuals, expecteds, exposures):
     rank_df = rank_df.groupby(["attribute", "attribute_value"]).sum().reset_index()
 
     # calculate ranks and sort by rank_combined
-    logger.info(f"The total AE with {expecteds} as E for dataset is {ae:.1f}%")
+    logger.info(f"The total AE with {expecteds} as E for dataset is {ae*100:.1f}%")
     rank_df["ae"] = rank_df[actuals] / rank_df[expecteds]
+    rank_df["a-e"] = rank_df[actuals] - rank_df[expecteds]
     rank_df["exposure_pct"] = rank_df[exposures] / total_exposure
     rank_df["rank_issue"] = (
         abs((rank_df[actuals] - rank_df[expecteds]) * (rank_df["ae"] - 1))
@@ -125,34 +129,52 @@ class ModelResults:
 
     The class will hold the model information and the scorecard.
 
+    Using json as the preferred format for storing the results to be human
+    readable, however pickle is also an option.
+
     Parameters
     ----------
-    scorecard_cols : list
-        The scorecard columns
+    filepath : str
+        The filepath to load the model results
+    metrics : list
+        The metrics for scorecard
 
     """
 
-    def __init__(self, scorecard_cols=None):
-        self.model = pd.DataFrame(
-            columns=[
-                "model_name",
-                "model_data_shape",
-                "feature_dict",
-                "date_added",
-            ]
-        )
-        self.scorecard_cols = scorecard_cols
-        self.scorecard = pd.DataFrame(columns=["model_name", *scorecard_cols])
+    def __init__(self, filepath=None, metrics=None):
+        self.filepath = filepath
+        # load model results from file
+        if filepath is not None:
+            filepath = helpers.test_path(filepath)
+            if not str(filepath).endswith(".json"):
+                raise ValueError("Filepath must end with .json")
+            logger.info(f"loading results from {filepath}")
+
+            with open(filepath, "r") as file:
+                data = json.load(file)
+            model_df = pd.read_json(StringIO(json.dumps(data["model"])), orient="split")
+            model_df["date_added"] = pd.to_datetime(model_df["date_added"], unit="ms")
+            scorecard_df = pd.read_json(
+                StringIO(json.dumps(data["scorecard"])), orient="split"
+            )
+
+            self.model = model_df
+            self.scorecard = scorecard_df
+            self.metrics = scorecard_df.columns.tolist().remove("model_name")
+        else:
+            self.model = pd.DataFrame()
+            self.scorecard = pd.DataFrame()
+            self.metrics = metrics
 
     def add_model(
         self,
         model_name,
-        model_data,
+        data_path,
+        data_shape,
         feature_dict,
-        y_true,
-        y_pred,
-        model=None,
-        **kwargs,
+        scorecard,
+        preprocess_params=None,
+        model_params=None,
     ):
         """
         Add the model.
@@ -161,25 +183,24 @@ class ModelResults:
         ----------
         model_name : str
             The model name
-        model_data : pd.DataFrame
-            The model data
+        data_path : str
+            The data path
+        data_shape : tuple
+            The data shape
         feature_dict : dict
             The feature dictionary
-        y_true : series
-            The columns to create metrics on (actuals)
-        y_pred : series
-            The columns to create metrics on (predicted)
-        model : model, optional (default=None)
-            The model that has metrics to use
-        kwargs : dict
-            The keyword arguments for the metrics
+        scorecard : pd.DataFrame
+            The scorecard row
+        preprocess_params : dict, optional (default=None)
+            The preprocessing parameters
+        model_params : dict, optional (default=None)
+            The model parameters
 
         Returns
         -------
         None
 
         """
-        logger.info(f"Adding model '{model_name}'")
         if self.check_duplicate_name(model_name):
             logger.error(
                 f"Model name {model_name} already exists, not adding model. "
@@ -187,32 +208,26 @@ class ModelResults:
             )
             return
 
-        # adding model and scorecard rows
+        logger.info(f"Adding model '{model_name}'")
+        # adding model row
         model_row = pd.DataFrame(
             [
                 {
                     "model_name": model_name,
-                    "model_data_shape": model_data.shape,
+                    "data_path": data_path,
+                    "data_shape": data_shape,
+                    "preprocess_params": preprocess_params,
                     "feature_dict": feature_dict,
+                    "model_params": model_params,
                     "date_added": pd.Timestamp.now(),
                 }
             ]
         ).dropna(axis="columns", how="all")
-        scorecard_row = pd.DataFrame(
-            [
-                {
-                    "model_name": model_name,
-                    **self.get_metrics(
-                        y_true=y_true,
-                        y_pred=y_pred,
-                        model=model,
-                        metrics=None,
-                        **kwargs,
-                    ),
-                }
-            ]
-        ).dropna(axis="columns", how="all")
+        # adding scorecard row
+        scorecard_row = scorecard.dropna(axis="columns", how="all")
+        scorecard_row["model_name"] = model_name
 
+        # appending to the model and scorecard
         if self.model.empty or self.scorecard.empty:
             self.model = model_row
             self.scorecard = scorecard_row
@@ -240,7 +255,39 @@ class ModelResults:
         self.model = self.model[self.model["model_name"] != model_name]
         self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
 
-    def get_metrics(self, y_true, y_pred, metrics=None, model=None, **kwargs):
+    def save_model(self, filepath=None):
+        """
+        Save the model.
+
+        Parameters
+        ----------
+        filepath : str
+            The path to save the model
+
+        Returns
+        -------
+        None
+
+        """
+        if filepath is None:
+            filepath = (
+                self.filepath
+                if self.filepath
+                else helpers.FILES_PATH / "result" / "model_results.json"
+            )
+
+        if not str(filepath).endswith(".json"):
+            raise ValueError("Filname must end with .json")
+        logger.info(f"saving results to {filepath}")
+
+        # saving the results
+        model_json = json.loads(self.model.to_json(orient="split", index=False))
+        scorecard_json = json.loads(self.scorecard.to_json(orient="split", index=False))
+        model_results = {"model": model_json, "scorecard": scorecard_json}
+        with open(filepath, "w") as file:
+            json.dump(model_results, file, indent=4)
+
+    def get_scorecard(self, y_true, y_pred, metrics=None, model=None, **kwargs):
         """
         Get the metrics.
 
@@ -268,12 +315,12 @@ class ModelResults:
 
         Returns
         -------
-        metric_dict : dict
-            The metric dictionary
+        scorecard : pd.DataFrame
+            Metrics scorecard in a DataFrame
 
         """
         if metrics is None:
-            metrics = self.scorecard_cols
+            metrics = self.metrics
         metric_dict = {}
         for metric in metrics:
             if metric == "smape":
@@ -294,7 +341,9 @@ class ModelResults:
                 except AttributeError:
                     logger.error(f"Metric {metric} not found in sklearn.metrics")
                     metric_dict[metric] = None
-        return metric_dict
+
+        scorecard = pd.DataFrame([metric_dict])
+        return scorecard
 
     def check_duplicate_name(self, model_name):
         """
@@ -307,8 +356,13 @@ class ModelResults:
 
         Returns
         -------
-        bool
+        duplicate : bool
             True if the model name already exists
 
         """
-        return model_name in self.model["model_name"].values
+        if self.model.empty:
+            duplicate = False
+        else:
+            duplicate = model_name in self.model["model_name"].values
+
+        return duplicate

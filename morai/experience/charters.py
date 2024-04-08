@@ -31,6 +31,7 @@ def chart(
     y_sort=False,
     x_bins=None,
     y_special=True,
+    add_line=False,
     display=True,
     **kwargs,
 ):
@@ -70,6 +71,8 @@ def chart(
         The number of bins to use for the x-axis.
     y_special : bool, optional (default=True)
         Whether to calculate the y_axis using the numerator and denominator.
+    add_line : bool, optional (default=False)
+        Whether to add a line to the chart at y-axis of 1.
     display : bool, optional (default=True)
         Whether to display figure or not.
     **kwargs : dict
@@ -141,6 +144,15 @@ def chart(
             title=title,
             **kwargs,
         )
+        if add_line:
+            # using scatter to add to legend
+            fig.add_scatter(
+                x=[grouped_data[x_axis].min(), grouped_data[x_axis].max()],
+                y=[1, 1],
+                mode="lines",
+                line={"dash": "dot", "color": "grey"},
+                name="y=1",
+            )
     elif type == "bar":
         if not title:
             title = f"{y_axis} by {x_axis} and {color}"
