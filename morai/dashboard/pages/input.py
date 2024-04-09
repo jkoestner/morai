@@ -2,9 +2,9 @@
 
 import json
 
-import dash
 import dash_bootstrap_components as dbc
-from dash import (
+import dash_extensions.enrich as dash
+from dash_extensions.enrich import (
     Input,
     Output,
     State,
@@ -33,8 +33,6 @@ def layout():
     """Input layout."""
     return html.Div(
         [
-            dcc.Store(id="user-config", storage_type="session"),
-            # -----------------------------------------------------
             dbc.Row(
                 html.H4(
                     "Data Input",
@@ -148,7 +146,7 @@ def layout():
 #  | |__| (_| | | | |_) | (_| | (__|   <\__ \
 #   \____\__,_|_|_|_.__/ \__,_|\___|_|\_\___/
 @callback(
-    Output("user-config", "data"),
+    Output("store-config", "data"),
     [Input("load-button", "n_clicks")],
     [State("dataset-dropdown", "value")],
     prevent_initial_call=True,
@@ -169,11 +167,13 @@ def load_config(n_clicks, dataset):
         Output("general-config-str", "children"),
         Output("dataset-config-str", "children"),
     ],
-    [Input("user-config", "data")],
+    [Input("store-config", "data")],
     # prevent_initial_call=True,
 )
 def display_general_config(config_data):
     """Display the configuration file."""
+    if config_data is None:
+        return dash.no_update, dash.no_update
     logger.debug("display config")
     general_dict = config_data["general"]
     general_json = json.dumps(general_dict, indent=2)

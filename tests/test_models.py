@@ -56,7 +56,7 @@ hmd_usa_df["qx_raw"] = hmd_usa_df["qx_raw"].astype(float)
 def test_glm():
     """Test the Generalized Linear Model."""
     GLM = models.GLM(X, y, weights)
-    GLM.fit_model()
+    GLM.fit()
     predictions = GLM.model.predict(GLM.X)
 
     assert predictions.mean() == approx(0.0525, abs=1e-4), "glm mean is off"

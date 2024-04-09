@@ -6,10 +6,17 @@ Issue age, duration, and attained age are needed to compare mortality tables.
 
 from io import StringIO
 
-import dash
 import dash_bootstrap_components as dbc
+import dash_extensions.enrich as dash
 import pandas as pd
-from dash import Input, Output, State, callback, dcc, html
+from dash_extensions.enrich import (
+    Input,
+    Output,
+    State,
+    callback,
+    dcc,
+    html,
+)
 
 from morai.experience import charters, tables
 from morai.utils import custom_logger
@@ -31,9 +38,8 @@ def layout():
     """Table layout."""
     return html.Div(
         [
-            dcc.Store(id="user-config", storage_type="session"),
-            dcc.Store(id="compare-df-store", storage_type="session"),
-            # -----------------------------------------------------
+            dcc.Store(id="store-tables", storage_type="session"),
+            # -----------------------------------------------------------
             html.H4(
                 "Table Viewer",
                 className="bg-primary text-white p-2 mb-2 text-center",
@@ -134,7 +140,7 @@ def layout():
                 className="mb-2",
             ),
             dcc.Loading(
-                id="loading-content",
+                id="loading-graph-contour",
                 type="dot",
                 children=html.Div(id="graph-contour"),
             ),
@@ -161,14 +167,14 @@ def layout():
                 [
                     dbc.Col(
                         dcc.Loading(
-                            id="loading-content",
+                            id="loading-graph-compare-duration",
                             type="dot",
                             children=html.Div(id="graph-compare-duration"),
                         ),
                     ),
                     dbc.Col(
                         dcc.Loading(
-                            id="loading-content",
+                            id="loading-graph-compare-age",
                             type="dot",
                             children=html.Div(id="graph-compare-age"),
                         ),
@@ -190,7 +196,7 @@ def layout():
 
 @callback(
     [
-        Output("compare-df-store", "data"),
+        Output("store-tables", "data"),
         Output("table-1-desc", "children"),
         Output("table-2-desc", "children"),
         Output("toast-null-tables", "is_open"),
@@ -238,7 +244,7 @@ def get_table_data(n_clicks, table1_id, table2_id):
         Output("slider-issue-age", "max"),
         Output("slider-issue-age", "value"),
     ],
-    [Input("compare-df-store", "data")],
+    [Input("store-tables", "data")],
     prevent_initial_call=True,
 )
 def create_contour_and_sliders(compare_df):
@@ -277,7 +283,7 @@ def create_contour_and_sliders(compare_df):
         Output("graph-compare-age", "children"),
     ],
     [Input("slider-issue-age", "value")],
-    [State("compare-df-store", "data")],
+    [State("store-tables", "data")],
     prevent_initial_call=True,
 )
 def update_graphs_from_slider(issue_age_value, compare_df):

@@ -1,34 +1,27 @@
 """Explore dashboard."""
 
-import dash
-import polars as pl
-from dash import Input, Output, callback, dcc, html
+import dash_extensions.enrich as dash
+from dash_extensions.enrich import (
+    Input,
+    Output,
+    State,
+    callback,
+    dcc,
+    html,
+)
 
 from morai.dashboard.components import sidebars
 from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters
-from morai.utils import custom_logger, helpers
+from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/explore", title="morai - Explore")
 
-#   ____        _          _                    _
-#  |  _ \  __ _| |_ __ _  | |    ___   __ _  __| |
-#  | | | |/ _` | __/ _` | | |   / _ \ / _` |/ _` |
-#  | |_| | (_| | || (_| | | |__| (_) | (_| | (_| |
-#  |____/ \__,_|\__\__,_| |_____\___/ \__,_|\__,_|
-
 # load config
 config = dh.load_config()
 config_dataset = config["datasets"][config["general"]["dataset"]]
-# load dataset
-file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
-if file_path.suffix == ".parquet":
-    pl.enable_string_cache()
-    lzdf = pl.scan_parquet(file_path)
-    mortality_df = lzdf.collect()
-    mortality_df = mortality_df.to_pandas()
 
 
 #   _                            _
@@ -43,9 +36,6 @@ def layout():
     """Explore layout."""
     return html.Div(
         [
-            dcc.Store(id="user-config", storage_type="session"),
-            dcc.Location(id="explore-url", refresh=False),
-            # -----------------------------------------------------
             html.Div(  # Sidebar container
                 sidebars.explore_sidebar,
             ),
@@ -72,7 +62,7 @@ def layout():
                                 className="bg-secondary text-white p-2 mb-2",
                             ),
                             dcc.Loading(
-                                id="loading-content",
+                                id="loading-chart-freq-num",
                                 type="dot",
                                 children=html.Div(id="chart-freq-num"),
                             ),
@@ -82,7 +72,7 @@ def layout():
                                 className="bg-secondary text-white p-2 mb-2",
                             ),
                             dcc.Loading(
-                                id="loading-content",
+                                id="loading-chart-freq-cat",
                                 type="dot",
                                 children=html.Div(id="chart-freq-cat"),
                             ),
@@ -92,7 +82,7 @@ def layout():
                                 className="bg-secondary text-white p-2 mb-2",
                             ),
                             dcc.Loading(
-                                id="loading-content",
+                                id="loading-chart-target",
                                 type="dot",
                                 children=html.Div(id="chart-target"),
                             ),
@@ -119,10 +109,9 @@ def layout():
         Output("nav-freq-cat", "active"),
         Output("nav-target", "active"),
     ],
-    Input("explore-url", "hash"),
-    prevent_initial_call=True,
+    [Input("url", "hash"), Input("url", "href")],
 )
-def set_active_link(hash):
+def set_active_link(hash, href):
     """Set the active link in the sidebar based on the URL."""
     if not hash:
         return True, False, False
@@ -141,13 +130,14 @@ def set_active_link(hash):
         Output("chart-freq-cat", "children"),
         Output("chart-target", "children"),
     ],
-    Input("explore-url", "url"),
+    [Input("url", "pathname")],
+    [State("store-dataset", "data")],
 )
-def update_charts(hash):
+def update_charts(hash, dataset):
     """Update charts when page is loaded."""
     # charts
     chart_freq_num = charters.frequency(
-        mortality_df,
+        dataset,
         cols=3,
         features=[
             "observation_year",
@@ -159,10 +149,10 @@ def update_charts(hash):
         sum_var="amount_exposed",
     )
 
-    chart_freq_cat = charters.frequency(mortality_df, cols=3, sum_var="amount_exposed")
+    chart_freq_cat = charters.frequency(dataset, cols=3, sum_var="amount_exposed")
 
     chart_target = charters.target(
-        df=mortality_df,
+        df=dataset,
         target="risk",
         cols=3,
         features=[

@@ -13,10 +13,9 @@ The ascii text is generated using https://patorjk.com/software/taag/
 with "standard font"
 """
 
-import dash
 import dash_bootstrap_components as dbc
-from dash import html
-from dash_extensions.enrich import DashProxy, ServersideOutputTransform
+import dash_extensions.enrich as dash
+from dash_extensions.enrich import DashProxy, ServersideOutputTransform, dcc, html
 
 from morai.utils import helpers
 
@@ -81,6 +80,10 @@ navbar = dbc.Navbar(
 
 app.layout = html.Div(
     [
+        dcc.Store(id="store-dataset", storage_type="session"),
+        dcc.Store(id="store-config", storage_type="session"),
+        dcc.Store(id="store-exp-filter", storage_type="session"),
+        dcc.Location(id="url", refresh=False),
         navbar,
         dash.page_container,
     ]

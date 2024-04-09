@@ -27,6 +27,7 @@ def get_column_defs(table):
                 columnDefs.append(
                     {
                         "field": col,
+                        "headerName": col,
                         "valueFormatter": {"function": "d3.format('d')(params.value)"},
                     }
                 )
@@ -34,6 +35,7 @@ def get_column_defs(table):
                 columnDefs.append(
                     {
                         "field": col,
+                        "headerName": col,
                         "valueFormatter": {"function": "d3.format(',')(params.value)"},
                     }
                 )
@@ -42,6 +44,7 @@ def get_column_defs(table):
                 columnDefs.append(
                     {
                         "field": col,
+                        "headerName": col,
                         "valueFormatter": {
                             "function": "d3.format('.2%')(params.value)"
                         },
@@ -51,11 +54,17 @@ def get_column_defs(table):
                 columnDefs.append(
                     {
                         "field": col,
+                        "headerName": col,
                         "valueFormatter": {
                             "function": "d3.format(',.1f')(params.value)"
                         },
                     }
                 )
         else:
-            columnDefs.append({"field": col})
+            columnDefs.append(
+                {
+                    "field": col,
+                    "headerName": col,
+                }
+            )
     return columnDefs

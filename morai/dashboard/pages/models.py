@@ -1,9 +1,11 @@
 """Experience dashboard."""
 
-import dash
 import dash_ag_grid as dag
-from dash import (
-    dcc,
+import dash_extensions.enrich as dash
+from dash_extensions.enrich import (
+    Input,
+    Output,
+    callback,
     html,
 )
 
@@ -15,11 +17,6 @@ logger = custom_logger.setup_logging(__name__)
 
 
 dash.register_page(__name__, path="/model", title="morai - Model")
-
-# load models
-model_results = metrics.ModelResults(filepath="model_results.json")
-models = model_results.model
-scorecard = model_results.scorecard
 
 
 #   _                            _
@@ -34,19 +31,12 @@ def layout():
     """Model layout."""
     return html.Div(
         [
-            dcc.Store(id="user-config", storage_type="session"),
-            # -----------------------------------------------------
             html.H4(
                 "Model Analysis",
                 className="bg-primary text-white p-2 mb-2 text-center",
             ),
-            dag.AgGrid(
-                rowData=models.to_dict("records"),
-                columnDefs=dash_formats.get_column_defs(models),
-            ),
-            dag.AgGrid(
-                rowData=scorecard.to_dict("records"),
-                columnDefs=dash_formats.get_column_defs(scorecard),
+            html.Div(
+                id="model-results",
             ),
         ],
         className="container",
@@ -58,3 +48,29 @@ def layout():
 #  | |   / _` | | | '_ \ / _` |/ __| |/ / __|
 #  | |__| (_| | | | |_) | (_| | (__|   <\__ \
 #   \____\__,_|_|_|_.__/ \__,_|\___|_|\_\___/
+
+
+@callback(
+    Output("model-results", "children"),
+    Input("url", "pathname"),
+)
+def load_model_results(pathname):
+    """Load model results."""
+    # load models
+    model_results = metrics.ModelResults(filepath="model_results.json")
+    models = model_results.model
+    scorecard = model_results.scorecard
+
+    model_results_div = html.Div(
+        [
+            dag.AgGrid(
+                rowData=models.to_dict("records"),
+                columnDefs=dash_formats.get_column_defs(models),
+            ),
+            dag.AgGrid(
+                rowData=scorecard.to_dict("records"),
+                columnDefs=dash_formats.get_column_defs(scorecard),
+            ),
+        ]
+    )
+    return model_results_div

@@ -1,8 +1,8 @@
 """Experience dashboard."""
 
-import dash
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
+import dash_extensions.enrich as dash
 import polars as pl
 from dash_extensions.enrich import (
     ALL,
@@ -27,6 +27,7 @@ logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/experience", title="morai - Experience")
 
+# load config
 config = dh.load_config()
 config_dataset = config["datasets"][config["general"]["dataset"]]
 # create cards
@@ -49,9 +50,6 @@ def layout():
     """Experience layout."""
     return html.Div(
         [
-            dcc.Store(id="user-config", storage_type="session"),
-            dcc.Store(id="store", storage_type="session"),
-            # -----------------------------------------------------
             html.H4(
                 "Experience Analysis",
                 className="bg-primary text-white p-2 mb-2 text-center",
@@ -90,7 +88,7 @@ def layout():
                                     id="filtered-card",
                                 ),
                             ],
-                            id="loading-card",
+                            id="loading-filtered-card",
                             type="dot",
                         ),
                         width="auto",
@@ -138,12 +136,12 @@ def layout():
                                 active_tab="tab-chart",
                             ),
                             dcc.Loading(
-                                id="loading-content",
+                                id="loading-tab-content",
                                 type="dot",
                                 children=html.Div(id="tab-content"),
                             ),
                             dcc.Loading(
-                                id="loading-content",
+                                id="loading-chart-secondary",
                                 type="dot",
                                 children=html.Div(id="chart-secondary"),
                             ),
@@ -191,8 +189,8 @@ def layout():
 
 @callback(
     [
-        Output("store", "dataset"),
-        Output("store", "filter_dict"),
+        Output("store-dataset", "data"),
+        Output("store-exp-filter", "data"),
         Output("selectors", "children"),
         Output("filters", "children"),
         Output("card", "children"),
@@ -230,8 +228,8 @@ def load_data(n_clicks):
 
     return (
         # setting a key will avoid multiple versions of the same dataset
-        Serverside(dataset),
-        Serverside(filter_dict),
+        Serverside(dataset, key=config["general"]["dataset"]),
+        Serverside(filter_dict, key=f"{config['general']['dataset']}_filter"),
         selectors_default,
         filters,
         card,
@@ -254,7 +252,7 @@ def load_data(n_clicks):
         # tabs
         Input("tabs", "active_tab"),
     ],
-    [State("store", "dataset"), State("store", "filter_dict")],
+    [State("store-dataset", "data"), State("store-exp-filter", "data")],
     prevent_initial_call=True,
 )
 def update_tab_content(
@@ -435,7 +433,7 @@ def toggle_tool(tool, all_selectors):
         Output({"type": "num-filter", "index": ALL}, "value"),
     ],
     [Input("reset-filters-button", "n_clicks")],
-    [State("store", "dataset"), State("store", "filter_dict")],
+    [State("store-dataset", "data"), State("store-exp-filter", "data")],
     prevent_initial_call=True,
 )
 def reset_filters(n_clicks, dataset, filter_dict):
