@@ -17,7 +17,7 @@ from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
-dash.register_page(__name__, path="/explore", title="morai - Explore")
+dash.register_page(__name__, path="/explore", title="morai - Explore", order=1)
 
 # load config
 config = dh.load_config()
@@ -133,8 +133,11 @@ def set_active_link(hash, href):
     [Input("url", "pathname")],
     [State("store-dataset", "data")],
 )
-def update_charts(hash, dataset):
+def update_charts(pathname, dataset):
     """Update charts when page is loaded."""
+    if pathname != "/explore" or dataset is None:
+        raise dash.exceptions.PreventUpdate
+    logger.debug("update explore charts")
     # charts
     chart_freq_num = charters.frequency(
         dataset,

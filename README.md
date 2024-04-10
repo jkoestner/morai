@@ -55,8 +55,8 @@ python -m ipykernel install --user --name=morai
 
 If wanting to get more detail in output of messages the logging can increased
 ```python
-from morai.utils import helpers
-helpers.set_log_level("DEBUG")
+from morai.utils import custom_logger
+custom_logger.set_log_level("DEBUG")
 ```
 
 ### Coverage

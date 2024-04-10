@@ -4,6 +4,7 @@ Custom logger with color formatter.
 inspired by:
 https://gist.github.com/joshbode/58fac7ababc700f51e2a9ecdebe563ad
 """
+
 import logging
 import sys
 
@@ -68,25 +69,28 @@ def setup_logging(name="morai"):
     return morai_logger
 
 
-def set_log_level(new_level):
+def set_log_level(new_level, module_prefix="morai"):
     """
     Set the log level.
 
     Parameters
     ----------
-    new_level : int
+    new_level : str
         the new log level
+    module_prefix : str
+        the module logger prefix to set the log level for
 
     """
     options = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if new_level not in options:
         raise ValueError(f"Log level must be one of {options}")
+    numeric_level = logging.getLevelName(new_level)
     # update the log level for all project loggers
     for logger_name, logger in logging.Logger.manager.loggerDict.items():
         # Check if the logger's name starts with the specified prefix
-        if logger_name.startswith("morai"):
+        if logger_name.startswith(module_prefix):
             if isinstance(logger, logging.Logger):
-                logger.setLevel(new_level)
+                logger.setLevel(numeric_level)
 
 
 def test_logger():

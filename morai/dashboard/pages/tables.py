@@ -23,7 +23,7 @@ from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
-dash.register_page(__name__, path="/tables", title="morai - Tables")
+dash.register_page(__name__, path="/tables", title="morai - Tables", order=4)
 
 
 #   _                            _
@@ -208,7 +208,7 @@ def layout():
 )
 def get_table_data(n_clicks, table1_id, table2_id):
     """Get the table data and create a compare dataframe."""
-    logger.info(f"Retrieving tables {table1_id} and {table2_id}")
+    logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
 
     if table1_id is None or table2_id is None:
         return dash.no_update, dash.no_update, dash.no_update, True, False

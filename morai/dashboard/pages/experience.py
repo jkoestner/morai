@@ -3,7 +3,6 @@
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
-import polars as pl
 from dash_extensions.enrich import (
     ALL,
     Input,
@@ -20,12 +19,12 @@ from morai.dashboard.components import dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters
 from morai.forecast import metrics
-from morai.utils import custom_logger, helpers
+from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
 
-dash.register_page(__name__, path="/experience", title="morai - Experience")
+dash.register_page(__name__, path="/experience", title="morai - Experience", order=2)
 
 # load config
 config = dh.load_config()
@@ -50,17 +49,11 @@ def layout():
     """Experience layout."""
     return html.Div(
         [
+            dcc.Store(id="store-exp-filter", storage_type="session"),
+            # -------------------------------------------------------
             html.H4(
                 "Experience Analysis",
                 className="bg-primary text-white p-2 mb-2 text-center",
-            ),
-            dbc.Col(
-                dbc.Button(
-                    "Load Data",
-                    id="load-dataset",
-                    className="btn btn-primary",
-                ),
-                width=1,
             ),
             dbc.Row(
                 html.P(
@@ -189,26 +182,20 @@ def layout():
 
 @callback(
     [
-        Output("store-dataset", "data"),
         Output("store-exp-filter", "data"),
         Output("selectors", "children"),
         Output("filters", "children"),
         Output("card", "children"),
     ],
-    [Input("load-dataset", "n_clicks")],
-    prevent_initial_call=True,
+    [Input("store-dataset", "data")],
+    [State("store-config", "data")],
 )
-def load_data(n_clicks):
+def load_data(dataset, config):
     """Load data and create selectors."""
-    config = dh.load_config()
-    config_dataset = config["datasets"][config["general"]["dataset"]]
-    file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
-    # load dataset
-    if file_path.suffix == ".parquet":
-        pl.enable_string_cache()
-        lzdf = pl.scan_parquet(file_path)
-        dataset = lzdf.collect()
-        dataset = dataset.to_pandas()
+    if dataset is None:
+        raise dash.exceptions.PreventUpdate
+
+    logger.debug("generate selectors and filters")
 
     # create filters and selectors
     filter_dict = dh.generate_filters(dataset)
@@ -228,7 +215,6 @@ def load_data(n_clicks):
 
     return (
         # setting a key will avoid multiple versions of the same dataset
-        Serverside(dataset, key=config["general"]["dataset"]),
         Serverside(filter_dict, key=f"{config['general']['dataset']}_filter"),
         selectors_default,
         filters,

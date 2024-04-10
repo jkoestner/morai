@@ -4,9 +4,11 @@ import json
 
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import polars as pl
 from dash_extensions.enrich import (
     Input,
     Output,
+    Serverside,
     State,
     callback,
     dcc,
@@ -18,7 +20,7 @@ from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 
-dash.register_page(__name__, path="/input", title="morai - Input")
+dash.register_page(__name__, path="/", title="morai - Input", order=0)
 
 
 #   _                            _
@@ -93,10 +95,10 @@ def layout():
                             dbc.Col(
                                 dbc.Button(
                                     "Load Config",
-                                    id="load-button",
+                                    id="button-load-config",
                                     className="btn btn-primary",
                                 ),
-                                width=1,
+                                width=2,
                             ),
                         ],
                     ),
@@ -145,21 +147,36 @@ def layout():
 #  | |   / _` | | | '_ \ / _` |/ __| |/ / __|
 #  | |__| (_| | | | |_) | (_| | (__|   <\__ \
 #   \____\__,_|_|_|_.__/ \__,_|\___|_|\_\___/
+
+
 @callback(
-    Output("store-config", "data"),
-    [Input("load-button", "n_clicks")],
+    [
+        Output("store-config", "data"),
+        Output("store-dataset", "data"),
+    ],
+    [Input("button-load-config", "n_clicks")],
     [State("dataset-dropdown", "value")],
-    prevent_initial_call=True,
 )
 def load_config(n_clicks, dataset):
     """Load the configuration file."""
+    if n_clicks is None:
+        raise dash.exceptions.PreventUpdate
     logger.debug("load config")
-    if n_clicks:
-        config = dh.load_config()
+    config = dh.load_config()
+    if dataset is not None:
         config["general"]["dataset"] = dataset
-        dh.write_config(config)
 
-        return config
+    # load dataset
+    logger.debug("load data")
+    config_dataset = config["datasets"][config["general"]["dataset"]]
+    file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
+    if file_path.suffix == ".parquet":
+        pl.enable_string_cache()
+        lzdf = pl.scan_parquet(file_path)
+        dataset = lzdf.collect()
+        dataset = dataset.to_pandas()
+
+    return config, Serverside(dataset, key=config["general"]["dataset"])
 
 
 @callback(
@@ -167,18 +184,24 @@ def load_config(n_clicks, dataset):
         Output("general-config-str", "children"),
         Output("dataset-config-str", "children"),
     ],
-    [Input("store-config", "data")],
-    # prevent_initial_call=True,
+    [Input("url", "pathname")],
+    [State("store-config", "data")],
 )
-def display_general_config(config_data):
+def display_config(pathname, config):
     """Display the configuration file."""
-    if config_data is None:
-        return dash.no_update, dash.no_update
+    if pathname != "/" or config is None:
+        raise dash.exceptions.PreventUpdate
+
+    # display config
     logger.debug("display config")
-    general_dict = config_data["general"]
+    general_dict = config["general"]
     general_json = json.dumps(general_dict, indent=2)
     general_config_str = f"```json\n{general_json}\n```"
-    dataset_dict = config_data["datasets"][general_dict["dataset"]]
+    dataset_dict = config["datasets"][general_dict["dataset"]]
     dataset_json = json.dumps(dataset_dict, indent=2)
     dataset_config_str = f"```json\n{dataset_json}\n```"
-    return general_config_str, dataset_config_str
+
+    return (
+        general_config_str,
+        dataset_config_str,
+    )

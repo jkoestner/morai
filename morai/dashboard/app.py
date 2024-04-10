@@ -17,7 +17,7 @@ import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 from dash_extensions.enrich import DashProxy, ServersideOutputTransform, dcc, html
 
-from morai.utils import helpers
+from morai.utils import custom_logger, helpers
 
 #      _    ____  ____
 #     / \  |  _ \|  _ \
@@ -80,9 +80,8 @@ navbar = dbc.Navbar(
 
 app.layout = html.Div(
     [
-        dcc.Store(id="store-dataset", storage_type="session"),
         dcc.Store(id="store-config", storage_type="session"),
-        dcc.Store(id="store-exp-filter", storage_type="session"),
+        dcc.Store(id="store-dataset", storage_type="session"),
         dcc.Location(id="url", refresh=False),
         navbar,
         dash.page_container,
@@ -91,4 +90,5 @@ app.layout = html.Div(
 
 
 if __name__ == "__main__":
+    custom_logger.set_log_level("DEBUG", module_prefix="pages")
     app.run_server(debug=True, host=helpers.HOST)
