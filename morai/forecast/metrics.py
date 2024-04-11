@@ -225,7 +225,7 @@ class ModelResults:
         ).dropna(axis="columns", how="all")
         # adding scorecard row
         scorecard_row = scorecard.dropna(axis="columns", how="all")
-        scorecard_row["model_name"] = model_name
+        scorecard_row.insert(0, "model_name", model_name)
 
         # appending to the model and scorecard
         if self.model.empty or self.scorecard.empty:

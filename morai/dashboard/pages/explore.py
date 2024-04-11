@@ -11,18 +11,12 @@ from dash_extensions.enrich import (
 )
 
 from morai.dashboard.components import sidebars
-from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/explore", title="morai - Explore", order=1)
-
-# load config
-config = dh.load_config()
-config_dataset = config["datasets"][config["general"]["dataset"]]
-
 
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
@@ -47,14 +41,8 @@ def layout():
                     ),
                     html.Div(
                         [
-                            html.P(
-                                [
-                                    "Dataset: ",
-                                    html.Span(
-                                        f"{config_dataset['filename']}",
-                                        style={"fontWeight": "bold"},
-                                    ),
-                                ],
+                            html.Div(
+                                id="data-description",
                             ),
                             html.H5(
                                 "Frequency Number",
@@ -181,3 +169,43 @@ def update_charts(pathname, dataset):
     chart_target = dcc.Graph(figure=chart_target)
 
     return chart_freq_num, chart_freq_cat, chart_target
+
+
+@callback(
+    [
+        Output("data-description", "children"),
+    ],
+    [Input("url", "pathname")],
+    [State("store-config", "data")],
+)
+def update_dataset_description(pathname, config):
+    """Update charts when page is loaded."""
+    if pathname not in ["/explore", "/experience"]:
+        raise dash.exceptions.PreventUpdate
+
+    filename = "No dataset loaded"
+    description = "No dataset loaded"
+    if config is not None:
+        config_dataset = config["datasets"][config["general"]["dataset"]]
+        filename = f"{config_dataset['filename']}"
+        description = f"{config_dataset['description']}"
+
+    div_description = html.Div(
+        html.P(
+            [
+                html.Span(
+                    "Dataset: ",
+                    style={"fontWeight": "bold"},
+                ),
+                filename,
+                html.Br(),
+                html.Span(
+                    "Description: ",
+                    style={"fontWeight": "bold"},
+                ),
+                description,
+            ],
+        ),
+    )
+
+    return div_description

@@ -47,6 +47,10 @@ def layout():
                         "This page is used to load the configuration file "
                         "and display the configuration.",
                         html.Br(),
+                        "The data must first be loaded and then can be used in "
+                        "the other pages. The data will be available until the tab "
+                        "is closed.",
+                        html.Br(),
                         "The configuration file should be located in: ",
                         html.Span(
                             f"{helpers.FILES_PATH!s}",
@@ -60,6 +64,7 @@ def layout():
                     ],
                 ),
             ),
+            # select file
             dbc.Container(
                 [
                     dbc.Row(
@@ -105,6 +110,7 @@ def layout():
                 ],
                 className="m-1 bg-light border",
             ),
+            # configuration
             dbc.Row(
                 [
                     html.Div(
@@ -125,14 +131,12 @@ def layout():
                     ),
                     dbc.Col(
                         dcc.Markdown(id="general-config-str"),
-                        width=12,
                     ),
                     html.H6(
                         "Dataset Config",
                     ),
                     dbc.Col(
                         dcc.Markdown(id="dataset-config-str"),
-                        width=12,
                     ),
                 ],
                 className="m-1 bg-light border",
@@ -184,8 +188,7 @@ def load_config(n_clicks, dataset):
         Output("general-config-str", "children"),
         Output("dataset-config-str", "children"),
     ],
-    [Input("url", "pathname")],
-    [State("store-config", "data")],
+    [Input("url", "pathname"), Input("store-config", "data")],
 )
 def display_config(pathname, config):
     """Display the configuration file."""

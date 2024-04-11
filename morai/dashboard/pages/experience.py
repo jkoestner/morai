@@ -56,14 +56,8 @@ def layout():
                 className="bg-primary text-white p-2 mb-2 text-center",
             ),
             dbc.Row(
-                html.P(
-                    [
-                        "Dataset: ",
-                        html.Span(
-                            f"{config_dataset['filename']}",
-                            style={"fontWeight": "bold"},
-                        ),
-                    ],
+                html.Div(
+                    id="data-description",
                 ),
             ),
             dbc.Row(

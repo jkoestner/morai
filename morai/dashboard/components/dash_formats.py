@@ -16,15 +16,15 @@ def get_column_defs(table):
 
     Returns
     -------
-    ColumnDefs : list
+    column_defs : list
         The column definitions
 
     """
-    columnDefs = []
+    column_defs = []
     for col in table.columns:
         if table[col].dtype.kind in "i":
             if "year" in col.lower():
-                columnDefs.append(
+                column_defs.append(
                     {
                         "field": col,
                         "headerName": col,
@@ -32,7 +32,7 @@ def get_column_defs(table):
                     }
                 )
             else:
-                columnDefs.append(
+                column_defs.append(
                     {
                         "field": col,
                         "headerName": col,
@@ -40,8 +40,8 @@ def get_column_defs(table):
                     }
                 )
         elif table[col].dtype.kind in "f":
-            if col in ["ratio", "risk", "ae"] or "pct" in col.lower():
-                columnDefs.append(
+            if col in ["ratio", "risk", "ae", "r2_score"] or "pct" in col.lower():
+                column_defs.append(
                     {
                         "field": col,
                         "headerName": col,
@@ -51,7 +51,7 @@ def get_column_defs(table):
                     }
                 )
             else:
-                columnDefs.append(
+                column_defs.append(
                     {
                         "field": col,
                         "headerName": col,
@@ -61,10 +61,33 @@ def get_column_defs(table):
                     }
                 )
         else:
-            columnDefs.append(
+            column_defs.append(
                 {
                     "field": col,
                     "headerName": col,
                 }
             )
-    return columnDefs
+    return column_defs
+
+
+def remove_column_defs(column_defs, col_name):
+    """
+    Remove a column from the column definitions.
+
+    Parameters
+    ----------
+    column_defs : list
+        The column definitions
+    col_name : str
+        The column name to remove
+
+    Returns
+    -------
+    column_defs : list
+        The column definitions
+
+    """
+    for col in column_defs:
+        if col["field"] == col_name:
+            column_defs.remove(col)
+    return column_defs
