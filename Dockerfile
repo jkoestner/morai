@@ -15,7 +15,7 @@ RUN apt-get update && \
 WORKDIR /code
 
 # Install requirements (without copying the whole directory)
-RUN pip install --no-cache-dir "https://github.com/jkoestner/morai.git@main"
+RUN pip install --no-cache-dir "git+https://github.com/jkoestner/morai.git@main"
 
 # Create new user
 RUN adduser --disabled-password --gecos '' morai && \
