@@ -14,10 +14,6 @@ RUN apt-get update && \
 # Set work directory
 WORKDIR /code
 
-# COPY files for web dashboard
-COPY ./morai/dashboard/app.py /code/
-COPY ./morai/dashboard/assets /code/assets/
-
 # Install requirements (without copying the whole directory)
 RUN pip install --no-cache-dir "git+https://github.com/jkoestner/morai.git@main"
 

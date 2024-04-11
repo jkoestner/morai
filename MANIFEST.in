@@ -1,0 +1,2 @@
+# MANIFEST is used to include files in the distribution for setuptools
+graft morai/dashboard/assets

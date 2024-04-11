@@ -26,15 +26,12 @@ logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/experience", title="morai - Experience", order=2)
 
-# load config
-config = dh.load_config()
-config_dataset = config["datasets"][config["general"]["dataset"]]
-# create cards
+# create cards - TODO (make dynamic)
 card_list = [
-    config_dataset["columns"]["exposure_amt"],
-    config_dataset["columns"]["actuals_cnt"],
-    config_dataset["columns"]["exposure_amt"],
-    config_dataset["columns"]["actuals_amt"],
+    "policies_exposed",
+    "death_count",
+    "amount_exposed",
+    "death_claim_amount",
 ]
 
 #   _                            _
@@ -232,7 +229,11 @@ def load_data(dataset, config):
         # tabs
         Input("tabs", "active_tab"),
     ],
-    [State("store-dataset", "data"), State("store-exp-filter", "data")],
+    [
+        State("store-dataset", "data"),
+        State("store-exp-filter", "data"),
+        State("store-config", "data"),
+    ],
     prevent_initial_call=True,
 )
 def update_tab_content(
@@ -243,9 +244,11 @@ def update_tab_content(
     active_tab,
     dataset,
     filter_dict,
+    config,
 ):
     """Create chart and table for experience analysis."""
     logger.debug("creating tab content")
+    config_dataset = config["datasets"][config["general"]["dataset"]]
     # inputs
     inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
     x_axis = dh._inputs_parse_id(inputs_info, "x_axis_selector")

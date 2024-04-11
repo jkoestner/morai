@@ -18,8 +18,6 @@ FILES_PATH = (
 )
 CONFIG_PATH = FILES_PATH / "dashboard_config.yaml"
 
-HOST = "0.0.0.0"
-
 logger = custom_logger.setup_logging(__name__)
 
 

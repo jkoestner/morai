@@ -17,7 +17,7 @@ def _create_argparser():
     _subparsers = _parser.add_subparsers(dest="command", help="command to choose")
 
     # subparser: dashboard
-    _dashboard_parser = _subparsers.add_parser("dashboard", help="dashboar command")
+    _dashboard_parser = _subparsers.add_parser("dashboard", help="dashboard command")
 
     return _parser
 
@@ -30,7 +30,7 @@ def cli():
     args = parser.parse_args()
 
     if args.command == "dashboard":
-        app.run_server(debug=False)
+        app.run_server(debug=True)
 
 
 if __name__ == "__main__":

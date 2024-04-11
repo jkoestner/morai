@@ -13,6 +13,7 @@
 - [Overview](#overview)
 - [Installation](#installation)
   - [Local Install](#local-install)
+  - [Docker Install](#docker-install)
 - [Usage](#usage)
   - [CLI](#cli)
 - [Other Tools](#other-tools)
@@ -30,7 +31,19 @@ mortality and experience data.
 
 **🔬 Jupyter Notebook:**
 
-- [Morai Example](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/mortality.ipynb)
+- [Data Process](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/data_process.ipynb)
+- [Exploratory](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/exploratory.ipynb)
+- [Predictive Models](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/predictive_model.ipynb)
+- [GLM Experiments](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/experiments/glm.ipynb)
+
+**📊 Dashboard:**
+
+- Morai Dashboard - Coming Soon
+- Data Input: ![dash_data_input](docs/screenshots/dash_data_input.png)
+- Data Explore: ![dash_explore](docs/screenshots/dash_explore.png)
+- Data Experience: ![dash_experience](docs/screenshots/dash_experience.png)
+- Data Models: ![dash_models](docs/screenshots/dash_models.png)
+- Table Explorer: ![dash_tables](docs/screenshots/dash_tables.png)
 
 ## Installation
 
@@ -56,7 +69,7 @@ services:
   morai:
     image: dmbymdt/morai:latest
     container_name: morai
-    command: gunicorn -b 0.0.0.0:8001 app:server
+    command: gunicorn -b 0.0.0.0:8001 morai.dashboard.app:server
     restart: unless-stopped
     environment:
       MORAI_FILES_PATH: /code/morai/files # setting the files path for morai
