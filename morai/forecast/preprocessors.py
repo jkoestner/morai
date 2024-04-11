@@ -1,4 +1,5 @@
 """Preprocessors used in the models."""
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
@@ -40,6 +41,8 @@ def preprocess_data(
         - weights : the weights column (no processing)
         - mapping : the mapping of the features to the encoding. this includes after
           standardization.
+        - md_encoded : the model_data with the encoded features
+        - features : the features that were used in the model
 
     """
     # initializing the variables
@@ -50,7 +53,9 @@ def preprocess_data(
     logger.info(f"model target: {model_target}")
     y = model_data[model_target].copy()
 
-    model_weight = feature_dict.get("weight", [])[0]
+    model_weight = (
+        feature_dict.get("weight", [])[0] if feature_dict.get("weight") else None
+    )
     logger.info(f"model weights: {model_weight}")
     weights = model_data[model_weight].copy() if model_weight else None
     x_features = [
@@ -149,7 +154,8 @@ def preprocess_data(
     # nominal - one hot encoded
     if ohe_cols:
         logger.info(f"nominal - one hot encoded: {ohe_cols}")
-        X = pd.get_dummies(X, columns=ohe_cols, dtype="int8", sparse=True)
+        # sparse=True is used to save memory however many models don't support sparse
+        X = pd.get_dummies(X, columns=ohe_cols, dtype="int8", sparse=False)
         for col in ohe_cols:
             mapping[col] = {
                 "values": {k: col + "_" + k for k in sorted(model_data[col].unique())},
@@ -202,6 +208,7 @@ def preprocess_data(
         "weights": weights,
         "mapping": mapping,
         "md_encoded": md_encoded,
+        "features": model_features,
     }
 
     return preprocess_dict

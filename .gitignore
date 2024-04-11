@@ -10,7 +10,10 @@
 _build/
 _pycache_/
 files/
+docs/coverage/
+morai/dashboard/file_system_backend/
 notebooks/working/
+
 
 # include tests/files/
 !tests/files/

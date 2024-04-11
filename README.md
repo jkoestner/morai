@@ -13,6 +13,9 @@
 - [Overview](#overview)
 - [Installation](#installation)
   - [Local Install](#local-install)
+  - [Docker Install](#docker-install)
+- [Usage](#usage)
+  - [CLI](#cli)
 - [Other Tools](#other-tools)
   - [Jupyter Lab Usage](#jupyter-lab-usage)
   - [Logging](#logging)
@@ -28,7 +31,19 @@ mortality and experience data.
 
 **🔬 Jupyter Notebook:**
 
-- [Morai Example](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/mortality.ipynb)
+- [Data Process](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/data_process.ipynb)
+- [Exploratory](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/exploratory.ipynb)
+- [Predictive Models](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/predictive_model.ipynb)
+- [GLM Experiments](https://nbviewer.jupyter.org/github/jkoestner/morai/blob/main/notebooks/experiments/glm.ipynb)
+
+**📊 Dashboard:**
+
+- Morai Dashboard - Coming Soon
+- Data Input: ![dash_data_input](docs/screenshots/dash_data_input.png)
+- Data Explore: ![dash_explore](docs/screenshots/dash_explore.png)
+- Data Experience: ![dash_experience](docs/screenshots/dash_experience.png)
+- Data Models: ![dash_models](docs/screenshots/dash_models.png)
+- Table Explorer: ![dash_tables](docs/screenshots/dash_tables.png)
 
 ## Installation
 
@@ -40,6 +55,44 @@ The following command can be run to install the packages in the pyproject.toml f
 
 ```
 pip install -e .
+```
+
+### Docker Install
+The package can also be run in docker which provides a containerized environment, and can host the web dashboard.
+
+To run the web dashboard there are a few prerequisites.
+  - Docker
+
+```bash
+version: "3.8"
+services:
+  morai:
+    image: dmbymdt/morai:latest
+    container_name: morai
+    command: gunicorn -b 0.0.0.0:8001 morai.dashboard.app:server
+    restart: unless-stopped
+    environment:
+      MORAI_FILES_PATH: /code/morai/files # setting the files path for morai
+    ports:
+      - '8001:8001'
+    volumes:
+      - $DOCKERDIR/morai/files:/code/morai/files # mounting the files directory
+```
+
+## Usage
+
+### CLI
+
+CLI can be used for easier commands of python scripts for both portfolio or manager. An example of a CLI command is shown below.
+
+```commandline
+morai dashboard
+```
+
+It also can be run locally by going to the dashboard folder and running below.
+
+```python
+python app.py
 ```
 
 ## Other Tools
@@ -55,6 +108,13 @@ python -m ipykernel install --user --name=morai
 
 If wanting to get more detail in output of messages the logging can increased
 ```python
-from morai.utils import helpers
-helpers.set_log_level("DEBUG")
+from morai.utils import custom_logger
+custom_logger.set_log_level("DEBUG")
+```
+
+### Coverage
+
+To see the test coverage the following command is run in the root directory.
+```
+pytest --cov=morai --cov-report=html
 ```

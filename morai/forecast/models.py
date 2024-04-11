@@ -1,4 +1,5 @@
 """Creates models for forecasting mortality rates."""
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -20,6 +21,8 @@ class GLM:
         weights=None,
         r_style=False,
         mapping=None,
+        family=None,
+        **kwargs,
     ):
         """
         Initialize the model.
@@ -37,19 +40,23 @@ class GLM:
         mapping : dict, optional
             The mapping of the features to the encoding and only needed
             if r_style is True
+        family : sm.families, optional
+            The family to use for the GLM model
+        kwargs : dict, optional
+            Additional keyword arguments
 
         """
         logger.info("initialzed GLM and add constant to X")
         self.X = sm.add_constant(X)
         self.y = y
         self.weights = weights
-        self.model = None
         self.r_style = r_style
         self.mapping = mapping
+        self.model = self.setup_model(family=family, **kwargs)
 
-    def fit_model(self, family=None, **kwargs):
+    def setup_model(self, family=None, **kwargs):
         """
-        Fit the GLM model.
+        Set up the GLM model.
 
         Returns
         -------
@@ -66,7 +73,7 @@ class GLM:
         weights = self.weights
         if family is None:
             family = sm.families.Binomial()
-        logger.info(f"fitting GLM model with statsmodels and {family} family...")
+        logger.info(f"setup GLM model with statsmodels and {family} family...")
 
         # using either r-style or python-style formula
         if self.r_style:
@@ -78,7 +85,7 @@ class GLM:
                 family=family,
                 freq_weights=weights,
                 **kwargs,
-            ).fit()
+            )
         else:
             model = sm.GLM(
                 endog=y,
@@ -86,8 +93,24 @@ class GLM:
                 family=sm.families.Binomial(),
                 freq_weights=weights,
                 **kwargs,
-            ).fit()
+            )
 
+        self.model = model
+
+        return model
+
+    def fit(self):
+        """
+        Fit the GLM model.
+
+        Returns
+        -------
+        model : GLM
+            The GLM model
+
+        """
+        logger.info("fit the model")
+        model = self.model.fit()
         self.model = model
 
         return model
@@ -183,6 +206,14 @@ class LeeCarter:
     """
     Create a Lee Carter model.
 
+    A Lee Carter model needs the data to be structured with the attained age
+    and observation year. The model will need "qx_raw". If not in dataframe
+    then actual and exposure will need to be used and the structure_df method
+    will calculate "qx_raw".
+
+    Note that the Lee Carter model assumes that the mortality rates are
+    log-linear over time and age.
+
     reference:
     - https://en.wikipedia.org/wiki/Lee%E2%80%93Carter_model
     """
@@ -263,7 +294,9 @@ class LeeCarter:
             .sum()
             .reset_index()
         )
-        logger.info("calculating qx_raw rates")
+        logger.info(
+            f"calculating qx_raw rates using {self.actual_col} and {self.expose_col}"
+        )
         lc_df["qx_raw"] = np.where(
             lc_df[self.actual_col] == 0,
             0,
@@ -365,7 +398,7 @@ class LeeCarter:
 
         return lc_df
 
-    def forecast(self, years):
+    def forecast(self, years, seed=None):
         """
         Forecast the mortality rates using deterministic random walk.
 
@@ -373,6 +406,8 @@ class LeeCarter:
         ----------
         years : int
             The amount of years to forecast LeeCarter model
+        seed : int, optional
+            The seed for the random number generator
 
         Returns
         -------
@@ -395,7 +430,7 @@ class LeeCarter:
         mu = (self.k_t.iloc[-1] - self.k_t.iloc[0]) / len(self.k_t)
 
         # random walk
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed=seed)
         k_t_i = (
             self.k_t.iloc[-1]
             + mu * np.arange(1, years + 1)
@@ -416,7 +451,7 @@ class LeeCarter:
             columns=self.b_x_k_t.columns,
         )
         lcf_df.index.name = self.year_col
-        lcf_df.reset_index().melt(
+        lcf_df = lcf_df.reset_index().melt(
             id_vars=self.year_col, var_name=self.age_col, value_name="qx_lc"
         )
 
@@ -473,7 +508,12 @@ class LeeCarter:
 
 class CBD:
     """
-    Create a Cairns, Blake, Dowd model.
+    Create a Cairns, Blake, Dowd (CBD) model.
+
+    A CBD model needs the data to be structured with the attained age
+    and observation year. The model will need "qx_raw". If not in dataframe
+    then actual and exposure will need to be used and the structure_df method
+    will calculate "qx_raw".
 
     reference:
     - https://www.actuaries.org/AFIR/Colloquia/Rome2/Cairns_Blake_Dowd.pdf
@@ -556,7 +596,9 @@ class CBD:
             .sum()
             .reset_index()
         )
-        logger.info("calculating qx_raw rates")
+        logger.info(
+            f"calculating qx_raw rates using {self.actual_col} and {self.expose_col}"
+        )
         cbd_df["qx_raw"] = np.where(
             cbd_df[self.actual_col] == 0,
             0,
@@ -655,7 +697,7 @@ class CBD:
 
         return cbd_df
 
-    def forecast(self, years):
+    def forecast(self, years, seed=None):
         """
         Forecast the mortality rates using deterministic random walk.
 
@@ -663,6 +705,8 @@ class CBD:
         ----------
         years : int
             The amount of years to forecast CBD model
+        seed : int, optional
+            The seed for the random number generator
 
         Returns
         -------
@@ -690,7 +734,7 @@ class CBD:
         ]
 
         # random walk
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed=seed)
         k_1_f = (
             self.k_t_1.iloc[-1]
             + mu[0] * np.arange(1, years + 1)
@@ -726,7 +770,7 @@ class CBD:
             columns=self.ages,
         )
         cbdf_df.index.name = self.year_col
-        cbdf_df.reset_index().melt(
+        cbdf_df = cbdf_df.reset_index().melt(
             id_vars=self.year_col, var_name=self.age_col, value_name="qx_cbd"
         )
 
