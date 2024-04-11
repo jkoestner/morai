@@ -59,11 +59,11 @@ services:
     command: gunicorn -b 0.0.0.0:8001 app:server
     restart: unless-stopped
     environment:
-      MORAI_FILES_PATH: /code/morai/files
+      MORAI_FILES_PATH: /code/morai/files # setting the files path for morai
     ports:
       - '8001:8001'
     volumes:
-      - $DOCKERDIR/morai/files:/code/morai/files
+      - $DOCKERDIR/morai/files:/code/morai/files # mounting the files directory
 ```
 
 ## Usage
