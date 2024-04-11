@@ -14,11 +14,8 @@ RUN apt-get update && \
 # Set work directory
 WORKDIR /code
 
-# COPY files for web dashboard
-COPY app.py /code/
-
 # Install requirements (without copying the whole directory)
-RUN pip install --no-cache-dir "https://github.com/jkoestner/morai.git"
+RUN pip install --no-cache-dir "https://github.com/jkoestner/morai.git@main"
 
 # Create new user
 RUN adduser --disabled-password --gecos '' morai && \

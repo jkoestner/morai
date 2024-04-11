@@ -45,6 +45,9 @@ dev = [
     "sphinx_rtd_theme>=1.2.2",
 ]
 
+[project.scripts]
+morai = "morai.utils.cli:cli" # the entry points provide console scripts at command line
+
 [project.urls]
 homepage = "https://github.com/jkoestner/morai"
 repository = "https://github.com/jkoestner/morai"

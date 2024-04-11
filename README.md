@@ -13,6 +13,8 @@
 - [Overview](#overview)
 - [Installation](#installation)
   - [Local Install](#local-install)
+- [Usage](#usage)
+  - [CLI](#cli)
 - [Other Tools](#other-tools)
   - [Jupyter Lab Usage](#jupyter-lab-usage)
   - [Logging](#logging)
@@ -40,6 +42,44 @@ The following command can be run to install the packages in the pyproject.toml f
 
 ```
 pip install -e .
+```
+
+### Docker Install
+The package can also be run in docker which provides a containerized environment, and can host the web dashboard.
+
+To run the web dashboard there are a few prerequisites.
+  - Docker
+
+```bash
+version: "3.8"
+services:
+  morai:
+    image: dmbymdt/morai:latest
+    container_name: morai
+    command: gunicorn -b 0.0.0.0:8001 app:server
+    restart: unless-stopped
+    environment:
+      MORAI_FILES_PATH: /code/morai/files
+    ports:
+      - '8001:8001'
+    volumes:
+      - $DOCKERDIR/morai/files:/code/morai/files
+```
+
+## Usage
+
+### CLI
+
+CLI can be used for easier commands of python scripts for both portfolio or manager. An example of a CLI command is shown below.
+
+```commandline
+morai dashboard
+```
+
+It also can be run locally by going to the dashboard folder and running below.
+
+```python
+python app.py
 ```
 
 ## Other Tools

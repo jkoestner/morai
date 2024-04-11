@@ -12,7 +12,11 @@ from morai.utils import custom_logger
 ROOT_PATH = Path(__file__).resolve().parent.parent.parent
 TESTS_PATH = ROOT_PATH / "tests" / "files"
 CONFIG_PATH = ROOT_PATH / "files" / "dashboard_config.yaml"
-FILES_PATH = ROOT_PATH / "files"
+FILES_PATH = (
+    Path(os.getenv("MORAI_FILES_PATH"))
+    if os.getenv("MORAI_FILES_PATH")
+    else ROOT_PATH / "files"
+)
 HOST = "0.0.0.0"
 
 logger = custom_logger.setup_logging(__name__)
