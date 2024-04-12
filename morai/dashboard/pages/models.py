@@ -9,7 +9,6 @@ from dash_extensions.enrich import (
     Input,
     Output,
     Serverside,
-    State,
     callback,
     dcc,
     html,
@@ -88,8 +87,7 @@ def load_model_results(pathname):
 
 @callback(
     Output("model-results", "children"),
-    Input("url", "pathname"),
-    State("store-model-results", "data"),
+    [Input("url", "pathname"), Input("store-model-results", "data")],
 )
 def display_model_results(pathname, model_results):
     """Load model results."""
