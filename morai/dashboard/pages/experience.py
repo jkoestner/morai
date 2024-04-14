@@ -26,14 +26,6 @@ logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/experience", title="morai - Experience", order=2)
 
-# create cards - TODO (make dynamic)
-card_list = [
-    "policies_exposed",
-    "death_count",
-    "amount_exposed",
-    "death_claim_amount",
-]
-
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
 #  | |   / _` | | | |/ _ \| | | | __|
@@ -102,7 +94,7 @@ def layout():
                     # selectors
                     dbc.Col(
                         html.Div(
-                            id="selectors",
+                            id="chart-selectors",
                             className="m-2 bg-light border p-1",
                         ),
                         width=2,
@@ -150,7 +142,7 @@ def layout():
                                     className="btn btn-primary",
                                 ),
                                 html.Div(
-                                    id="filters",
+                                    id="chart-filters",
                                 ),
                             ],
                             className="m-2 bg-light border p-1",
@@ -174,8 +166,8 @@ def layout():
 @callback(
     [
         Output("store-exp-filter", "data"),
-        Output("selectors", "children"),
-        Output("filters", "children"),
+        Output("chart-selectors", "children"),
+        Output("chart-filters", "children"),
         Output("card", "children"),
     ],
     [Input("store-dataset", "data")],
@@ -189,13 +181,28 @@ def load_data(dataset, config):
     logger.debug("generate selectors and filters")
 
     # create filters and selectors
-    filter_dict = dh.generate_filters(dataset)
+    filter_dict = dh.generate_filters(df=dataset, prefix="chart")
     selectors_default = dh.generate_selectors(
-        df=dataset,
-        filter_dict=filter_dict,
         config=config,
+        prefix="chart",
+        selector_dict={
+            "x_axis": True,
+            "y_axis": True,
+            "color": True,
+            "chart_type": True,
+            "numerator": True,
+            "denominator": True,
+            "secondary": True,
+            "x_bins": True,
+            "add_line": True,
+            "rates": False,
+            "weights": False,
+        },
     )
     filters = filter_dict["filters"]
+
+    # create card
+    card_list = dh.get_card_list(config)
 
     card = dh.generate_card(
         df=dataset,
@@ -223,9 +230,9 @@ def load_data(dataset, config):
         # tools
         Input("tool-selector", "value"),
         # selectors
-        Input({"type": "selector", "index": ALL}, "value"),
-        Input({"type": "str-filter", "index": ALL}, "value"),
-        Input({"type": "num-filter", "index": ALL}, "value"),
+        Input({"type": "chart-selector", "index": ALL}, "value"),
+        Input({"type": "chart-str-filter", "index": ALL}, "value"),
+        Input({"type": "chart-num-filter", "index": ALL}, "value"),
         # tabs
         Input("tabs", "active_tab"),
     ],
@@ -255,7 +262,7 @@ def update_tab_content(
     y_axis = dh._inputs_parse_id(inputs_info, "y_axis_selector")
     chart_secondary = None
     # filter the dataset
-    filtered_df = dataset.copy()
+    filtered_df = dataset
     for col in filter_dict["str_cols"]:
         str_values = dh._inputs_parse_id(inputs_info, col)
         if str_values:
@@ -267,6 +274,9 @@ def update_tab_content(
                 (filtered_df[col] >= num_values[0])
                 & (filtered_df[col] <= num_values[1])
             ]
+
+    # create cards
+    card_list = dh.get_card_list(config)
     filtered_card = dh.generate_card(
         df=filtered_df,
         card_list=card_list,
@@ -364,9 +374,9 @@ def update_tab_content(
 
 
 @callback(
-    Output({"type": "selector-group", "index": ALL}, "style"),
+    Output({"type": "chart-selector-group", "index": ALL}, "style"),
     [Input("tool-selector", "value")],
-    [State({"type": "selector-group", "index": ALL}, "id")],
+    [State({"type": "chart-selector-group", "index": ALL}, "id")],
     prevent_initial_call=True,
 )
 def toggle_tool(tool, all_selectors):
@@ -412,8 +422,8 @@ def toggle_tool(tool, all_selectors):
 
 @callback(
     [
-        Output({"type": "str-filter", "index": ALL}, "value"),
-        Output({"type": "num-filter", "index": ALL}, "value"),
+        Output({"type": "chart-str-filter", "index": ALL}, "value"),
+        Output({"type": "chart-num-filter", "index": ALL}, "value"),
     ],
     [Input("reset-filters-button", "n_clicks")],
     [State("store-dataset", "data"), State("store-exp-filter", "data")],

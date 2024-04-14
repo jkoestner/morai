@@ -38,7 +38,8 @@ datasets:
   model_data:
     filename: model_data.parquet
     description: Mortality data that used the "mortality_grouped" as the source data.
-      The data was predicted on a number of models.
+      The data was predicted on a number of models. The data was further filtered
+      with attained age between 50 to 95. Issue age is filtered between 30 and 80. 
     columns:
       features:
       - attained_age

@@ -180,7 +180,7 @@ def update_charts(pathname, dataset):
 )
 def update_dataset_description(pathname, config):
     """Update charts when page is loaded."""
-    if pathname not in ["/explore", "/experience"]:
+    if pathname not in ["/explore", "/experience", "/model"]:
         raise dash.exceptions.PreventUpdate
 
     filename = "No dataset loaded"

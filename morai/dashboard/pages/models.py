@@ -1,22 +1,28 @@
 """Experience dashboard."""
 
 import json
+import numpy as np
 
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import joblib
 from dash_extensions.enrich import (
+    ALL,
     Input,
     Output,
     Serverside,
+    State,
     callback,
+    callback_context,
     dcc,
     html,
 )
 
 from morai.dashboard.components import dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
-from morai.forecast import metrics
+from morai.experience import charters
+from morai.forecast import metrics, preprocessors
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
@@ -43,20 +49,74 @@ def layout():
                 "Model Analysis",
                 className="bg-primary text-white p-2 mb-2 text-center",
             ),
-            html.Div(
-                id="model-results",
+            dbc.Row(
+                html.Div(id="data-description"),
             ),
-            dbc.Col(
-                dcc.Dropdown(
-                    id="model-dropdown",
-                    options=[
-                        {"label": key, "value": key}
-                        for key in dh.list_files(helpers.FILES_PATH / "models")
-                    ],
-                    placeholder="Select a Model",
+            dbc.Toast(
+                (
+                    "Need to put results in the model_results.json "
+                    "file to display results."
                 ),
-                width=2,
-                className="p-1",
+                id="toast-no-model-results",
+                header="Input Error",
+                is_open=False,
+                dismissable=True,
+                icon="danger",
+                style={"position": "fixed", "top": 100, "right": 10, "width": 350},
+            ),
+            dbc.Row(
+                html.Div(
+                    id="model-results",
+                ),
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            dbc.Button(
+                                "Create PDP",
+                                id="button-pdp",
+                                className="btn btn-primary p-1",
+                            ),
+                            html.H5(
+                                "Selectors",
+                                style={
+                                    "border-bottom": "1px solid black",
+                                    "padding-bottom": "5px",
+                                },
+                            ),
+                            html.Div(
+                                id="pdp-selectors",
+                            ),
+                        ],
+                        width=2,
+                        className="mt-2 bg-light border p-1",
+                    ),
+                    dbc.Col(
+                        dcc.Loading(
+                            id="loading-pdp-chart",
+                            type="dot",
+                            children=html.Div(id="pdp-chart"),
+                        ),
+                        width=8,
+                    ),
+                    dbc.Col(
+                        [
+                            html.H5(
+                                "Filters",
+                                style={
+                                    "border-bottom": "1px solid black",
+                                    "padding-bottom": "5px",
+                                },
+                            ),
+                            html.Div(
+                                id="pdp-filters",
+                            ),
+                        ],
+                        width=2,
+                        className="mt-2 bg-light border p-1",
+                    ),
+                ],
             ),
         ],
         className="container",
@@ -71,7 +131,10 @@ def layout():
 
 
 @callback(
-    Output("store-model-results", "data"),
+    [
+        Output("store-model-results", "data"),
+        Output("toast-no-model-results", "is_open"),
+    ],
     Input("url", "pathname"),
 )
 def load_model_results(pathname):
@@ -79,10 +142,42 @@ def load_model_results(pathname):
     if pathname != "/model":
         raise dash.exceptions.PreventUpdate
 
+    if not (helpers.FILES_PATH / "result" / "model_results.json").exists():
+        return dash.no_update, True
+
     # load models
     model_results = metrics.ModelResults(filepath="model_results.json")
 
-    return Serverside(model_results, key="model_results")
+    return Serverside(model_results, key="model_results"), False
+
+
+@callback(
+    [Output("pdp-selectors", "children"), Output("pdp-filters", "children")],
+    Input("url", "pathname"),
+    [State("store-config", "data"), State("store-dataset", "data")],
+)
+def load_pdp_selectors(pathname, config, dataset):
+    """Load pdp selectors."""
+    if pathname != "/model" or config is None:
+        raise dash.exceptions.PreventUpdate
+
+    # create the pdp selectors
+    pdp_selectors = dh.generate_selectors(
+        config=config,
+        prefix="pdp",
+        selector_dict={
+            "model_file": True,
+            "x_axis": True,
+            "color": True,
+            "secondary": True,
+            "x_bins": True,
+            "pdp_weight": True,
+        },
+    )
+
+    pdp_filters = dh.generate_filters(df=dataset, prefix="pdp")["filters"]
+
+    return pdp_selectors, pdp_filters
 
 
 @callback(
@@ -182,3 +277,87 @@ def clicked_cell_model_dictionary(cell):
     markdown = json.dumps(cell["value"], indent=2)
     markdown = f"```json\n{markdown}\n```"
     return markdown
+
+
+@callback(
+    Output("pdp-chart", "children"),
+    Input("button-pdp", "n_clicks"),
+    [
+        State("store-model-results", "data"),
+        State("store-dataset", "data"),
+        State({"type": "pdp-selector", "index": ALL}, "value"),
+        State({"type": "pdp-str-filter", "index": ALL}, "value"),
+        State({"type": "pdp-num-filter", "index": ALL}, "value"),
+    ],
+)
+def display_pdp(
+    n_clicks, model_results, model_data, pdp_selectors, pdp_str_filters, pdp_num_filters
+):
+    """Create pdp."""
+    if n_clicks is None:
+        raise dash.exceptions.PreventUpdate
+
+    # get the callback context
+    states_info = dh._inputs_flatten_list(callback_context.states_list)
+    model_file = dh._inputs_parse_id(states_info, "model_file_selector")
+    x_axis_col = dh._inputs_parse_id(states_info, "x_axis_selector")
+
+    # checks inputs needed
+    if model_file is None or x_axis_col is None:
+        return dash.no_update
+
+    # load model
+    model = joblib.load(helpers.FILES_PATH / "models" / model_file)
+    model_name = model_file.split(".")[0]
+
+    # get model parameters
+    standardize = model_results.model[
+        model_results.model["model_name"] == model_name
+    ].iloc[0]["preprocess_params"]["standardize"]
+    preset = model_results.model[model_results.model["model_name"] == model_name].iloc[
+        0
+    ]["preprocess_params"]["preset"]
+    feature_dict = model_results.model[
+        model_results.model["model_name"] == model_name
+    ].iloc[0]["feature_dict"]
+
+    # filter_data
+    filtered_df = model_data
+    str_cols = filtered_df.select_dtypes(exclude=[np.number]).columns.to_list()
+    num_cols = filtered_df.select_dtypes(include=[np.number]).columns.to_list()
+    for col in str_cols:
+        str_values = dh._inputs_parse_id(states_info, col)
+        if str_values:
+            print(str_values)
+            filtered_df = filtered_df[filtered_df[col].isin(str_values)]
+    for col in num_cols:
+        num_values = dh._inputs_parse_id(states_info, col)
+        if num_values:
+            filtered_df = filtered_df[
+                (filtered_df[col] >= num_values[0])
+                & (filtered_df[col] <= num_values[1])
+            ]
+
+    # encode data
+    preprocess_dict = preprocessors.preprocess_data(
+        filtered_df,
+        feature_dict=feature_dict,
+        standardize=standardize,
+        preset=preset,
+    )
+    mapping = preprocess_dict["mapping"]
+    md_encoded = preprocess_dict["md_encoded"]
+
+    # create pdp
+    pdp_chart = charters.pdp(
+        model=model,
+        df=md_encoded,
+        x_axis=x_axis_col,
+        line_color=dh._inputs_parse_id(states_info, "color_selector"),
+        weight=dh._inputs_parse_id(states_info, "weights_selector"),
+        secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
+        mapping=mapping,
+        x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
+    )
+
+    return dcc.Graph(figure=pdp_chart)

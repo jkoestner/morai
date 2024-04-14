@@ -3,6 +3,8 @@
 # then pulled down into a web container.
 # To run dockerfile and create own image `docker build --no-cache -t morai .` 
 # from where the dockerfile is located.
+#
+# slim was used instead of alpine because of the need of numpy
 FROM python:3.9-slim
 
 # Install git
