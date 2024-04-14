@@ -143,6 +143,7 @@ class ModelResults:
 
     def __init__(self, filepath=None, metrics=None):
         self.filepath = filepath
+
         # load model results from file
         if filepath is not None:
             filepath = helpers.test_path(filepath)
@@ -157,13 +158,18 @@ class ModelResults:
             scorecard_df = pd.read_json(
                 StringIO(json.dumps(data["scorecard"])), orient="split"
             )
+            importance_df = pd.read_json(
+                StringIO(json.dumps(data["importance"])), orient="split"
+            )
 
             self.model = model_df
             self.scorecard = scorecard_df
+            self.importance = importance_df
             self.metrics = scorecard_df.columns.tolist().remove("model_name")
         else:
             self.model = pd.DataFrame()
             self.scorecard = pd.DataFrame()
+            self.importance = pd.DataFrame()
             self.metrics = metrics
 
     def add_model(
@@ -171,10 +177,10 @@ class ModelResults:
         model_name,
         data_path,
         data_shape,
-        feature_dict,
+        preprocess_dict,
+        model_params,
         scorecard,
-        preprocess_params=None,
-        model_params=None,
+        importance=None,
     ):
         """
         Add the model.
@@ -187,14 +193,14 @@ class ModelResults:
             The data path
         data_shape : tuple
             The data shape
-        feature_dict : dict
-            The feature dictionary
+        preprocess_dict : dict
+            The preprocess dictionary
+        model_params : dict
+            The model parameters
         scorecard : pd.DataFrame
             The scorecard row
-        preprocess_params : dict, optional (default=None)
-            The preprocessing parameters
-        model_params : dict, optional (default=None)
-            The model parameters
+        importance : pd.DataFrame, optional (default=None)
+            The importance of the features
 
         Returns
         -------
@@ -209,7 +215,18 @@ class ModelResults:
             return
 
         logger.info(f"Adding model '{model_name}'")
-        # adding model row
+
+        # check if preprocess_dict is None
+        if preprocess_dict is None:
+            preprocess_params = None
+            feature_dict = None
+            model_features = None
+        else:
+            preprocess_params = preprocess_dict["params"]
+            feature_dict = preprocess_dict["feature_dict"]
+            model_features = preprocess_dict["model_features"]
+
+        # initialize model row
         model_row = pd.DataFrame(
             [
                 {
@@ -219,22 +236,38 @@ class ModelResults:
                     "preprocess_params": preprocess_params,
                     "feature_dict": feature_dict,
                     "model_params": model_params,
+                    "model_features": model_features,
                     "date_added": pd.Timestamp.now(),
                 }
             ]
         ).dropna(axis="columns", how="all")
-        # adding scorecard row
+
+        # initialize scorecard row and put model_name in the first column
         scorecard_row = scorecard.dropna(axis="columns", how="all")
         scorecard_row.insert(0, "model_name", model_name)
+
+        # initialize importance row
+        importance_row = pd.DataFrame(
+            [
+                {
+                    "model_name": model_name,
+                    "importance": importance,
+                }
+            ]
+        ).dropna(axis="columns", how="all")
 
         # appending to the model and scorecard
         if self.model.empty or self.scorecard.empty:
             self.model = model_row
             self.scorecard = scorecard_row
+            self.importance = importance_row
         else:
             self.model = pd.concat([self.model, model_row], ignore_index=True)
             self.scorecard = pd.concat(
                 [self.scorecard, scorecard_row], ignore_index=True
+            )
+            self.importance = pd.concat(
+                [self.importance, importance_row], ignore_index=True
             )
 
     def remove_model(self, model_name):
@@ -254,6 +287,7 @@ class ModelResults:
         logger.info(f"Removing model '{model_name}'")
         self.model = self.model[self.model["model_name"] != model_name]
         self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
+        self.importance = self.importance[self.importance["model_name"] != model_name]
 
     def save_model(self, filepath=None):
         """
@@ -283,7 +317,14 @@ class ModelResults:
         # saving the results
         model_json = json.loads(self.model.to_json(orient="split", index=False))
         scorecard_json = json.loads(self.scorecard.to_json(orient="split", index=False))
-        model_results = {"model": model_json, "scorecard": scorecard_json}
+        importance_json = json.loads(
+            self.importance.to_json(orient="split", index=False)
+        )
+        model_results = {
+            "model": model_json,
+            "scorecard": scorecard_json,
+            "importance": importance_json,
+        }
         with open(filepath, "w") as file:
             json.dump(model_results, file, indent=4)
 

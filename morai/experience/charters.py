@@ -54,7 +54,8 @@ def chart(
         The column name to use for the x-axis.
     y_axis : str
         The column name to use for the y-axis.
-        "ratio" is a special value that will calculate the ratio of two columns.
+        ["ratio", "risk"] are special values that will calculate the ratio
+        of two columns.
     color : str, optional (default=None)
         The column name to use for the color.
     type : str, optional (default="line")
@@ -126,8 +127,13 @@ def chart(
     grouped_data = df.groupby(groupby_cols, observed=True)[sum_cols].sum().reset_index()
 
     # calculating fields
-    if y_special and y_axis in ["ratio", "risk"]:
+    if y_special and y_axis == "ratio":
         grouped_data[y_axis] = grouped_data[numerator] / grouped_data[denominator]
+    elif y_special and y_axis == "risk":
+        average_y_axis = grouped_data[numerator].sum() / grouped_data[denominator].sum()
+        grouped_data[y_axis] = (
+            grouped_data[numerator] / grouped_data[denominator]
+        ) / average_y_axis
 
     if y_sort:
         grouped_data = grouped_data.sort_values(by=y_axis, ascending=False)

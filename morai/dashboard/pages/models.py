@@ -1,12 +1,13 @@
 """Experience dashboard."""
 
 import json
-import numpy as np
 
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 import joblib
+import numpy as np
+import pandas as pd
 from dash_extensions.enrich import (
     ALL,
     Input,
@@ -193,6 +194,7 @@ def display_model_results(pathname, model_results):
     # load models
     models = model_results.model
     scorecard = model_results.scorecard
+    importance = model_results.importance
 
     # update column defs
     model_column_defs = dash_formats.get_column_defs(models)
@@ -212,6 +214,8 @@ def display_model_results(pathname, model_results):
     }
     score_column_defs = dash_formats.remove_column_defs(score_column_defs, "model_name")
     score_column_defs.insert(0, score_col_def)
+
+    importance_column_defs = dash_formats.get_column_defs(importance)
 
     # create the divs
     model_results_div = html.Div(
@@ -257,8 +261,37 @@ def display_model_results(pathname, model_results):
                         ],
                         title="Model Scorecard",
                     ),
+                    dbc.AccordionItem(
+                        [
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        [
+                                            dag.AgGrid(
+                                                id="grid-importance-dictionary",
+                                                rowData=importance.to_dict("records"),
+                                                columnDefs=importance_column_defs,
+                                            ),
+                                        ],
+                                        width=4,
+                                    ),
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-importance-chart",
+                                            type="dot",
+                                            children=html.Div(id="importance-chart"),
+                                        ),
+                                        width=8,
+                                        style={"height": "400px", "overflowY": "auto"},
+                                    ),
+                                ],
+                            ),
+                        ],
+                        title="Model Importance",
+                    ),
                 ],
                 start_collapsed=True,
+                always_open=True,
             )
         ]
     )
@@ -277,6 +310,29 @@ def clicked_cell_model_dictionary(cell):
     markdown = json.dumps(cell["value"], indent=2)
     markdown = f"```json\n{markdown}\n```"
     return markdown
+
+
+@callback(
+    Output("importance-chart", "children"),
+    Input("grid-importance-dictionary", "cellClicked"),
+)
+def clicked_cell_importance_dictionary(cell):
+    """Clicked cell importance dictionary."""
+    if not cell or cell["colId"] != "importance":
+        raise dash.exceptions.PreventUpdate
+
+    if cell["value"] is None:
+        return dcc.Markdown("No data to display")
+
+    columns = cell["value"]["columns"]
+    data = cell["value"]["data"]
+    importance = pd.DataFrame(data, columns=columns)
+
+    importance_chart = charters.chart(
+        df=importance, x_axis="feature", y_axis="importance", type="bar", y_sort=True
+    )
+
+    return dcc.Graph(figure=importance_chart)
 
 
 @callback(
@@ -322,21 +378,7 @@ def display_pdp(
     ].iloc[0]["feature_dict"]
 
     # filter_data
-    filtered_df = model_data
-    str_cols = filtered_df.select_dtypes(exclude=[np.number]).columns.to_list()
-    num_cols = filtered_df.select_dtypes(include=[np.number]).columns.to_list()
-    for col in str_cols:
-        str_values = dh._inputs_parse_id(states_info, col)
-        if str_values:
-            print(str_values)
-            filtered_df = filtered_df[filtered_df[col].isin(str_values)]
-    for col in num_cols:
-        num_values = dh._inputs_parse_id(states_info, col)
-        if num_values:
-            filtered_df = filtered_df[
-                (filtered_df[col] >= num_values[0])
-                & (filtered_df[col] <= num_values[1])
-            ]
+    filtered_df = dh.filter_data(df=model_data, callback_context=states_info)
 
     # encode data
     preprocess_dict = preprocessors.preprocess_data(

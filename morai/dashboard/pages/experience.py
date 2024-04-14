@@ -262,18 +262,7 @@ def update_tab_content(
     y_axis = dh._inputs_parse_id(inputs_info, "y_axis_selector")
     chart_secondary = None
     # filter the dataset
-    filtered_df = dataset
-    for col in filter_dict["str_cols"]:
-        str_values = dh._inputs_parse_id(inputs_info, col)
-        if str_values:
-            filtered_df = filtered_df[filtered_df[col].isin(str_values)]
-    for col in filter_dict["num_cols"]:
-        num_values = dh._inputs_parse_id(inputs_info, col)
-        if num_values:
-            filtered_df = filtered_df[
-                (filtered_df[col] >= num_values[0])
-                & (filtered_df[col] <= num_values[1])
-            ]
+    filtered_df = dh.filter_data(df=dataset, callback_context=inputs_info)
 
     # create cards
     card_list = dh.get_card_list(config)

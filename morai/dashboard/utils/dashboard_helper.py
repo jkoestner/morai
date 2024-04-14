@@ -12,6 +12,8 @@ from dash import dcc, html
 
 from morai.utils import helpers
 
+num_to_str_count = 10
+
 
 def convert_to_short_number(number):
     """
@@ -35,7 +37,50 @@ def convert_to_short_number(number):
     return f"{number:.1f}T"
 
 
-def generate_filters(df, prefix):
+def filter_data(df, callback_context, num_to_str_count=num_to_str_count):
+    """
+    Filter data based on the number of unique values.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe to filter.
+    callback_context : list
+        List of callback context.
+    num_to_str_count : int
+        Number of unique values to convert to string.
+
+    Returns
+    -------
+    filtered_df : pd.DataFrame
+        Filtered dataframe.
+
+    """
+    filtered_df = df
+    str_cols = []
+    num_cols = []
+    for col in filtered_df.columns:
+        if isinstance(filtered_df[col][0], str):
+            str_cols.append(col)
+        elif filtered_df[col].nunique() < num_to_str_count:
+            str_cols.append(col)
+        else:
+            num_cols.append(col)
+    for col in str_cols:
+        str_values = _inputs_parse_id(callback_context, col)
+        if str_values:
+            filtered_df = filtered_df[filtered_df[col].isin(str_values)]
+    for col in num_cols:
+        num_values = _inputs_parse_id(callback_context, col)
+        if num_values:
+            filtered_df = filtered_df[
+                (filtered_df[col] >= num_values[0])
+                & (filtered_df[col] <= num_values[1])
+            ]
+    return filtered_df
+
+
+def generate_filters(df, prefix, num_to_str_count=num_to_str_count):
     """
     Generate a dictionary of dashboard options from dataframe.
 
@@ -45,6 +90,8 @@ def generate_filters(df, prefix):
         Dataframe to generate dropdown options.
     prefix : str
         Prefix for the dropdown options.
+    num_to_str_count : int
+        Number of unique values to convert to string.
 
     Returns
     -------
@@ -71,7 +118,7 @@ def generate_filters(df, prefix):
                 placeholder=f"Select {col}",
             )
             str_cols.append(col)
-        elif df[col].nunique() < 10:
+        elif df[col].nunique() < num_to_str_count:
             filter = dcc.Dropdown(
                 id={"type": prefix_str_filter, "index": col},
                 options=[{"label": i, "value": i} for i in sorted(df[col].unique())],
@@ -82,61 +129,6 @@ def generate_filters(df, prefix):
         else:
             filter = dcc.RangeSlider(
                 id={"type": prefix_num_filter, "index": col},
-                min=df[col].min(),
-                max=df[col].max(),
-                marks=None,
-                value=[df[col].min(), df[col].max()],
-                tooltip={"always_visible": True, "placement": "bottom"},
-            )
-            num_cols.append(col)
-        filters.append(html.Label(col))
-        filters.append(filter)
-        filter_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
-
-    return filter_dict
-
-
-def generate_t_filters(df):
-    """
-    Generate a dictionary of dashboard options from dataframe.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataframe to generate dropdown options.
-
-    Returns
-    -------
-    filter_dict : dict
-        Dictionary for the dashboard including following keys:
-            - filters: list of filters
-            - str_cols: list of string columns
-            - num_cols: list of numeric columns
-
-    """
-    filters = []
-    str_cols = []
-    num_cols = []
-    for col in df.columns:
-        if isinstance(df[col][0], str):
-            filter = dcc.Dropdown(
-                id={"type": "chart-str-filter", "index": col},
-                options=[{"label": i, "value": i} for i in sorted(df[col].unique())],
-                multi=True,
-                placeholder=f"Select {col}",
-            )
-            str_cols.append(col)
-        elif df[col].nunique() < 10:
-            filter = dcc.Dropdown(
-                id={"type": "chart-str-filter", "index": col},
-                options=[{"label": i, "value": i} for i in sorted(df[col].unique())],
-                multi=True,
-                placeholder=f"Select {col}",
-            )
-            str_cols.append(col)
-        else:
-            filter = dcc.RangeSlider(
-                id={"type": "chart-num-filter", "index": col},
                 min=df[col].min(),
                 max=df[col].max(),
                 marks=None,

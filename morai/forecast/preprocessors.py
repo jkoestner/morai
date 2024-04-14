@@ -36,6 +36,7 @@ def preprocess_data(
     -------
     preprocess_dict : dict
         The preprocessed which includes the X, y, weights, and mapping.
+        - params : the parameters used in the preprocessing
         - X : the feature columns after processing
         - y : the target column (no processing)
         - weights : the weights column (no processing)
@@ -201,14 +202,17 @@ def preprocess_data(
 
     # model_data that is encoded
     md_encoded = pd.concat([model_data.drop(columns=model_features), X], axis=1)
+    params = {"standardize": standardize, "preset": preset}
 
     preprocess_dict = {
+        "params": params,
+        "feature_dict": feature_dict,
         "X": X,
         "y": y,
         "weights": weights,
         "mapping": mapping,
         "md_encoded": md_encoded,
-        "features": model_features,
+        "model_features": model_features,
     }
 
     return preprocess_dict
