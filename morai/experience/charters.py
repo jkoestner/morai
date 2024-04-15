@@ -141,7 +141,7 @@ def chart(
     # Selecting the plot type based on the 'chart_type' parameter
     if type == "line":
         if not title:
-            title = f"{y_axis} by {x_axis} and {color}"
+            title = f"'{y_axis}' by '{x_axis}' and '{color}'"
         fig = px.line(
             grouped_data,
             x=x_axis,
@@ -161,7 +161,7 @@ def chart(
             )
     elif type == "bar":
         if not title:
-            title = f"{y_axis} by {x_axis} and {color}"
+            title = f"'{y_axis}' by '{x_axis}' and '{color}'"
         fig = px.bar(
             grouped_data,
             x=x_axis,
@@ -173,7 +173,7 @@ def chart(
     elif type == "heatmap":
         grouped_data = grouped_data.pivot(index=_y_axis, columns=x_axis, values=_color)
         if not title:
-            title = f"Heatmap of {_color} by {x_axis} and {_y_axis}"
+            title = f"Heatmap of '{_color}' by '{x_axis}' and '{_y_axis}'"
         fig = px.imshow(
             grouped_data,
             labels={"x": x_axis, "y": _y_axis, "color": _color},
@@ -183,7 +183,7 @@ def chart(
     elif type == "contour":
         grouped_data = grouped_data.pivot(index=_y_axis, columns=x_axis, values=_color)
         if not title:
-            title = f"Contour of {_color} by {x_axis} and {_y_axis}"
+            title = f"Contour of '{_color}' by '{x_axis}' and '{_y_axis}'"
         fig = go.Figure(
             data=[
                 go.Contour(
@@ -358,7 +358,7 @@ def compare_rates(
         y_title = "Log Rates"
 
     fig.update_layout(
-        title_text=f"Comparison of {rates} by {x_axis}",
+        title_text=f"Comparison of '{rates}' by '{x_axis}'",
         yaxis_type=yaxis_type,
     )
     fig.update_xaxes(title_text=x_axis)
@@ -422,7 +422,7 @@ def frequency(df, cols=1, features=None, sum_var=None):
         height=chart_height * rows,
         width=chart_width,
         showlegend=False,
-        title_text=f"Frequency of variables using {sum_var}",
+        title_text=f"Frequency of variables using '{sum_var}'",
     )
 
     return fig
@@ -850,7 +850,9 @@ def target(
 
     # Update layout
     fig.update_layout(
-        height=chart_height * num_rows, width=chart_width, title_text="Target Plots"
+        height=chart_height * num_rows,
+        width=chart_width,
+        title_text=f"Target Plots using '{target}'",
     )
 
     return fig
