@@ -40,7 +40,9 @@ def get_column_defs(table):
                     }
                 )
         elif table[col].dtype.kind in "f":
-            if col in ["ratio", "risk", "ae", "r2_score"] or "pct" in col.lower():
+            if col in ["ratio", "risk", "r2_score"] or any(
+                substring in col.lower() for substring in ["pct", "ae"]
+            ):
                 column_defs.append(
                     {
                         "field": col,

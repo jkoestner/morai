@@ -94,7 +94,24 @@ def layout():
                     # selectors
                     dbc.Col(
                         html.Div(
-                            id="chart-selectors",
+                            [
+                                html.Button(
+                                    "Update Content",
+                                    id="update-content-button",
+                                    n_clicks=0,
+                                    className="btn btn-primary",
+                                ),
+                                html.H5(
+                                    "Selectors",
+                                    style={
+                                        "border-bottom": "1px solid black",
+                                        "padding-bottom": "5px",
+                                    },
+                                ),
+                                html.Div(
+                                    id="chart-selectors",
+                                ),
+                            ],
                             className="m-2 bg-light border p-1",
                         ),
                         width=2,
@@ -223,20 +240,23 @@ def load_data(dataset, config):
 @callback(
     [
         Output("tab-content", "children"),
-        Output("filtered-card", "children"),
         Output("chart-secondary", "children"),
+        Output("filtered-card", "children"),
+    ],
+    [
+        # tabs
+        Input("tabs", "active_tab"),
+        # update button
+        Input("update-content-button", "n_clicks"),
     ],
     [
         # tools
-        Input("tool-selector", "value"),
+        State("tool-selector", "value"),
         # selectors
-        Input({"type": "chart-selector", "index": ALL}, "value"),
-        Input({"type": "chart-str-filter", "index": ALL}, "value"),
-        Input({"type": "chart-num-filter", "index": ALL}, "value"),
-        # tabs
-        Input("tabs", "active_tab"),
-    ],
-    [
+        State({"type": "chart-selector", "index": ALL}, "value"),
+        State({"type": "chart-str-filter", "index": ALL}, "value"),
+        State({"type": "chart-num-filter", "index": ALL}, "value"),
+        # stores
         State("store-dataset", "data"),
         State("store-exp-filter", "data"),
         State("store-config", "data"),
@@ -244,11 +264,12 @@ def load_data(dataset, config):
     prevent_initial_call=True,
 )
 def update_tab_content(
+    active_tab,
+    n_clicks,
     tool,
     selectors,
     str_filters,
     num_filters,
-    active_tab,
     dataset,
     filter_dict,
     config,
@@ -256,13 +277,15 @@ def update_tab_content(
     """Create chart and table for experience analysis."""
     logger.debug("creating tab content")
     config_dataset = config["datasets"][config["general"]["dataset"]]
-    # inputs
-    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
-    x_axis = dh._inputs_parse_id(inputs_info, "x_axis_selector")
-    y_axis = dh._inputs_parse_id(inputs_info, "y_axis_selector")
+
+    # callback context
+    states_info = dh._inputs_flatten_list(callback_context.states_list)
+    x_axis = dh._inputs_parse_id(states_info, "x_axis_selector")
+    y_axis = dh._inputs_parse_id(states_info, "y_axis_selector")
     chart_secondary = None
+
     # filter the dataset
-    filtered_df = dh.filter_data(df=dataset, callback_context=inputs_info)
+    filtered_df = dh.filter_data(df=dataset, callback_context=states_info)
 
     # create cards
     card_list = dh.get_card_list(config)
@@ -281,31 +304,31 @@ def update_tab_content(
             chart = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=dh._inputs_parse_id(inputs_info, "rates_selector"),
-                weights=dh._inputs_parse_id(inputs_info, "weights_selector"),
-                secondary=dh._inputs_parse_id(inputs_info, "secondary_selector"),
-                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                rates=dh._inputs_parse_id(states_info, "rates_selector"),
+                weights=dh._inputs_parse_id(states_info, "weights_selector"),
+                secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
+                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
             )
         else:
             chart = charters.chart(
                 df=filtered_df,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                color=dh._inputs_parse_id(inputs_info, "color_selector"),
-                type=dh._inputs_parse_id(inputs_info, "chart_type_selector"),
-                numerator=dh._inputs_parse_id(inputs_info, "numerator_selector"),
-                denominator=dh._inputs_parse_id(inputs_info, "denominator_selector"),
-                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
-                add_line=dh._inputs_parse_id(inputs_info, "add_line_selector"),
+                color=dh._inputs_parse_id(states_info, "color_selector"),
+                type=dh._inputs_parse_id(states_info, "chart_type_selector"),
+                numerator=dh._inputs_parse_id(states_info, "numerator_selector"),
+                denominator=dh._inputs_parse_id(states_info, "denominator_selector"),
+                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
+                add_line=dh._inputs_parse_id(states_info, "add_line_selector"),
             )
-            if dh._inputs_parse_id(inputs_info, "secondary_selector"):
+            if dh._inputs_parse_id(states_info, "secondary_selector"):
                 chart_secondary = charters.chart(
                     df=filtered_df,
                     x_axis=x_axis,
-                    y_axis=dh._inputs_parse_id(inputs_info, "secondary_selector"),
-                    color=dh._inputs_parse_id(inputs_info, "color_selector"),
+                    y_axis=dh._inputs_parse_id(states_info, "secondary_selector"),
+                    color=dh._inputs_parse_id(states_info, "color_selector"),
                     type="bar",
-                    x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                    x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 )
                 chart_secondary = dcc.Graph(figure=chart_secondary)
 
@@ -316,10 +339,10 @@ def update_tab_content(
             table = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=dh._inputs_parse_id(inputs_info, "rates_selector"),
-                weights=dh._inputs_parse_id(inputs_info, "weights_selector"),
-                secondary=dh._inputs_parse_id(inputs_info, "secondary_selector"),
-                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                rates=dh._inputs_parse_id(states_info, "rates_selector"),
+                weights=dh._inputs_parse_id(states_info, "weights_selector"),
+                secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
+                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 display=False,
             )
         else:
@@ -327,11 +350,11 @@ def update_tab_content(
                 df=filtered_df,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                color=dh._inputs_parse_id(inputs_info, "color_selector"),
-                type=dh._inputs_parse_id(inputs_info, "chart_type_selector"),
-                numerator=dh._inputs_parse_id(inputs_info, "numerator_selector"),
-                denominator=dh._inputs_parse_id(inputs_info, "denominator_selector"),
-                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                color=dh._inputs_parse_id(states_info, "color_selector"),
+                type=dh._inputs_parse_id(states_info, "chart_type_selector"),
+                numerator=dh._inputs_parse_id(states_info, "numerator_selector"),
+                denominator=dh._inputs_parse_id(states_info, "denominator_selector"),
+                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 display=False,
             )
 
@@ -359,7 +382,7 @@ def update_tab_content(
     else:
         tab_content = None
 
-    return tab_content, filtered_card, chart_secondary
+    return tab_content, chart_secondary, filtered_card
 
 
 @callback(

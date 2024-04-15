@@ -304,7 +304,7 @@ def compare_rates(
                             [None] * len(rates) if weights is None else weights,
                         )
                     },
-                    **{secondary: x[secondary].sum() if secondary else None},  # noqa: PIE800
+                    **({secondary: x[secondary].sum()} if secondary else {}),
                 }
             )
         )
@@ -314,16 +314,17 @@ def compare_rates(
     # Create a subplot with a secondary y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Add the bar chart for secondary variable first (background)
-    fig.add_trace(
-        go.Bar(
-            x=grouped_df[x_axis],
-            y=grouped_df[secondary],
-            name=secondary,
-            marker_color="rgba(135, 206, 250, 0.6)",
-        ),
-        secondary_y=True,
-    )
+    if secondary:
+        # Add the bar chart for secondary variable first (background)
+        fig.add_trace(
+            go.Bar(
+                x=grouped_df[x_axis],
+                y=grouped_df[secondary],
+                name=secondary,
+                marker_color="rgba(135, 206, 250, 0.6)",
+            ),
+            secondary_y=True,
+        )
 
     # Add the lines for rates (foreground)
     line_feature_values = grouped_df[line_feature].unique() if line_feature else [None]

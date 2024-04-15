@@ -64,59 +64,99 @@ def layout():
                 icon="danger",
                 style={"position": "fixed", "top": 100, "right": 10, "width": 350},
             ),
-            dbc.Row(
-                html.Div(
-                    id="model-results",
-                ),
-            ),
-            dbc.Row(
+            dbc.Accordion(
                 [
-                    dbc.Col(
+                    dbc.AccordionItem(
                         [
-                            dbc.Button(
-                                "Create PDP",
-                                id="button-pdp",
-                                className="btn btn-primary p-1",
-                            ),
-                            html.H5(
-                                "Selectors",
-                                style={
-                                    "border-bottom": "1px solid black",
-                                    "padding-bottom": "5px",
-                                },
-                            ),
                             html.Div(
-                                id="pdp-selectors",
+                                id="model-results",
                             ),
                         ],
-                        width=2,
-                        className="mt-2 bg-light border p-1",
+                        title="Model Results",
                     ),
-                    dbc.Col(
-                        dcc.Loading(
-                            id="loading-pdp-chart",
-                            type="dot",
-                            children=html.Div(id="pdp-chart"),
-                        ),
-                        width=8,
-                    ),
-                    dbc.Col(
+                    dbc.AccordionItem(
                         [
-                            html.H5(
-                                "Filters",
-                                style={
-                                    "border-bottom": "1px solid black",
-                                    "padding-bottom": "5px",
-                                },
-                            ),
                             html.Div(
-                                id="pdp-filters",
+                                id="model-scorecard",
                             ),
                         ],
-                        width=2,
-                        className="mt-2 bg-light border p-1",
+                        title="Model Scorecard",
+                    ),
+                    dbc.AccordionItem(
+                        [
+                            html.Div(
+                                id="model-importance",
+                            ),
+                        ],
+                        title="Model Importance",
+                    ),
+                    dbc.AccordionItem(
+                        [
+                            html.Div(
+                                id="model-target",
+                            ),
+                        ],
+                        title="Model Target",
+                    ),
+                    dbc.AccordionItem(
+                        [
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        html.Div(
+                                            [
+                                                dbc.Button(
+                                                    "Create PDP",
+                                                    id="button-pdp",
+                                                    className="btn btn-primary p-1",
+                                                ),
+                                                html.H5(
+                                                    "Selectors",
+                                                    style={
+                                                        "border-bottom": "1px solid black",
+                                                        "padding-bottom": "5px",
+                                                    },
+                                                ),
+                                                html.Div(
+                                                    id="pdp-selectors",
+                                                ),
+                                            ],
+                                            className="mt-2 bg-light border p-1",
+                                        ),
+                                        width=2,
+                                    ),
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-pdp-chart",
+                                            type="dot",
+                                            children=html.Div(id="pdp-chart"),
+                                        ),
+                                        width=8,
+                                    ),
+                                    dbc.Col(
+                                        [
+                                            html.H5(
+                                                "Filters",
+                                                style={
+                                                    "border-bottom": "1px solid black",
+                                                    "padding-bottom": "5px",
+                                                },
+                                            ),
+                                            html.Div(
+                                                id="pdp-filters",
+                                            ),
+                                        ],
+                                        width=2,
+                                        className="mt-2 bg-light border p-1",
+                                    ),
+                                ],
+                            ),
+                        ],
+                        title="Model PDP",
                     ),
                 ],
+                start_collapsed=True,
+                always_open=True,
             ),
         ],
         className="container",
@@ -181,7 +221,12 @@ def load_pdp_selectors(pathname, config, dataset):
 
 
 @callback(
-    Output("model-results", "children"),
+    [
+        Output("model-results", "children"),
+        Output("model-scorecard", "children"),
+        Output("model-importance", "children"),
+        Output("model-target", "children"),
+    ],
     [Input("url", "pathname"), Input("store-model-results", "data")],
 )
 def display_model_results(pathname, model_results):
@@ -194,6 +239,7 @@ def display_model_results(pathname, model_results):
     models = model_results.model
     scorecard = model_results.scorecard
     importance = model_results.importance
+    target = model_results.importance[["model_name"]]
 
     # update column defs
     model_column_defs = dash_formats.get_column_defs(models)
@@ -216,85 +262,106 @@ def display_model_results(pathname, model_results):
 
     importance_column_defs = dash_formats.get_column_defs(importance)
 
+    target_column_defs = dash_formats.get_column_defs(target)
+
     # create the divs
     model_results_div = html.Div(
         [
-            dbc.Accordion(
+            dbc.Row(
                 [
-                    dbc.AccordionItem(
-                        [
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        [
-                                            dag.AgGrid(
-                                                id="grid-model-dictionary",
-                                                rowData=models.to_dict("records"),
-                                                columnDefs=model_column_defs,
-                                            ),
-                                        ],
-                                        width=6,
-                                    ),
-                                    dbc.Col(
-                                        dcc.Markdown(
-                                            id="markdown-model-dictionary",
-                                            children=(
-                                                "### Model Details ",
-                                                "Select a cell to see value",
-                                            ),
-                                        ),
-                                        width=6,
-                                        style={"height": "400px", "overflowY": "auto"},
-                                    ),
-                                ],
-                            ),
-                        ],
-                        title="Model Dictionary",
-                    ),
-                    dbc.AccordionItem(
+                    dbc.Col(
                         [
                             dag.AgGrid(
-                                rowData=scorecard.to_dict("records"),
-                                columnDefs=score_column_defs,
+                                id="grid-model-dictionary",
+                                rowData=models.to_dict("records"),
+                                columnDefs=model_column_defs,
                             ),
                         ],
-                        title="Model Scorecard",
+                        width=6,
                     ),
-                    dbc.AccordionItem(
-                        [
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        [
-                                            dag.AgGrid(
-                                                id="grid-importance-dictionary",
-                                                rowData=importance.to_dict("records"),
-                                                columnDefs=importance_column_defs,
-                                            ),
-                                        ],
-                                        width=4,
-                                    ),
-                                    dbc.Col(
-                                        dcc.Loading(
-                                            id="loading-importance-chart",
-                                            type="dot",
-                                            children=html.Div(id="importance-chart"),
-                                        ),
-                                        width=8,
-                                        style={"height": "400px", "overflowY": "auto"},
-                                    ),
-                                ],
+                    dbc.Col(
+                        dcc.Markdown(
+                            id="markdown-model-dictionary",
+                            children=(
+                                "### Model Details ",
+                                "Select a cell to see value",
                             ),
-                        ],
-                        title="Model Importance",
+                        ),
+                        width=6,
+                        style={"height": "400px", "overflowY": "auto"},
                     ),
                 ],
-                start_collapsed=True,
-                always_open=True,
-            )
-        ]
+            ),
+        ],
     )
-    return model_results_div
+    model_scorecard_div = html.Div(
+        [
+            dag.AgGrid(
+                rowData=scorecard.to_dict("records"),
+                columnDefs=score_column_defs,
+            ),
+        ],
+    )
+    model_importance_div = html.Div(
+        [
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            dag.AgGrid(
+                                id="grid-importance-dictionary",
+                                rowData=importance.to_dict("records"),
+                                columnDefs=importance_column_defs,
+                            ),
+                        ],
+                        width=4,
+                    ),
+                    dbc.Col(
+                        dcc.Loading(
+                            id="loading-importance-chart",
+                            type="dot",
+                            children=html.Div(id="importance-chart"),
+                        ),
+                        width=8,
+                        style={"height": "400px", "overflowY": "auto"},
+                    ),
+                ],
+            ),
+        ],
+    )
+    model_target_div = html.Div(
+        [
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            dag.AgGrid(
+                                id="grid-target-dictionary",
+                                rowData=target.to_dict("records"),
+                                columnDefs=target_column_defs,
+                            ),
+                        ],
+                        width=2,
+                    ),
+                    dbc.Col(
+                        dcc.Loading(
+                            id="loading-target-chart",
+                            type="dot",
+                            children=html.Div(id="target-chart"),
+                        ),
+                        width=10,
+                        style={"height": "400px", "overflowY": "auto"},
+                    ),
+                ],
+            ),
+        ],
+    )
+    return (
+        model_results_div,
+        model_scorecard_div,
+        model_importance_div,
+        model_target_div,
+    )
 
 
 @callback(
@@ -332,6 +399,39 @@ def clicked_cell_importance_dictionary(cell):
     )
 
     return dcc.Graph(figure=importance_chart)
+
+
+@callback(
+    Output("target-chart", "children"),
+    Input("grid-target-dictionary", "cellClicked"),
+    [State("store-dataset", "data"), State("store-config", "data")],
+)
+def clicked_cell_target_dictionary(cell, model_data, config):
+    """Clicked cell target dictionary."""
+    if not cell:
+        raise dash.exceptions.PreventUpdate
+
+    if cell["value"] is None:
+        return dcc.Markdown("No data to display")
+
+    # target chart parameters
+    model = cell["value"]
+    config_dataset = config["datasets"][config["general"]["dataset"]]
+    features = config_dataset["columns"]["features"]
+    numerator = config_dataset["columns"]["actuals_amt"]
+    denmoninator = f"exp_amt_{model}"
+
+    # create target chart
+    target_chart = charters.target(
+        df=model_data,
+        target="ratio",
+        cols=3,
+        features=features,
+        numerator=numerator,
+        denominator=denmoninator,
+    )
+
+    return dcc.Graph(figure=target_chart)
 
 
 @callback(
