@@ -495,20 +495,21 @@ def pdp(
     line_color_type = "passthrough"
 
     grouped_features = [x_axis]
-    colorscale = px.colors.qualitative.G10
     weights = None
     if weight:
         weights = df[weight]
         logger.info(f"Weights: [{weight}]")
 
-    # get the feature names from the model
+    # get the feature names from the model to create X
     model_features = None
-    feature_attrs = ["feature_names_in_", "params"]
+    feature_attrs = ["feature_names_in_", "feature_names", "feature_name", "params"]
     for attr in feature_attrs:
         try:
             if attr == "params":
                 model_features = list(getattr(model, attr).keys())
                 df["const"] = 1
+            elif hasattr(model, "feature_name"):
+                model_features = model.feature_name()
             else:
                 model_features = list(getattr(model, attr))
             if model_features:
@@ -517,10 +518,11 @@ def pdp(
             continue
     if not model_features:
         raise ValueError("Model does not have feature names.")
+    logger.debug(f"Model features for pdp: {model_features}")
     X = df[model_features]
 
-    # check df is not empty
-    if df.empty:
+    # check X is not empty
+    if X.empty:
         raise ValueError("DataFrame is empty.")
 
     # x_axis processing
@@ -532,6 +534,8 @@ def pdp(
             x_axis_values = [col[len(x_axis + "_") :] for col in x_axis_cols]
         else:
             x_axis_values = list(X[x_axis].unique())
+    elif x_axis in X.select_dtypes(exclude=[np.number]).columns.tolist():
+        x_axis_values = list(X[x_axis].unique())
     else:
         x_axis_values = np.linspace(X[x_axis].min(), X[x_axis].max(), 100)
 
@@ -555,17 +559,12 @@ def pdp(
             .sort_values(by=grouped_features)
         )
 
-    # average value of features
-    X_mean = X.apply(lambda x: helpers._weighted_mean(x, weights=weights))
-    if isinstance(X_mean.dtype, pd.SparseDtype):
-        X_mean = X_mean.sparse.to_dense()
-
     # calculate predictions of feature by looping through the feature values
     # and using the average of the other features
     preds = []
     for line_value in line_color_values:
         for value in x_axis_values:
-            X_temp = X_mean.copy()
+            X_temp = X.copy()
 
             # ohe zeros out the encoded columns and steps through the values
             if x_axis_type == "ohe":
@@ -583,8 +582,9 @@ def pdp(
             if isinstance(X_temp, pd.Series):
                 X_temp = X_temp.to_frame().T
 
-            # predict the value
-            pred = model.predict(X_temp)[0]
+            # predict the value and then average the predictions
+            pred = model.predict(X_temp)
+            pred = helpers._weighted_mean(pred, weights=weights)
             pred_dict = {
                 x_axis: value,
                 line_color: line_value,
@@ -592,47 +592,48 @@ def pdp(
             }
             preds.append(pred_dict)
 
-    plot_df = pd.DataFrame(preds)
+    pdp_df = pd.DataFrame(preds)
 
     # the mean prediction should be average and not weighted so that the values
     # are relative to eachother and not to the weights.
-    mean_pred = np.mean(plot_df["pred"])
-    plot_df["%_diff"] = (plot_df["pred"] - mean_pred) / mean_pred + 1
+    mean_pred = np.mean(pdp_df["pred"])
+    pdp_df["%_diff"] = (pdp_df["pred"] - mean_pred) / mean_pred + 1
     if secondary:
-        plot_df = plot_df.merge(secondary_df, on=grouped_features, how="left")
+        pdp_df = pdp_df.merge(secondary_df, on=grouped_features, how="left")
 
     # use mapping to get the original x_axis values
     if mapping and x_axis in mapping and x_axis_type != "ohe":
         reversed_mapping = {v: k for k, v in mapping[x_axis]["values"].items()}
-        plot_df[x_axis] = plot_df[x_axis].map(reversed_mapping)
+        pdp_df[x_axis] = pdp_df[x_axis].map(reversed_mapping)
     if mapping and line_color and line_color in mapping and line_color != "ohe":
         reversed_mapping = {v: k for k, v in mapping[line_color]["values"].items()}
-        plot_df[line_color] = plot_df[line_color].map(reversed_mapping)
+        pdp_df[line_color] = pdp_df[line_color].map(reversed_mapping)
 
-    plot_df = plot_df.sort_values(by=grouped_features)
+    pdp_df = pdp_df.sort_values(by=grouped_features)
 
     # bin the feature if x_bins is provided
     if x_bins:
         logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
-        plot_df[x_axis] = preprocessors.bin_feature(plot_df[x_axis], x_bins)
+        pdp_df[x_axis] = preprocessors.bin_feature(pdp_df[x_axis], x_bins)
         if secondary:
-            plot_df = (
-                plot_df.groupby(grouped_features, observed=True)
+            pdp_df = (
+                pdp_df.groupby(grouped_features, observed=True)
                 .agg({"%_diff": "mean", secondary: "sum"})
                 .reset_index()
             )
         else:
-            plot_df = (
-                plot_df.groupby(grouped_features, observed=True).mean().reset_index()
+            pdp_df = (
+                pdp_df.groupby(grouped_features, observed=True).mean().reset_index()
             )
 
     # create the plots
+    colorscale = px.colors.qualitative.G10
     rows = 2 if secondary else 1
     fig = make_subplots(rows=rows, cols=1)
 
     # add the line plot
-    for index, line_color_value in enumerate(plot_df[line_color].unique()):
-        df_subset = plot_df[plot_df[line_color] == line_color_value]
+    for index, line_color_value in enumerate(pdp_df[line_color].unique()):
+        df_subset = pdp_df[pdp_df[line_color] == line_color_value]
         fig.add_trace(
             go.Scatter(
                 x=df_subset[x_axis],
@@ -657,8 +658,8 @@ def pdp(
     if secondary:
         logger.info(f"Adding secondary to chart: [{secondary}]")
 
-        for index, line_color_value in enumerate(plot_df[line_color].unique()):
-            df_subset = plot_df[plot_df[line_color] == line_color_value]
+        for index, line_color_value in enumerate(pdp_df[line_color].unique()):
+            df_subset = pdp_df[pdp_df[line_color] == line_color_value]
             fig.add_trace(
                 go.Bar(
                     x=df_subset[x_axis],
@@ -676,7 +677,7 @@ def pdp(
         )
 
     if not display:
-        fig = plot_df
+        fig = pdp_df
 
     return fig
 
