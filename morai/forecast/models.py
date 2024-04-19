@@ -46,31 +46,34 @@ class GLM:
             Additional keyword arguments
 
         """
-        logger.info("initialzed GLM and add constant to X")
-        self.X = sm.add_constant(X)
-        self.y = y
-        self.weights = weights
+        logger.info("initialzed GLM")
         self.r_style = r_style
         self.mapping = mapping
-        self.model = self.setup_model(family=family, **kwargs)
+        self.model = self.setup_model(X, y, weights, family, **kwargs)
 
-    def setup_model(self, family=None, **kwargs):
+    def setup_model(self, X, y, weights=None, family=None, **kwargs):
         """
         Set up the GLM model.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
+        weights : pd.Series
+            The weights
+        family : sm.families, optional
+            The family to use for the GLM model
+        kwargs : dict, optional
+            Additional keyword arguments to apply to the model
 
         Returns
         -------
         model : GLM
             The GLM model
-        Family : sm.families
-            The family
-        kwargs : dict
-            Additional keyword arguments
 
         """
-        X = self.X
-        y = self.y
-        weights = self.weights
         if family is None:
             family = sm.families.Binomial()
         logger.info(f"setup GLM model with statsmodels and {family} family...")
@@ -78,7 +81,7 @@ class GLM:
         # using either r-style or python-style formula
         if self.r_style:
             model_data = pd.concat([y, X], axis=1)
-            formula = self.get_formula()
+            formula = self.get_formula(X, y)
             model = smf.glm(
                 formula=formula,
                 data=model_data,
@@ -115,9 +118,16 @@ class GLM:
 
         return model
 
-    def get_formula(self):
+    def get_formula(self, X, y):
         """
         Get the formula for the GLM model.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
 
         Returns
         -------
@@ -125,8 +135,6 @@ class GLM:
             The formula
 
         """
-        y = self.y
-        X = self.X
         # creating formula that uses categories and passthrough
         if self.mapping:
             cat_pass_keys = {
@@ -840,3 +848,33 @@ class CBD:
 
         """
         return np.log(a / (1 - a))
+
+
+def generate_table(model, mapping):
+    """
+    Generate a 1-d mortality table based on model predictions.
+
+    Parameters
+    ----------
+    model : model
+        The model to use for generating the table
+    mapping : dict
+        The mapping of the features to predict on with corresponding values
+
+    Returns
+    -------
+    table : pd.DataFrame
+        The 1-d mortality table
+
+    """
+    from itertools import product
+
+    logger.info("generating 1-d mortality table")
+    columns = list(mapping.keys())
+    values = [list(mapping[col]["values"].keys()) for col in columns]
+    combination = product(*values)
+    table = pd.DataFrame(combination, columns=columns)
+    table = table.sort_values(by=table.columns.tolist())
+    table["vals"] = model.predict(table)
+
+    return table

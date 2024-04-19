@@ -443,10 +443,10 @@ def pdp(
     """
     Create a partial dependence plot (PDP) for the DataFrame.
 
-    The 1-dimension partial dependency plot assumes that all of the features will
-    use the weighted-average for that feature except the one that is being analyzed.
-    That one will be predicted on. This then develops a relative risk as the only
-    difference in prediction is the analyzed feature.
+    The 1-dimension partial dependency plot assumes will loop through the values of
+    the feature and average the predictions.
+    This then develops a relative risk as the only difference in prediction is
+    the analyzed feature.
 
     The 2-dimension partial dependency plot is the same concept, however there will be
     two features where the values will be looped through.
@@ -572,11 +572,13 @@ def pdp(
                     X_temp[col] = 0
                 X_temp[x_axis + "_" + value] = 1
             else:
-                X_temp[x_axis] = value
+                # avoiding changing category dtype
+                X_temp.iloc[:, X_temp.columns.get_loc(x_axis)] = value
 
             # creating line_color values
             if line_color and line_color != "Overall":
-                X_temp[line_color] = line_value
+                # avoiding changing category dtype
+                X_temp.iloc[:, X_temp.columns.get_loc(line_color)] = line_value
 
             # change series to dataframe
             if isinstance(X_temp, pd.Series):
@@ -591,6 +593,7 @@ def pdp(
                 "pred": pred,
             }
             preds.append(pred_dict)
+            logger.debug(f"predicted color [{line_value}] value [{value}]: {pred}")
 
     pdp_df = pd.DataFrame(preds)
 

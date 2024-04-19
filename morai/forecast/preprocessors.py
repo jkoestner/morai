@@ -12,6 +12,7 @@ logger = custom_logger.setup_logging(__name__)
 def preprocess_data(
     model_data,
     feature_dict,
+    add_constant=False,
     standardize=False,
     preset=None,
 ):
@@ -25,6 +26,8 @@ def preprocess_data(
     feature_dict : dict
         A feature dictionary with multiple options (passthrough, cat_pass, ordinal,
         nominal, ohe)
+    add_constant : bool, optional (default=False)
+        Whether to add a constant column to the data.
     standardize : bool, optional (default=False)
         Whether to standardize the data, which uses the StandardScaler.
     preset : str, optional (default=None)
@@ -48,24 +51,13 @@ def preprocess_data(
     """
     # initializing the variables
     mapping = {}
-    model_target = feature_dict.get("target", [])[0]
-    if not model_target:
-        raise ValueError("model_target not found in the feature_dict")
-    logger.info(f"model target: {model_target}")
-    y = model_data[model_target].copy()
+    y = None
+    weights = None
+    constant_col = []
 
-    model_weight = (
-        feature_dict.get("weight", [])[0] if feature_dict.get("weight") else None
-    )
-    logger.info(f"model weights: {model_weight}")
-    weights = model_data[model_weight].copy() if model_weight else None
-    x_features = [
-        col for col in model_data.columns if col not in [model_target, model_weight]
-    ]
-
-    # check if the feature_dict has the acceptable categories
-    for cat in feature_dict.keys():
-        acceptable_cats = [
+    # check if the feature_dict has the acceptable keys
+    for key in feature_dict.keys():
+        acceptable_keys = [
             "target",
             "weight",
             "passthrough",
@@ -74,22 +66,22 @@ def preprocess_data(
             "nominal",
             "ohe",
         ]
-        if cat not in acceptable_cats:
-            logger.warning(f"{cat} not in the acceptable categories")
+        if key not in acceptable_keys:
+            logger.warning(f"{key} not in the acceptable categories")
 
     # check if the features are in the model_data
     model_feature_dict = {}
+    missing_features = []
+    column_set = set(model_data.columns)
     for feature_cat, features in feature_dict.items():
-        model_feature_dict[feature_cat] = [col for col in x_features if col in features]
-        missing_features = [
-            col
-            for col in features
-            if col not in [*x_features, model_target, model_weight]
-        ]
-        if missing_features:
-            logger.warning(f"{missing_features} not in the model_data")
+        feature_set = set(features)
+        model_feature_dict[feature_cat] = list(feature_set & column_set)
+        missing = list(feature_set - column_set)
+        missing_features.extend(missing)
+    if missing_features:
+        logger.warning(f"{missing_features} not in the model_data")
 
-    # check for duplicates
+    # check for duplicate features
     model_features = []
     for features in model_feature_dict.values():
         model_features.extend(features)
@@ -98,12 +90,17 @@ def preprocess_data(
         duplicates = {x for x in model_features if x in seen or seen.add(x)}
         raise ValueError(f"duplicates found: {duplicates}")
 
-    # features to preprocess
+    # get the dictionary values
+    model_target = model_feature_dict.get("target", [])
+    model_weight = model_feature_dict.get("weight", [])
     passthrough_cols = model_feature_dict.get("passthrough", [])
     cat_pass_cols = model_feature_dict.get("cat_pass", [])
     ordinal_cols = model_feature_dict.get("ordinal", [])
     nominal_cols = model_feature_dict.get("nominal", [])
     ohe_cols = model_feature_dict.get("ohe", [])
+    model_features = (
+        passthrough_cols + cat_pass_cols + ordinal_cols + nominal_cols + ohe_cols
+    )
 
     if preset == "tree":
         logger.info(
@@ -121,7 +118,18 @@ def preprocess_data(
         nominal_cols = None
         ohe_cols = None
 
-    X = model_data[model_features].copy()
+    # get y, weights, and X
+    if model_target:
+        logger.info(f"model target: {model_target}")
+        y = model_data[model_target].copy()
+    if model_weight:
+        logger.info(f"model weights: {model_weight}")
+        weights = model_data[model_weight].copy()
+    if add_constant:
+        logger.info("adding a constant column to the data")
+        constant_col = ["constant"]
+        model_data[constant_col] = 1
+    X = model_data[model_features + constant_col].copy()
 
     # numeric - passthrough
     if passthrough_cols:
@@ -155,13 +163,13 @@ def preprocess_data(
     # nominal - one hot encoded
     if ohe_cols:
         logger.info(f"nominal - one hot encoded: {ohe_cols}")
-        # sparse=True is used to save memory however many models don't support sparse
-        X = pd.get_dummies(X, columns=ohe_cols, dtype="int8", sparse=False)
         for col in ohe_cols:
             mapping[col] = {
                 "values": {k: col + "_" + k for k in sorted(model_data[col].unique())},
                 "type": "ohe",
             }
+        # sparse=True is used to save memory however many models don't support sparse
+        X = pd.get_dummies(X, columns=ohe_cols, dtype="int8", sparse=False)
 
     # nominal - weighted average target encoded
     if nominal_cols:
@@ -202,17 +210,21 @@ def preprocess_data(
 
     # model_data that is encoded
     md_encoded = pd.concat([model_data.drop(columns=model_features), X], axis=1)
-    params = {"standardize": standardize, "preset": preset}
+    params = {
+        "standardize": standardize,
+        "preset": preset,
+        "add_constant": add_constant,
+    }
 
     preprocess_dict = {
         "params": params,
         "feature_dict": feature_dict,
+        "model_features": model_features,
+        "mapping": mapping,
         "X": X,
         "y": y,
         "weights": weights,
-        "mapping": mapping,
         "md_encoded": md_encoded,
-        "model_features": model_features,
     }
 
     return preprocess_dict

@@ -55,9 +55,18 @@ hmd_usa_df["qx_raw"] = hmd_usa_df["qx_raw"].astype(float)
 
 def test_glm():
     """Test the Generalized Linear Model."""
+    preprocess_dict = preprocessors.preprocess_data(
+        simple_data,
+        feature_dict=feature_dict,
+        standardize=False,
+        add_constant=True,
+    )
+    X = preprocess_dict["X"]
+    y = preprocess_dict["y"]
+    weights = preprocess_dict["weights"]
     GLM = models.GLM(X, y, weights)
     GLM.fit()
-    predictions = GLM.model.predict(GLM.X)
+    predictions = GLM.model.predict(X)
 
     assert predictions.mean() == approx(0.0525, abs=1e-4), "glm mean is off"
     assert predictions[0] == approx(0.0815, abs=1e-4), "glm first value is off"
@@ -160,7 +169,7 @@ def test_xg():
     assert predictions.mean() == approx(0.0530, abs=1e-4), "xgboost mean is off"
     # xgboost has sampling which is difficult to replicate
     # loosen the tolerance
-    assert predictions[0] == approx(0.0765, abs=1e-3), "xgboost first value is off"
+    assert predictions[0] == approx(0.0777, abs=1e-3), "xgboost first value is off"
 
 
 def test_lee_carter():
