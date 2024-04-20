@@ -5,3 +5,7 @@
     margin: 0;
     padding: 10px;
 }
+
+.center-aligned-group-header .ag-header-group-cell-label {
+    justify-content: center;
+}

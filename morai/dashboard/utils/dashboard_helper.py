@@ -527,6 +527,27 @@ def list_files_in_folder(folder_path):
     return files
 
 
+def flatten_columns(df):
+    """
+    Flatten columns in dataframe.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe to flatten columns.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        Dataframe with flattened columns.
+
+    """
+    df.columns = [
+        "__".join(col).strip() if isinstance(col, tuple) else col for col in df.columns
+    ]
+    return df
+
+
 def _inputs_flatten_list(input_list):
     flat_list = []
     for item in input_list:

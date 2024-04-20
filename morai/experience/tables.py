@@ -334,8 +334,12 @@ class MortTable:
         dimensions = list(dims.values())
         grid = list(itertools.product(*dimensions))
         column_names = list(dims.keys())
+        logger.info(f"Creating grid with dimensions: {column_names}")
+
+        # create mort grid
         mort_grid = pd.DataFrame(grid, columns=column_names)
         if "attained_age" not in mort_grid.columns:
+            logger.info(f"Adding attained age to the grid with max age: {self.max_age}")
             mort_grid["attained_age"] = (
                 mort_grid["issue_age"] + mort_grid["duration"] - 1
             )

@@ -238,6 +238,7 @@ def display_model_results(pathname, model_results):
     # load models
     models = model_results.model
     scorecard = model_results.scorecard
+    scorecard = dh.flatten_columns(scorecard)
     importance = model_results.importance
     target = model_results.importance[["model_name"]]
 
@@ -253,12 +254,15 @@ def display_model_results(pathname, model_results):
 
     score_column_defs = dash_formats.get_column_defs(scorecard)
     score_col_def = {
-        "headerName": "model_name",
-        "field": "model_name",
+        "field": "model_name__",
+        "headerName": "model_name__",
         "pinned": "left",
     }
-    score_column_defs = dash_formats.remove_column_defs(score_column_defs, "model_name")
+    score_column_defs = dash_formats.remove_column_defs(
+        score_column_defs, "model_name__"
+    )
     score_column_defs.insert(0, score_col_def)
+    score_column_defs = dash_formats.group_column_defs(score_column_defs)
 
     importance_column_defs = dash_formats.get_column_defs(importance)
 

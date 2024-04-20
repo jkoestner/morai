@@ -16,55 +16,31 @@ class GLM:
 
     def __init__(
         self,
-        X,
-        y,
-        weights=None,
-        r_style=False,
-        mapping=None,
-        family=None,
-        **kwargs,
+    ):
+        """Initialize the model."""
+        self.r_style = None
+        self.mapping = None
+        self.model = None
+
+    def fit(
+        self, X, y, weights=None, family=None, r_style=False, mapping=None, **kwargs
     ):
         """
-        Initialize the model.
+        Fit the GLM model.
 
-        Parameters
-        ----------
         X : pd.DataFrame
             The features
         y : pd.Series
             The target
         weights : pd.Series, optional
             The weights
+        family : sm.families, optional
+            The family to use for the GLM model
         r_style : bool, optional
             Whether to use R-style formulas
         mapping : dict, optional
             The mapping of the features to the encoding and only needed
             if r_style is True
-        family : sm.families, optional
-            The family to use for the GLM model
-        kwargs : dict, optional
-            Additional keyword arguments
-
-        """
-        logger.info("initialzed GLM")
-        self.r_style = r_style
-        self.mapping = mapping
-        self.model = self.setup_model(X, y, weights, family, **kwargs)
-
-    def setup_model(self, X, y, weights=None, family=None, **kwargs):
-        """
-        Set up the GLM model.
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            The features
-        y : pd.Series
-            The target
-        weights : pd.Series
-            The weights
-        family : sm.families, optional
-            The family to use for the GLM model
         kwargs : dict, optional
             Additional keyword arguments to apply to the model
 
@@ -74,46 +50,11 @@ class GLM:
             The GLM model
 
         """
-        if family is None:
-            family = sm.families.Binomial()
-        logger.info(f"setup GLM model with statsmodels and {family} family...")
-
-        # using either r-style or python-style formula
-        if self.r_style:
-            model_data = pd.concat([y, X], axis=1)
-            formula = self.get_formula(X, y)
-            model = smf.glm(
-                formula=formula,
-                data=model_data,
-                family=family,
-                freq_weights=weights,
-                **kwargs,
-            )
-        else:
-            model = sm.GLM(
-                endog=y,
-                exog=X,
-                family=sm.families.Binomial(),
-                freq_weights=weights,
-                **kwargs,
-            )
-
-        self.model = model
-
-        return model
-
-    def fit(self):
-        """
-        Fit the GLM model.
-
-        Returns
-        -------
-        model : GLM
-            The GLM model
-
-        """
-        logger.info("fit the model")
-        model = self.model.fit()
+        logger.info("fiting the model")
+        self.r_style = r_style
+        self.mapping = mapping
+        model = self._setup_model(X, y, weights, family, **kwargs)
+        model = model.fit()
         self.model = model
 
         return model
@@ -208,6 +149,55 @@ class GLM:
             )
 
         return odds_ratio
+
+    def _setup_model(self, X, y, weights=None, family=None, **kwargs):
+        """
+        Set up the GLM model.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
+        weights : pd.Series, optional
+            The weights
+        family : sm.families, optional
+            The family to use for the GLM model
+        kwargs : dict, optional
+            Additional keyword arguments to apply to the model
+
+        Returns
+        -------
+        model : GLM
+            The GLM model
+
+        """
+        if family is None:
+            family = sm.families.Binomial()
+        logger.info(f"setup GLM model with statsmodels and {family} family...")
+
+        # using either r-style or python-style formula
+        if self.r_style:
+            model_data = pd.concat([y, X], axis=1)
+            formula = self.get_formula(X, y)
+            model = smf.glm(
+                formula=formula,
+                data=model_data,
+                family=family,
+                freq_weights=weights,
+                **kwargs,
+            )
+        else:
+            model = sm.GLM(
+                endog=y,
+                exog=X,
+                family=sm.families.Binomial(),
+                freq_weights=weights,
+                **kwargs,
+            )
+
+        return model
 
 
 class LeeCarter:

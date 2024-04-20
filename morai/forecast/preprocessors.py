@@ -121,10 +121,10 @@ def preprocess_data(
     # get y, weights, and X
     if model_target:
         logger.info(f"model target: {model_target}")
-        y = model_data[model_target].copy()
+        y = model_data[model_target].squeeze().copy()
     if model_weight:
         logger.info(f"model weights: {model_weight}")
-        weights = model_data[model_weight].copy()
+        weights = model_data[model_weight].squeeze().copy()
     if add_constant:
         logger.info("adding a constant column to the data")
         constant_col = ["constant"]

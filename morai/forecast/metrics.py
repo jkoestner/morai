@@ -158,6 +158,7 @@ class ModelResults:
             scorecard_df = pd.read_json(
                 StringIO(json.dumps(data["scorecard"])), orient="split"
             )
+            scorecard_df.columns = pd.MultiIndex.from_tuples(scorecard_df.columns)
             importance_df = pd.read_json(
                 StringIO(json.dumps(data["importance"])), orient="split"
             )
@@ -165,7 +166,9 @@ class ModelResults:
             self.model = model_df
             self.scorecard = scorecard_df
             self.importance = importance_df
-            self.metrics = scorecard_df.columns.tolist().remove("model_name")
+            self.metrics = list(
+                {col[1] for col in scorecard_df.columns if col[1] != ""}
+            )
         else:
             self.model = pd.DataFrame()
             self.scorecard = pd.DataFrame()
@@ -328,7 +331,18 @@ class ModelResults:
         with open(filepath, "w") as file:
             json.dump(model_results, file, indent=4)
 
-    def get_scorecard(self, y_true, y_pred, metrics=None, model=None, **kwargs):
+    def get_scorecard(
+        self,
+        y_true_train,
+        y_pred_train,
+        weights_train=None,
+        y_true_test=None,
+        y_pred_test=None,
+        weights_test=None,
+        metrics=None,
+        model=None,
+        **kwargs,
+    ):
         """
         Get the metrics.
 
@@ -343,10 +357,18 @@ class ModelResults:
 
         Parameters
         ----------
-        y_true : series
+        y_true_train : series
             The actual column name
-        y_pred : series
+        y_pred_train : series
             The predicted column name
+        weights_train : series, optional (default=None)
+            The train weights column name
+        y_true_test : series, optional (default=None)
+            The test actual column name
+        y_pred_test : series, optional (default=None)
+            The test predicted column name
+        weights_test : series, optional (default=None)
+            The test weights column name
         model : model
             there are some models that provide metrics which we can use
         metrics : list
@@ -362,28 +384,63 @@ class ModelResults:
         """
         if metrics is None:
             metrics = self.metrics
-        metric_dict = {}
-        for metric in metrics:
-            if metric == "smape":
-                metric_dict[metric] = smape(y_true, y_pred)
-            elif metric == "ae":
-                metric_dict[metric] = ae(y_true, y_pred)
-            elif metric == "aic":
-                try:
-                    metric_dict[metric] = model.aic if model is not None else None
-                except AttributeError:
-                    logger.error(
-                        f"Model {model} does not have AIC attribute, returning None"
-                    )
-                    metric_dict[metric] = None
-            else:
-                try:
-                    metric_dict[metric] = getattr(skm, metric)(y_true, y_pred, **kwargs)
-                except AttributeError:
-                    logger.error(f"Metric {metric} not found in sklearn.metrics")
-                    metric_dict[metric] = None
+        results = {}
 
-        scorecard = pd.DataFrame([metric_dict])
+        # apply weights to predictions
+        if weights_train is not None:
+            if weights_test is None:
+                raise ValueError("weights_test must be provided if weights_train is")
+            y_true_train = y_true_train * weights_train
+            y_pred_train = y_pred_train * weights_train
+            y_true_test = y_true_test * weights_test
+            y_pred_test = y_pred_test * weights_test
+
+        def calculate_metrics(y_true, y_pred, prefix):
+            metric_dict = {}
+            for metric in metrics:
+                if metric == "smape":
+                    metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred)
+                elif metric == "shape":
+                    metric_dict[f"{prefix}_{metric}"] = y_true.shape[0]
+                elif metric == "ae":
+                    metric_dict[f"{prefix}_{metric}"] = ae(y_true, y_pred)
+                elif metric == "aic":
+                    try:
+                        metric_dict[f"{prefix}_{metric}"] = (
+                            model.aic if model is not None else None
+                        )
+                    except AttributeError:
+                        logger.error(
+                            f"Model `{model}` does not have AIC attribute, "
+                            f"returning None"
+                        )
+                        metric_dict[f"{prefix}_{metric}"] = None
+                else:
+                    try:
+                        metric_dict[f"{prefix}_{metric}"] = getattr(skm, metric)(
+                            y_true, y_pred, **kwargs
+                        )
+                    except AttributeError:
+                        logger.error(f"Metric `{metric}` not found in sklearn.metrics")
+                        metric_dict[f"{prefix}_{metric}"] = None
+            return metric_dict
+
+        # calculate train
+        results.update(calculate_metrics(y_true_train, y_pred_train, "train"))
+
+        # calculate test if provided
+        if y_true_test is not None and y_pred_test is not None:
+            results.update(calculate_metrics(y_true_test, y_pred_test, "test"))
+
+        # create dataframe
+        scorecard = pd.DataFrame([results])
+        scorecard.columns = pd.MultiIndex.from_tuples(
+            [
+                (c.split("_", 1)[0], c.split("_", 1)[1]) if "_" in c else (c, "")
+                for c in scorecard.columns
+            ]
+        )
+
         return scorecard
 
     def check_duplicate_name(self, model_name):

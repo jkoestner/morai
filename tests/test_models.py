@@ -64,8 +64,8 @@ def test_glm():
     X = preprocess_dict["X"]
     y = preprocess_dict["y"]
     weights = preprocess_dict["weights"]
-    GLM = models.GLM(X, y, weights)
-    GLM.fit()
+    GLM = models.GLM()
+    GLM.fit(X, y, weights)
     predictions = GLM.model.predict(X)
 
     assert predictions.mean() == approx(0.0525, abs=1e-4), "glm mean is off"
@@ -158,18 +158,16 @@ def test_xg():
         eval_metric="rmse",
         max_depth=6,
         eta=0.05,
-        subsample=0.8,
-        colsample_bytree=0.5,
         enable_categorical=True,
         random_state=seed,
     )
     bst.fit(X, y, sample_weight=weights)
     predictions = bst.predict(X)
 
-    assert predictions.mean() == approx(0.0530, abs=1e-4), "xgboost mean is off"
+    assert predictions.mean() == approx(0.0525, abs=1e-4), "xgboost mean is off"
     # xgboost has sampling which is difficult to replicate
     # loosen the tolerance
-    assert predictions[0] == approx(0.0777, abs=1e-3), "xgboost first value is off"
+    assert predictions[0] == approx(0.0962, abs=1e-3), "xgboost first value is off"
 
 
 def test_lee_carter():
