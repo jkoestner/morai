@@ -6,6 +6,7 @@ import plotly.express as px
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
+from morai.experience import tables
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
@@ -857,14 +858,10 @@ def generate_table(model, mapping):
         The 1-d mortality table
 
     """
-    from itertools import product
-
-    logger.info("generating 1-d mortality table")
-    columns = list(mapping.keys())
-    values = [list(mapping[col]["values"].keys()) for col in columns]
-    combination = product(*values)
-    table = pd.DataFrame(combination, columns=columns)
-    table = table.sort_values(by=table.columns.tolist())
+    logger.info(f"generating table for model {model}")
+    if not hasattr(model, "predict"):
+        raise ValueError("model does not have a predict method")
+    table = tables.create_grid(mapping=mapping)
     table["vals"] = model.predict(table)
 
     return table

@@ -1,4 +1,4 @@
-/* Adjustments */
+/* dash adjustments */
 .container {
     max-width: 100%;
     width: 100%;
@@ -6,6 +6,7 @@
     padding: 10px;
 }
 
+/* used in the dash ag-grid */
 .center-aligned-group-header .ag-header-group-cell-label {
     justify-content: center;
 }

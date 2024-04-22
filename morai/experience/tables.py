@@ -3,6 +3,7 @@
 import itertools
 
 import pandas as pd
+import polars as pl
 import pymort
 
 from morai.utils import custom_logger
@@ -111,7 +112,7 @@ class MortTable:
             "issue_age": range(max_age + 1),
             "duration": range(1, max_age + 2),
         } | extra_dims
-        mort_table = self._create_grid(dims=dims)
+        mort_table = create_grid(dims=dims, max_age=max_age)
 
         for table, combo, juv_table_id in zip(table_list, combinations, juv_list):
             extra_dims_list = list(zip(extra_dims.keys(), combo))
@@ -316,36 +317,73 @@ class MortTable:
 
         return soa_table, select_period, min_age
 
-    def _create_grid(self, dims):
-        """
-        Create a grid from the dimensions.
 
-        Parameters
-        ----------
-        dims : dict
-            The dimensions.
+def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
+    """
+    Create a grid from the dimensions.
 
-        Returns
-        -------
-        mort_grid : pd.DataFrame
-            The grid.
+    Parameters
+    ----------
+    dims : dict
+        The dimensions where it is structured as {dim_name: dim_values}.
+    mapping : dict
+        The mapping where it is structured as {dim_name: {"values": dim_values}}.
+    max_age : int, optional (default=121)
+        The maximum age.
+    max_grid_size : int, optional (default=5,000,000)
+        The maximum grid size.
 
-        """
-        dimensions = list(dims.values())
-        grid = list(itertools.product(*dimensions))
-        column_names = list(dims.keys())
-        logger.info(f"Creating grid with dimensions: {column_names}")
+    Returns
+    -------
+    mort_grid : pd.DataFrame
+        The grid.
 
-        # create mort grid
-        mort_grid = pd.DataFrame(grid, columns=column_names)
-        if "attained_age" not in mort_grid.columns:
-            logger.info(f"Adding attained age to the grid with max age: {self.max_age}")
-            mort_grid["attained_age"] = (
-                mort_grid["issue_age"] + mort_grid["duration"] - 1
-            )
-            mort_grid = mort_grid[mort_grid["attained_age"] <= self.max_age]
-        mort_grid["vals"] = None
-        return mort_grid
+    """
+    if not dims and not mapping or dims and mapping:
+        raise ValueError("Either dims or mapping must be provided.")
+    if mapping:
+        dims = {col: list(val["values"].keys()) for col, val in mapping.items()}
+    dimensions = list(dims.values())
+
+    # check the grid size before creating it
+    grid_size = 1
+    for dimension in dimensions:
+        grid_size *= len(dimension)
+    logger.info(f"Grid size: {grid_size} combinations.")
+    if grid_size > max_grid_size:
+        raise ValueError(
+            f"Grid size too large: {grid_size} combinations. "
+            f"Maximum allowed is {max_grid_size}."
+        )
+
+    grid = list(itertools.product(*dimensions))
+    column_names = list(dims.keys())
+    logger.info(f"Creating grid with dimensions: {column_names}")
+
+    # create mort grid (polars is much quicker)
+    mort_grid = pl.DataFrame(grid, schema=column_names)
+    mort_grid = mort_grid.sort(by=mort_grid.columns)
+    # convert objects to categorical
+    mort_grid = mort_grid.with_columns(
+        [
+            pl.col(name).cast(pl.Categorical)
+            for name in mort_grid.columns
+            if mort_grid[name].dtype == pl.Utf8
+        ]
+    )
+    mort_grid = mort_grid.to_pandas()
+
+    # add in attained age
+    if dims and "attained_age" not in mort_grid.columns:
+        if not all(col in column_names for col in ["issue_age", "duration"]):
+            raise ValueError("`issue_age` and `duration` must be in the column names.")
+        logger.info(f"Adding attained age to the grid with max age: {max_age}")
+        mort_grid["attained_age"] = mort_grid["issue_age"] + mort_grid["duration"] - 1
+        mort_grid = mort_grid[mort_grid["attained_age"] <= max_age]
+
+    logger.info("vals")
+    mort_grid["vals"] = None
+    return mort_grid
 
 
 def compare_tables(table_1, table_2, value_col="vals"):

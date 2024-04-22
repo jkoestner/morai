@@ -129,7 +129,9 @@ def preprocess_data(
         logger.info("adding a constant column to the data")
         constant_col = ["constant"]
         model_data[constant_col] = 1
-    X = model_data[model_features + constant_col].copy()
+        model_features = model_features + constant_col
+        passthrough_cols = passthrough_cols + constant_col
+    X = model_data[model_features].copy()
 
     # numeric - passthrough
     if passthrough_cols:
@@ -271,3 +273,31 @@ def bin_feature(feature, bins):
         feature, bins=bin_edges, labels=labels, include_lowest=True, right=True
     )
     return binned_feature
+
+
+def get_dimensions(mapping):
+    """
+    Get the dimensions for each feature in the mapping.
+
+    Parameters
+    ----------
+    mapping : dict
+        The mapping of the features to the encoding.
+
+    Returns
+    -------
+    dimensions : pd.DataFrame
+        The dimensions of the mapping.
+
+    """
+    dimensions = pd.DataFrame(
+        [
+            {
+                "feature": feature,
+                "dimension": len(mapping[feature]["values"]),
+                "type": mapping[feature]["type"],
+            }
+            for feature in mapping
+        ]
+    )
+    return dimensions
