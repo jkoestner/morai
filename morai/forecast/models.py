@@ -7,6 +7,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
 from morai.experience import tables
+from morai.forecast import preprocessors
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
@@ -841,7 +842,7 @@ class CBD:
         return np.log(a / (1 - a))
 
 
-def generate_table(model, mapping):
+def generate_table(model, mapping, feature_dict, params):
     """
     Generate a 1-d mortality table based on model predictions.
 
@@ -851,6 +852,10 @@ def generate_table(model, mapping):
         The model to use for generating the table
     mapping : dict
         The mapping of the features to predict on with corresponding values
+    feature_dict : dict
+        The dictionary of features to use for the model
+    params : dict
+        The parameters to use for the model
 
     Returns
     -------
@@ -858,10 +863,27 @@ def generate_table(model, mapping):
         The 1-d mortality table
 
     """
-    logger.info(f"generating table for model {model}")
+    logger.info(f"generating table for model {type(model).__name__}")
     if not hasattr(model, "predict"):
         raise ValueError("model does not have a predict method")
-    table = tables.create_grid(mapping=mapping)
+
+    # remove unneeded keys
+    feature_dict = feature_dict.copy()
+    feature_dict.pop("target", None)
+    feature_dict.pop("weight", None)
+
+    # create the grid and drop the vals column
+    grid = tables.create_grid(mapping=mapping)
+    grid = grid.drop(columns=["vals"])
+
+    # preprocess the data and predict
+    preprocess_dict = preprocessors.preprocess_data(
+        model_data=grid, feature_dict=feature_dict, **params
+    )
+    table = preprocess_dict["md_encoded"]
     table["vals"] = model.predict(table)
+
+    # remap the values
+    table = preprocessors.remap_values(df=table, mapping=mapping)
 
     return table

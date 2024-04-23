@@ -606,11 +606,9 @@ def pdp(
 
     # use mapping to get the original x_axis values
     if mapping and x_axis in mapping and x_axis_type != "ohe":
-        reversed_mapping = {v: k for k, v in mapping[x_axis]["values"].items()}
-        pdp_df[x_axis] = pdp_df[x_axis].map(reversed_mapping)
+        pdp_df[x_axis] = preprocessors.remap_values(pdp_df[x_axis], mapping)
     if mapping and line_color and line_color in mapping and line_color != "ohe":
-        reversed_mapping = {v: k for k, v in mapping[line_color]["values"].items()}
-        pdp_df[line_color] = pdp_df[line_color].map(reversed_mapping)
+        pdp_df[x_axis] = preprocessors.remap_values(pdp_df[x_axis], mapping)
 
     pdp_df = pdp_df.sort_values(by=grouped_features)
 

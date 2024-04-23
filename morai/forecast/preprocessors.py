@@ -301,3 +301,47 @@ def get_dimensions(mapping):
         ]
     )
     return dimensions
+
+
+def remap_values(df, mapping):
+    """
+    Remap the values using the mapping.
+
+    Parameters
+    ----------
+    df : pd.DataFrame or pd.Series
+        The object to remap.
+    mapping : dict
+        The mapping of the features to the encoding.
+
+    Returns
+    -------
+    df : pd.DataFrame or pd.Series
+        The remapped object.
+
+    """
+    for column, value_map in mapping.items():
+        reversed_map = {v: k for k, v in value_map["values"].items()}
+        if isinstance(df, pd.Series) and column == df.name:
+            df = df.replace(reversed_map)
+        elif isinstance(df, pd.DataFrame):
+            # remap one hot encoded columns
+            if value_map["type"] == "ohe":
+                # Create a new categorical column from the OHE columns
+                # We use the `apply` method along axis=1 to determine which OHE column is 1
+                df[column] = df.apply(
+                    lambda row: next(
+                        (
+                            cat
+                            for cat, col in value_map["values"].items()
+                            if row[col] == 1
+                        ),
+                        None,
+                    ),
+                    axis=1,
+                )
+                # Optionally, drop the OHE columns if they are no longer needed
+                df = df.drop(columns=value_map["values"].values())
+            elif column in df.columns:
+                df[column] = df[column].map(reversed_map)
+    return df

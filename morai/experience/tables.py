@@ -2,6 +2,7 @@
 
 import itertools
 
+import numpy as np
 import pandas as pd
 import polars as pl
 import pymort
@@ -339,7 +340,7 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
         The grid.
 
     """
-    if not dims and not mapping or dims and mapping:
+    if (not dims and not mapping) or (dims and mapping):
         raise ValueError("Either dims or mapping must be provided.")
     if mapping:
         dims = {col: list(val["values"].keys()) for col, val in mapping.items()}
@@ -381,8 +382,7 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
         mort_grid["attained_age"] = mort_grid["issue_age"] + mort_grid["duration"] - 1
         mort_grid = mort_grid[mort_grid["attained_age"] <= max_age]
 
-    logger.info("vals")
-    mort_grid["vals"] = None
+    mort_grid["vals"] = np.nan
     return mort_grid
 
 
