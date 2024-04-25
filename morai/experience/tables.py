@@ -7,7 +7,7 @@ import pandas as pd
 import polars as pl
 import pymort
 
-from morai.utils import custom_logger
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -114,6 +114,11 @@ class MortTable:
             "duration": range(1, max_age + 2),
         } | extra_dims
         mort_table = create_grid(dims=dims, max_age=max_age)
+        if "attained_age" not in mort_table.columns:
+            mort_table["attained_age"] = (
+                mort_table["issue_age"] + mort_table["duration"] - 1
+            )
+            mort_table = mort_table[mort_table["attained_age"] <= max_age]
 
         for table, combo, juv_table_id in zip(table_list, combinations, juv_list):
             extra_dims_list = list(zip(extra_dims.keys(), combo))
@@ -319,7 +324,7 @@ class MortTable:
         return soa_table, select_period, min_age
 
 
-def create_grid(dims=None, mapping=None, max_grid_size=5000000):
+def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
     """
     Create a grid from the dimensions.
 
@@ -329,6 +334,8 @@ def create_grid(dims=None, mapping=None, max_grid_size=5000000):
         The dimensions where it is structured as {dim_name: dim_values}.
     mapping : dict
         The mapping where it is structured as {dim_name: {"values": dim_values}}.
+    max_age : int, optional (default=121)
+        The maximum age.
     max_grid_size : int, optional (default=5,000,000)
         The maximum grid size.
 
@@ -372,7 +379,7 @@ def create_grid(dims=None, mapping=None, max_grid_size=5000000):
         ]
     )
     mort_grid = mort_grid.to_pandas()
-    mort_grid = check_aa_ia_dur_cols(mort_grid, max_age=121)
+    mort_grid = check_aa_ia_dur_cols(mort_grid, max_age=max_age)
 
     mort_grid["vals"] = np.nan
     return mort_grid
@@ -489,3 +496,20 @@ def check_aa_ia_dur_cols(df, max_age=121):
         )
 
     return df
+
+
+def output_table(df, name="table.csv"):
+    """
+    Output the table to a csv file.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame.
+    name : str, optional (default="table.csv")
+        The name of the file.
+
+    """
+    path = helpers.FILES_PATH / "dataset" / "tables" / name
+    df.to_csv(path, index=False)
+    logger.info(f"Output table to: {path}")

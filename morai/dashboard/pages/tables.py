@@ -6,6 +6,7 @@ Issue age, duration, and attained age are needed to compare mortality tables.
 
 from io import StringIO
 
+import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 import pandas as pd
@@ -18,8 +19,10 @@ from dash_extensions.enrich import (
     html,
 )
 
+from morai.dashboard.components import dash_formats
+from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters, tables
-from morai.utils import custom_logger
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -80,20 +83,25 @@ def layout():
             dbc.Row(
                 [
                     dbc.Col(
+                        dcc.RadioItems(
+                            id="table-1-radio",
+                            options=["soa table", "file"],
+                            value="soa table",
+                        ),
+                        width=1,
+                    ),
+                    dbc.Col(
                         dbc.Card(
                             [
                                 dbc.CardHeader("Morality Table 1"),
                                 dbc.CardBody(
-                                    dbc.Input(
-                                        type="number",
-                                        id="table-1-id",
-                                        placeholder="example 3249",
-                                    ),
+                                    children=None,
+                                    id="table-1-card",
                                 ),
                             ],
                             color="light",
                         ),
-                        width="auto",
+                        width=2,
                     ),
                     dbc.Col(
                         dbc.Card(
@@ -111,20 +119,25 @@ def layout():
             dbc.Row(
                 [
                     dbc.Col(
+                        dcc.RadioItems(
+                            id="table-2-radio",
+                            options=["soa table", "file"],
+                            value="soa table",
+                        ),
+                        width=1,
+                    ),
+                    dbc.Col(
                         dbc.Card(
                             [
                                 dbc.CardHeader("Morality Table 2"),
                                 dbc.CardBody(
-                                    dbc.Input(
-                                        type="number",
-                                        id="table-2-id",
-                                        placeholder="example 3252",
-                                    ),
+                                    children=None,
+                                    id="table-2-card",
                                 ),
                             ],
                             color="light",
                         ),
-                        width="auto",
+                        width=2,
                     ),
                     dbc.Col(
                         dbc.Card(
@@ -182,6 +195,15 @@ def layout():
                 ],
                 className="mb-2",
             ),
+            dbc.Row(
+                [
+                    dcc.Loading(
+                        id="loading-tables-tab-content",
+                        type="dot",
+                        children=html.Div(id="tables-tab-content"),
+                    ),
+                ],
+            ),
         ],
         className="container",
     )
@@ -199,6 +221,7 @@ def layout():
         Output("store-tables", "data"),
         Output("table-1-desc", "children"),
         Output("table-2-desc", "children"),
+        Output("tables-tab-content", "children"),
         Output("toast-null-tables", "is_open"),
         Output("toast-table-not-found", "is_open"),
     ],
@@ -213,17 +236,49 @@ def get_table_data(n_clicks, table1_id, table2_id):
     if table1_id is None or table2_id is None:
         return dash.no_update, dash.no_update, dash.no_update, True, False
 
-    # get the tables and compare them
+    # process tables
     mt = tables.MortTable()
-    try:
-        table_1 = mt.build_table(table_list=[table1_id], extend=True)
-        table_2 = mt.build_table(table_list=[table2_id], extend=True)
-    except FileNotFoundError:
-        logger.warning(f"Table not found: {table1_id} or {table2_id}")
-        return dash.no_update, dash.no_update, dash.no_update, False, True
-    table_1_desc = mt.get_soa_xml(table1_id).ContentClassification.TableDescription
-    table_2_desc = mt.get_soa_xml(table2_id).ContentClassification.TableDescription
+
+    # table_1
+    if isinstance(table1_id, str):
+        try:
+            table_1 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table1_id)
+        except FileNotFoundError:
+            logger.warning(f"Table not found: {table1_id}")
+            return dash.no_update, dash.no_update, dash.no_update, False, True
+        table_1_desc = table1_id
+    else:
+        try:
+            table_1 = mt.build_table(table_list=[table1_id], extend=True)
+        except FileNotFoundError:
+            logger.warning(f"Table not found: {table1_id}")
+            return dash.no_update, dash.no_update, dash.no_update, False, True
+        table_1_desc = mt.get_soa_xml(table1_id).ContentClassification.TableDescription
+
+    # table_2
+    if isinstance(table2_id, str):
+        try:
+            table_2 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table2_id)
+        except FileNotFoundError:
+            logger.warning(f"Table not found: {table2_id}")
+            return dash.no_update, dash.no_update, dash.no_update, False, True
+        table_2_desc = table2_id
+    else:
+        try:
+            table_2 = mt.build_table(table_list=[table2_id], extend=True)
+        except FileNotFoundError:
+            logger.warning(f"Table not found: {table2_id}")
+            return dash.no_update, dash.no_update, dash.no_update, False, True
+        table_2_desc = mt.get_soa_xml(table2_id).ContentClassification.TableDescription
+
     compare_df = tables.compare_tables(table_1, table_2)
+
+    # create table content
+    columnDefs = dash_formats.get_column_defs(compare_df)
+    tab_content = dag.AgGrid(
+        rowData=compare_df.to_dict("records"),
+        columnDefs=columnDefs,
+    )
 
     # serialize the compare_df
     compare_df = compare_df.to_json(orient="split")
@@ -232,9 +287,68 @@ def get_table_data(n_clicks, table1_id, table2_id):
         compare_df,
         table_1_desc,
         table_2_desc,
+        tab_content,
         False,
         False,
     )
+
+
+@callback(
+    [Output("table-1-card", "children")],
+    [Input("table-1-radio", "value")],
+)
+def set_table_1_input(value):
+    """Set the table 1 input based on the radio button."""
+    if value == "soa table":
+        input_box = dbc.Input(
+            type="number",
+            id="table-1-id",
+            placeholder="example 3249",
+        )
+    else:
+        input_box = (
+            dcc.Dropdown(
+                id="table-1-id",
+                options=[
+                    {"label": key, "value": key}
+                    for key in dh.list_files_in_folder(
+                        helpers.FILES_PATH / "dataset" / "tables"
+                    )
+                    if key.endswith(".csv")
+                ],
+                placeholder="Select a file",
+            ),
+        )
+    return input_box
+
+
+@callback(
+    [Output("table-2-card", "children")],
+    [Input("table-2-radio", "value")],
+)
+def set_table_2_input(value):
+    """Set the table 2 input based on the radio button."""
+    if value == "soa table":
+        input_box = dbc.Input(
+            type="number",
+            id="table-2-id",
+            placeholder="example 3252",
+        )
+    else:
+        input_box = (
+            dcc.Dropdown(
+                id="table-2-id",
+                options=[
+                    {"label": key, "value": key}
+                    for key in dh.list_files_in_folder(
+                        helpers.FILES_PATH / "dataset" / "tables"
+                    )
+                    if key.endswith(".csv")
+                ],
+                placeholder="Select a file",
+            ),
+        )
+    return input_box
 
 
 @callback(
