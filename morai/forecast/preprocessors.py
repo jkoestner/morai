@@ -327,10 +327,8 @@ def remap_values(df, mapping):
         elif isinstance(df, pd.DataFrame):
             # remap one hot encoded columns
             if value_map["type"] == "ohe":
-                # Create a new categorical column from the OHE columns
-                # We use the `apply` method along axis=1 to determine which OHE column is 1
                 df[column] = df.apply(
-                    lambda row: next(
+                    lambda row, value_map=value_map: next(
                         (
                             cat
                             for cat, col in value_map["values"].items()
@@ -340,7 +338,6 @@ def remap_values(df, mapping):
                     ),
                     axis=1,
                 )
-                # Optionally, drop the OHE columns if they are no longer needed
                 df = df.drop(columns=value_map["values"].values())
             elif column in df.columns:
                 df[column] = df[column].map(reversed_map)

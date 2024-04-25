@@ -30,8 +30,8 @@ def chart(
     title=None,
     y_sort=False,
     x_bins=None,
-    y_special=True,
     add_line=False,
+    agg="sum",
     display=True,
     **kwargs,
 ):
@@ -70,10 +70,10 @@ def chart(
         Sort the records by the y-axis descending.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
-    y_special : bool, optional (default=True)
-        Whether to calculate the y_axis using the numerator and denominator.
     add_line : bool, optional (default=False)
         Whether to add a line to the chart at y-axis of 1.
+    agg : str, optional (default="sum")
+        The aggregation to use for the y-axis.
     display : bool, optional (default=True)
         Whether to display figure or not.
     **kwargs : dict
@@ -86,6 +86,7 @@ def chart(
 
     """
     df = df.copy()
+    use_num_and_den = True if numerator and denominator else False
     # heatmap sum values are color rather than y_axis
     if type in ("heatmap", "contour"):
         if not color:
@@ -98,12 +99,12 @@ def chart(
     # getting the columns to sum by
     # columns will be y_axis unless y_axis is "ratio" or "risk"
     check_cols = [x_axis, y_axis, color, numerator, denominator]
-    if y_special and y_axis in ["ratio", "risk"]:
+    if use_num_and_den and y_axis in ["ratio", "risk"]:
         logger.info(f"Calculating {y_axis} using [{numerator}] and [{denominator}]")
-        sum_cols = [numerator, denominator]
+        agg_cols = [numerator, denominator]
         check_cols.remove(y_axis)
     else:
-        sum_cols = y_axis
+        agg_cols = y_axis
 
     # check if columns in dataframe
     missing_columns = [
@@ -124,12 +125,14 @@ def chart(
         logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
         df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)
 
-    grouped_data = df.groupby(groupby_cols, observed=True)[sum_cols].sum().reset_index()
+    grouped_data = (
+        df.groupby(groupby_cols, observed=True)[agg_cols].agg(agg).reset_index()
+    )
 
     # calculating fields
-    if y_special and y_axis == "ratio":
+    if use_num_and_den and y_axis == "ratio":
         grouped_data[y_axis] = grouped_data[numerator] / grouped_data[denominator]
-    elif y_special and y_axis == "risk":
+    elif use_num_and_den and y_axis == "risk":
         average_y_axis = grouped_data[numerator].sum() / grouped_data[denominator].sum()
         grouped_data[y_axis] = (
             grouped_data[numerator] / grouped_data[denominator]
@@ -174,12 +177,17 @@ def chart(
         grouped_data = grouped_data.pivot(index=_y_axis, columns=x_axis, values=_color)
         if not title:
             title = f"Heatmap of '{_color}' by '{x_axis}' and '{_y_axis}'"
-        fig = px.imshow(
-            grouped_data,
-            labels={"x": x_axis, "y": _y_axis, "color": _color},
-            title=title,
-            **kwargs,
+        fig = go.Figure(
+            data=[
+                go.Heatmap(
+                    z=grouped_data.values,
+                    x=grouped_data.columns,
+                    y=grouped_data.index,
+                    **kwargs,
+                )
+            ]
         )
+        fig.update_layout(title=title, xaxis_title=x_axis, yaxis_title=_y_axis)
     elif type == "contour":
         grouped_data = grouped_data.pivot(index=_y_axis, columns=x_axis, values=_color)
         if not title:
@@ -741,7 +749,6 @@ def target(
     target,
     features=None,
     cols=3,
-    y_special=True,
     numerator=None,
     denominator=None,
     normalize=None,
@@ -763,8 +770,6 @@ def target(
         The features to use for the plot. Default is to use all features.
     cols : int, optional
         The number of columns to use for the subplots.
-    y_special : bool, optional (default=True)
-        Whether to calculate the y_axis using the numerator and denominator.
     numerator : str, optional
         The column name to use for the numerator values.
     denominator : str, optional
@@ -783,6 +788,7 @@ def target(
         features = df.columns
     if normalize is None:
         normalize = []
+    use_num_and_den = True if numerator and denominator else False
 
     # validations
     if target not in [*list(df.columns), "ratio", "risk"]:
@@ -817,14 +823,14 @@ def target(
         row = (i - 1) // cols + 1
         col = (i - 1) % cols + 1
 
-        if y_special and target == "ratio":
+        if use_num_and_den and target == "ratio":
             grouped_data = (
                 df.groupby(feature, observed=True)[[numerator, denominator]]
                 .sum()
                 .reset_index()
             ).sort_values(by=feature)
             grouped_data[target] = grouped_data[numerator] / grouped_data[denominator]
-        elif y_special and target == "risk":
+        elif use_num_and_den and target == "risk":
             grouped_data = (
                 df.groupby(feature, observed=True)[[numerator, denominator]]
                 .sum()

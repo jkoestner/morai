@@ -264,7 +264,6 @@ def create_contour_and_sliders(compare_df):
         y_axis="duration",
         color="ratio",
         type="contour",
-        y_special=False,
     )
 
     graph_contour = dcc.Graph(figure=graph_contour)

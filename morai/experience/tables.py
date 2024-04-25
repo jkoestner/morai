@@ -319,7 +319,7 @@ class MortTable:
         return soa_table, select_period, min_age
 
 
-def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
+def create_grid(dims=None, mapping=None, max_grid_size=5000000):
     """
     Create a grid from the dimensions.
 
@@ -329,8 +329,6 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
         The dimensions where it is structured as {dim_name: dim_values}.
     mapping : dict
         The mapping where it is structured as {dim_name: {"values": dim_values}}.
-    max_age : int, optional (default=121)
-        The maximum age.
     max_grid_size : int, optional (default=5,000,000)
         The maximum grid size.
 
@@ -364,6 +362,7 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
     # create mort grid (polars is much quicker)
     mort_grid = pl.DataFrame(grid, schema=column_names)
     mort_grid = mort_grid.sort(by=mort_grid.columns)
+
     # convert objects to categorical
     mort_grid = mort_grid.with_columns(
         [
@@ -373,14 +372,7 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
         ]
     )
     mort_grid = mort_grid.to_pandas()
-
-    # add in attained age
-    if dims and "attained_age" not in mort_grid.columns:
-        if not all(col in column_names for col in ["issue_age", "duration"]):
-            raise ValueError("`issue_age` and `duration` must be in the column names.")
-        logger.info(f"Adding attained age to the grid with max age: {max_age}")
-        mort_grid["attained_age"] = mort_grid["issue_age"] + mort_grid["duration"] - 1
-        mort_grid = mort_grid[mort_grid["attained_age"] <= max_age]
+    mort_grid = check_aa_ia_dur_cols(mort_grid, max_age=121)
 
     mort_grid["vals"] = np.nan
     return mort_grid
@@ -389,6 +381,8 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
 def compare_tables(table_1, table_2, value_col="vals"):
     """
     Compare two tables.
+
+    Table 1 is used as the source of the keys to compare on.
 
     Parameters
     ----------
@@ -402,7 +396,7 @@ def compare_tables(table_1, table_2, value_col="vals"):
     Returns
     -------
     compare_df : pd.DataFrame
-        DataFrame of the comparison with the ratio of the values.
+        DataFrame of the comparison with the ratio of the table_1/table_2 values.
 
     """
     if type(table_1) != pd.DataFrame or type(table_2) != pd.DataFrame:
@@ -410,17 +404,88 @@ def compare_tables(table_1, table_2, value_col="vals"):
     if value_col not in table_1.columns or value_col not in table_2.columns:
         raise ValueError(f"Value column: {value_col} not in both tables.")
 
-    keys = [col for col in table_1.columns if col != "vals"]
-    missing_keys = [key for key in keys if key not in table_2.columns]
-    if missing_keys:
-        raise ValueError(f"Table 2 is missing the following keys: {missing_keys}")
+    # get the common keys to compare on
+    common_keys = list(set(table_1.columns) & set(table_2.columns) - {value_col})
+    if not common_keys:
+        raise ValueError("No common keys between the two tables.")
+    logger.info(f"Comparing tables on keys: {common_keys}")
 
+    # get the unique keys dict for each table
+    unique_keys = {}
+    for i, table in enumerate([table_1, table_2]):
+        table_name = f"table_{i+1}"
+        unique_keys[table_name] = list(
+            set(table.columns) - set(common_keys) - {value_col}
+        )
+        if unique_keys[table_name]:
+            unique_keys[table_name] = {
+                key: len(table[key].unique()) for key in unique_keys[table_name]
+            }
+            if table_name == "table_1":
+                logger.info(f"{table_name} has extra keys: {unique_keys[table_name]}.")
+            # aggregate table_2 if it has extra keys
+            elif table_name == "table_2":
+                table_2 = table_2.groupby(common_keys, as_index=False).agg(
+                    {value_col: "mean"}
+                )
+                logger.info(
+                    f"{table_name} has extra keys: {unique_keys[table_name]}. "
+                    f"Calculated mean for '{value_col}' column."
+                )
+
+    # compare
     compare_df = table_1.merge(
         table_2,
-        on=keys,
+        on=common_keys,
         suffixes=("_1", "_2"),
     )
     compare_df = compare_df.rename(columns={"vals_1": "table_1", "vals_2": "table_2"})
     compare_df["ratio"] = compare_df["table_1"] / compare_df["table_2"]
 
     return compare_df
+
+
+def check_aa_ia_dur_cols(df, max_age=121):
+    """
+    Check attained age, issue age, and duration columns.
+
+    attained_age = issue_age + duration - 1
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame.
+    max_age : int, optional (default=121)
+        The maximum age.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        The DataFrame with the columns checked.
+
+    """
+    initial_rows = len(df)
+
+    # check for invalid attained age / duration / issue age combos
+    if all(col in df.columns for col in ["attained_age", "issue_age", "duration"]):
+        df = df[df["attained_age"] >= df["duration"] - 1]
+        df = df[df["attained_age"] >= df["issue_age"]]
+    elif all(col in df.columns for col in ["attained_age", "duration"]):
+        df = df[df["attained_age"] >= df["duration"] - 1]
+    elif all(col in df.columns for col in ["attained_age", "issue_age"]):
+        df = df[df["attained_age"] >= df["issue_age"]]
+
+    # cap the max attained age
+    if "attained_age" in df.columns:
+        df = df[df["attained_age"] <= max_age]
+    elif all(col in df.columns for col in ["issue_age", "duration"]):
+        df = df[(df["issue_age"] + df["duration"] - 1) <= max_age]
+
+    removed_rows = initial_rows - len(df)
+    if removed_rows:
+        logger.info(
+            f"Removed '{removed_rows}' rows where attained_age, issue_age, "
+            f"or duration was invalid."
+        )
+
+    return df

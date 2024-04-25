@@ -875,6 +875,7 @@ def generate_table(model, mapping, feature_dict, params):
     # create the grid and drop the vals column
     grid = tables.create_grid(mapping=mapping)
     grid = grid.drop(columns=["vals"])
+    column_list = grid.columns.tolist()
 
     # preprocess the data and predict
     preprocess_dict = preprocessors.preprocess_data(
@@ -885,5 +886,7 @@ def generate_table(model, mapping, feature_dict, params):
 
     # remap the values
     table = preprocessors.remap_values(df=table, mapping=mapping)
+    table = table[[*column_list, "vals"]]
+    table = table.sort_values(by=table.columns.to_list())
 
     return table
