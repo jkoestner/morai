@@ -2,4 +2,3 @@
 docs/* linguist-vendored
 notebooks/* linguist-vendored
 *.ipynb filter=lfs diff=lfs merge=lfs -text
-*.csv filter=lfs diff=lfs merge=lfs -text
