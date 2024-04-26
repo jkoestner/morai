@@ -198,7 +198,7 @@ def load_data(dataset, config):
     logger.debug("generate selectors and filters")
 
     # create filters and selectors
-    filter_dict = dh.generate_filters(df=dataset, prefix="chart")
+    filter_dict = dh.generate_filters(df=dataset, prefix="chart", config=config)
     selectors_default = dh.generate_selectors(
         config=config,
         prefix="chart",

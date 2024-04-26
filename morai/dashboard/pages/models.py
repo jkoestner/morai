@@ -215,7 +215,9 @@ def load_pdp_selectors(pathname, config, dataset):
         },
     )
 
-    pdp_filters = dh.generate_filters(df=dataset, prefix="pdp")["filters"]
+    pdp_filters = dh.generate_filters(df=dataset, prefix="pdp", config=config)[
+        "filters"
+    ]
 
     return pdp_selectors, pdp_filters
 
@@ -476,6 +478,9 @@ def display_pdp(
     preset = model_results.model[model_results.model["model_name"] == model_name].iloc[
         0
     ]["preprocess_params"]["preset"]
+    add_constant = model_results.model[
+        model_results.model["model_name"] == model_name
+    ].iloc[0]["preprocess_params"]["add_constant"]
     feature_dict = model_results.model[
         model_results.model["model_name"] == model_name
     ].iloc[0]["feature_dict"]
@@ -489,6 +494,7 @@ def display_pdp(
         feature_dict=feature_dict,
         standardize=standardize,
         preset=preset,
+        add_constant=add_constant,
     )
     mapping = preprocess_dict["mapping"]
     md_encoded = preprocess_dict["md_encoded"]

@@ -15,6 +15,7 @@ from dash_extensions.enrich import (
     Output,
     State,
     callback,
+    callback_context,
     dcc,
     html,
 )
@@ -42,6 +43,8 @@ def layout():
     return html.Div(
         [
             dcc.Store(id="store-tables", storage_type="session"),
+            dcc.Store(id="store-table-1", storage_type="session"),
+            dcc.Store(id="store-table-2", storage_type="session"),
             # -----------------------------------------------------------
             html.H4(
                 "Table Viewer",
@@ -107,11 +110,27 @@ def layout():
                         dbc.Card(
                             [
                                 dbc.CardHeader("Table Description"),
-                                dbc.CardBody(html.P(id="table-1-desc", children=" ")),
+                                dbc.CardBody(
+                                    children=None,
+                                    id="table-1-desc",
+                                ),
                             ],
                             color="light",
                         ),
                         width=6,
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            [
+                                dbc.CardHeader("Filters Table-1"),
+                                dbc.CardBody(
+                                    children=None,
+                                    id="table-1-filters",
+                                ),
+                            ],
+                            color="light",
+                        ),
+                        width=2,
                     ),
                 ],
                 className="mb-2",
@@ -143,11 +162,27 @@ def layout():
                         dbc.Card(
                             [
                                 dbc.CardHeader("Table Description"),
-                                dbc.CardBody(html.P(id="table-2-desc", children=" ")),
+                                dbc.CardBody(
+                                    children=None,
+                                    id="table-2-desc",
+                                ),
                             ],
                             color="light",
                         ),
                         width=6,
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            [
+                                dbc.CardHeader("Filters Table-2"),
+                                dbc.CardBody(
+                                    children=None,
+                                    id="table-2-filters",
+                                ),
+                            ],
+                            color="light",
+                        ),
+                        width=2,
                     ),
                 ],
                 className="mb-2",
@@ -180,13 +215,6 @@ def layout():
                 [
                     dbc.Col(
                         dcc.Loading(
-                            id="loading-graph-compare-duration",
-                            type="dot",
-                            children=html.Div(id="graph-compare-duration"),
-                        ),
-                    ),
-                    dbc.Col(
-                        dcc.Loading(
                             id="loading-graph-compare-age",
                             type="dot",
                             children=html.Div(id="graph-compare-age"),
@@ -197,6 +225,15 @@ def layout():
             ),
             dbc.Row(
                 [
+                    dbc.Tabs(
+                        [
+                            dbc.Tab(label="Table-1", tab_id="tab-table-1"),
+                            dbc.Tab(label="Table-2", tab_id="tab-table-2"),
+                            dbc.Tab(label="Compare", tab_id="tab-table-compare"),
+                        ],
+                        id="tabs-tables",
+                        active_tab="tab-table-1",
+                    ),
                     dcc.Loading(
                         id="loading-tables-tab-content",
                         type="dot",
@@ -219,22 +256,35 @@ def layout():
 @callback(
     [
         Output("store-tables", "data"),
+        Output("store-table-1", "data"),
+        Output("store-table-2", "data"),
         Output("table-1-desc", "children"),
         Output("table-2-desc", "children"),
-        Output("tables-tab-content", "children"),
         Output("toast-null-tables", "is_open"),
         Output("toast-table-not-found", "is_open"),
     ],
     [Input("compare-button", "n_clicks")],
-    [State("table-1-id", "value"), State("table-2-id", "value")],
+    [
+        State("table-1-id", "value"),
+        State("table-2-id", "value"),
+    ],
     prevent_initial_call=True,
 )
 def get_table_data(n_clicks, table1_id, table2_id):
     """Get the table data and create a compare dataframe."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
+    states_info = dh._inputs_flatten_list(callback_context.states_list)
 
     if table1_id is None or table2_id is None:
-        return dash.no_update, dash.no_update, dash.no_update, True, False
+        return (
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+            True,
+            False,
+        )
 
     # process tables
     mt = tables.MortTable()
@@ -245,15 +295,52 @@ def get_table_data(n_clicks, table1_id, table2_id):
             table_1 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table1_id)
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
-            return dash.no_update, dash.no_update, dash.no_update, False, True
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                False,
+                True,
+            )
+        table_1_cols = {
+            col: len(table_1[col].unique()) for col in table_1.columns if col != "vals"
+        }
         table_1_desc = table1_id
+        # add age and duration columns if not present
+        table_1 = tables.add_aa_ia_dur_cols(table_1)
     else:
         try:
             table_1 = mt.build_table(table_list=[table1_id], extend=True)
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
-            return dash.no_update, dash.no_update, dash.no_update, False, True
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                False,
+                True,
+            )
+        table_1_cols = {
+            col: len(table_1[col].unique()) for col in table_1.columns if col != "vals"
+        }
         table_1_desc = mt.get_soa_xml(table1_id).ContentClassification.TableDescription
+    # create table description
+    desc_1 = html.Div(
+        [
+            html.B("Table Description:"),
+            html.Span(f" {table_1_desc}"),
+            html.Br(),
+            html.B("Table Shape:"),
+            html.Span(f" {table_1.shape}"),
+            html.Br(),
+            html.B("Columns:"),
+            html.Span(f" {table_1_cols}"),
+        ]
+    )
 
     # table_2
     if isinstance(table2_id, str):
@@ -262,32 +349,48 @@ def get_table_data(n_clicks, table1_id, table2_id):
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
             return dash.no_update, dash.no_update, dash.no_update, False, True
+        table_2_cols = {
+            col: len(table_2[col].unique()) for col in table_2.columns if col != "vals"
+        }
         table_2_desc = table2_id
+        # add age and duration columns if not present
+        table_2 = tables.add_aa_ia_dur_cols(table_2)
     else:
         try:
             table_2 = mt.build_table(table_list=[table2_id], extend=True)
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
             return dash.no_update, dash.no_update, dash.no_update, False, True
+        table_2_cols = {
+            col: len(table_2[col].unique()) for col in table_2.columns if col != "vals"
+        }
         table_2_desc = mt.get_soa_xml(table2_id).ContentClassification.TableDescription
-
+    # create table description
+    desc_2 = html.Div(
+        [
+            html.B("Table Description:"),
+            html.Span(f" {table_2_desc}"),
+            html.Br(),
+            html.B("Table Shape:"),
+            html.Span(f" {table_2.shape}"),
+            html.Br(),
+            html.B("Columns:"),
+            html.Span(f" {table_2_cols}"),
+        ]
+    )
     compare_df = tables.compare_tables(table_1, table_2)
 
-    # create table content
-    columnDefs = dash_formats.get_column_defs(compare_df)
-    tab_content = dag.AgGrid(
-        rowData=compare_df.to_dict("records"),
-        columnDefs=columnDefs,
-    )
-
-    # serialize the compare_df
+    # serialize the dataframes
     compare_df = compare_df.to_json(orient="split")
+    table_1 = table_1.to_json(orient="split")
+    table_2 = table_2.to_json(orient="split")
 
     return (
         compare_df,
-        table_1_desc,
-        table_2_desc,
-        tab_content,
+        table_1,
+        table_2,
+        desc_1,
+        desc_2,
         False,
         False,
     )
@@ -392,7 +495,6 @@ def create_contour_and_sliders(compare_df):
 
 @callback(
     [
-        Output("graph-compare-duration", "children"),
         Output("graph-compare-age", "children"),
     ],
     [Input("slider-issue-age", "value")],
@@ -405,12 +507,6 @@ def update_graphs_from_slider(issue_age_value, compare_df):
     compare_df = pd.read_json(StringIO(compare_df), orient="split")
 
     # graph the tables
-    graph_compare_duration = charters.compare_rates(
-        compare_df[compare_df["issue_age"] == issue_age_value],
-        x_axis="duration",
-        rates=["table_1", "table_2"],
-        y_log=True,
-    )
 
     graph_compare_age = charters.compare_rates(
         compare_df[compare_df["issue_age"] == issue_age_value],
@@ -419,7 +515,63 @@ def update_graphs_from_slider(issue_age_value, compare_df):
         y_log=True,
     )
 
-    graph_compare_duration = dcc.Graph(figure=graph_compare_duration)
     graph_compare_age = dcc.Graph(figure=graph_compare_age)
 
-    return graph_compare_duration, graph_compare_age
+    return graph_compare_age
+
+
+@callback(
+    [Output("tables-tab-content", "children")],
+    [Input("tabs-tables", "active_tab"), Input("store-tables", "data")],
+    [
+        State("store-table-1", "data"),
+        State("store-table-2", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def update_table_tabs(active_tab, compare_df, table_1, table_2):
+    """Update the tables tab content."""
+    if active_tab == "tab-table-1":
+        table = table_1
+    elif active_tab == "tab-table-2":
+        table = table_2
+    else:
+        table = compare_df
+
+    # deserialize the table
+    table = pd.read_json(StringIO(table), orient="split")
+    columnDefs = dash_formats.get_column_defs(table)
+    tab_content = dag.AgGrid(
+        rowData=table.to_dict("records"),
+        columnDefs=columnDefs,
+        defaultColDef={"resizable": True, "sortable": True, "filter": True},
+        dashGridOptions={"pagination": True},
+    )
+
+    return tab_content
+
+
+@callback(
+    [Output("table-1-filters", "children"), Output("table-2-filters", "children")],
+    [Input("store-table-1", "data"), Input("store-table-2", "data")],
+    prevent_initial_call=True,
+)
+def create_filters(table_1, table_2):
+    """Create the filters for the tables."""
+    # deserialize the tables
+    table_1 = pd.read_json(StringIO(table_1), orient="split")
+    table_2 = pd.read_json(StringIO(table_2), orient="split")
+
+    # create the filters
+    filters_1 = dh.generate_filters(
+        df=table_1,
+        prefix="table-1",
+        exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
+    ).get("filters")
+    filters_2 = dh.generate_filters(
+        df=table_2,
+        prefix="table-2",
+        exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
+    ).get("filters")
+
+    return filters_1, filters_2

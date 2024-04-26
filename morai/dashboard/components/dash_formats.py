@@ -23,7 +23,7 @@ def get_column_defs(table):
     column_defs = []
     for col in table.columns:
         # specific case for columns
-        if "smape" in col.lower():
+        if any(substring in col.lower() for substring in ["smape", "vals"]):
             column_defs.append(
                 {
                     "field": col,

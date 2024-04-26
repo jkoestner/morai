@@ -66,13 +66,19 @@ def filter_data(df, callback_context, num_to_str_count=num_to_str_count):
             str_cols.append(col)
         else:
             num_cols.append(col)
+
+    # filter string columns
     for col in str_cols:
         str_values = _inputs_parse_id(callback_context, col)
         if str_values:
+            print(f"{col} and {str_values}")
             filtered_df = filtered_df[filtered_df[col].isin(str_values)]
+
+    # filter numeric columns
     for col in num_cols:
         num_values = _inputs_parse_id(callback_context, col)
         if num_values:
+            print(f"{col} and {num_values}")
             filtered_df = filtered_df[
                 (filtered_df[col] >= num_values[0])
                 & (filtered_df[col] <= num_values[1])
@@ -80,7 +86,13 @@ def filter_data(df, callback_context, num_to_str_count=num_to_str_count):
     return filtered_df
 
 
-def generate_filters(df, prefix, num_to_str_count=num_to_str_count):
+def generate_filters(
+    df,
+    prefix,
+    num_to_str_count=num_to_str_count,
+    config=None,
+    exclude_cols=None,
+):
     """
     Generate a dictionary of dashboard options from dataframe.
 
@@ -92,6 +104,10 @@ def generate_filters(df, prefix, num_to_str_count=num_to_str_count):
         Prefix for the dropdown options.
     num_to_str_count : int
         Number of unique values to convert to string.
+    config : dict
+        Configuration dictionary.
+    exclude_cols : list
+        List of columns to exclude from the dropdown options.
 
     Returns
     -------
@@ -108,8 +124,20 @@ def generate_filters(df, prefix, num_to_str_count=num_to_str_count):
     prefix_str_filter = f"{prefix}-str-filter"
     prefix_num_filter = f"{prefix}-num-filter"
 
+    columns = df.columns
+    if config:
+        config_dataset = config["datasets"][config["general"]["dataset"]]
+        config_columns = config_dataset["columns"]["features"]
+        columns = [col for col in columns if col in config_columns]
+
+    if exclude_cols:
+        columns = [col for col in columns if col not in exclude_cols]
+
+    if not columns:
+        return {}
+
     # create filters
-    for col in df.columns:
+    for col in columns:
         if isinstance(df[col][0], str):
             filter = dcc.Dropdown(
                 id={"type": prefix_str_filter, "index": col},

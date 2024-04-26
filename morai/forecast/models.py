@@ -842,7 +842,7 @@ class CBD:
         return np.log(a / (1 - a))
 
 
-def generate_table(model, mapping, feature_dict, params):
+def generate_table(model, mapping, feature_dict, params, grid=None):
     """
     Generate a 1-d mortality table based on model predictions.
 
@@ -856,6 +856,8 @@ def generate_table(model, mapping, feature_dict, params):
         The dictionary of features to use for the model
     params : dict
         The parameters to use for the model
+    grid : pd.DataFrame, optional
+        The grid to use for the table
 
     Returns
     -------
@@ -868,25 +870,35 @@ def generate_table(model, mapping, feature_dict, params):
         raise ValueError("model does not have a predict method")
 
     # remove unneeded keys
-    feature_dict = feature_dict.copy()
-    feature_dict.pop("target", None)
-    feature_dict.pop("weight", None)
+    feature_dict = {
+        k: v for k, v in feature_dict.items() if k not in ["target", "weight"]
+    }
 
-    # create the grid and drop the vals column
-    grid = tables.create_grid(mapping=mapping)
-    grid = grid.drop(columns=["vals"])
-    column_list = grid.columns.tolist()
+    # create the grid from the mapping
+    if grid is None:
+        grid = tables.create_grid(mapping=mapping)
+        grid = grid.drop(columns=["vals"])
+
+    # get the original order of the columns
+    model_cols = [col for cols in feature_dict.values() for col in cols]
+    model_data = grid.loc[:, model_cols]
+    model_data = tables.remove_duplicates(model_data, suppress_log=True)
+    logger.info(f"model data shape: {model_data.shape}")
 
     # preprocess the data and predict
-    preprocess_dict = preprocessors.preprocess_data(
-        model_data=grid, feature_dict=feature_dict, **params
-    )
-    table = preprocess_dict["md_encoded"]
-    table["vals"] = model.predict(table)
+    try:
+        preprocess_dict = preprocessors.preprocess_data(
+            model_data=model_data, feature_dict=feature_dict, **params
+        )
+        predictions = preprocess_dict["md_encoded"]
+        predictions["vals"] = model.predict(predictions)
+    except Exception as e:
+        raise ValueError("Error during preprocessing or prediction") from e
+    predictions = preprocessors.remap_values(df=predictions, mapping=mapping)
 
-    # remap the values
-    table = preprocessors.remap_values(df=table, mapping=mapping)
-    table = table[[*column_list, "vals"]]
-    table = table.sort_values(by=table.columns.to_list())
+    # create the table
+    table = grid.merge(predictions, on=model_cols, how="left")
+    table = table.sort_index()
+    logger.info(f"table shape: {table.shape}")
 
     return table
