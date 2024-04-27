@@ -198,8 +198,8 @@ class MortTable:
 
         if extend:
             fill_keys = ["issue_age", "attained_age"]
+            missing = len(mort_table[mort_table["vals"].isnull()])
             for key in fill_keys:
-                missing = len(mort_table[mort_table["vals"].isnull()])
                 grouped = mort_table.groupby([key, *extra_dims_keys], group_keys=False)
                 mort_table["vals"] = grouped["vals"].apply(
                     lambda x: x.astype(float).ffill().bfill()
@@ -207,7 +207,6 @@ class MortTable:
 
         logger.info(f"Created table that has the following dims: {dims}")
         logger.info(f"Table has {len(mort_table)} cells.")
-        logger.info(f"combinations: {combinations}")
         logger.info(f"tables: {table_list}")
         if juv_table_id:
             logger.info(f"juveniles: {juv_list}")

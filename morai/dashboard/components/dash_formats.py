@@ -28,7 +28,7 @@ def get_column_defs(table):
                 {
                     "field": col,
                     "headerName": col,
-                    "valueFormatter": {"function": "d3.format(',.4f')(params.value)"},
+                    "valueFormatter": {"function": "d3.format(',.5f')(params.value)"},
                 }
             )
         # update integer columns

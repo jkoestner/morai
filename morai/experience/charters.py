@@ -446,6 +446,7 @@ def pdp(
     secondary=None,
     mapping=None,
     x_bins=None,
+    quick=False,
     display=True,
 ):
     """
@@ -483,6 +484,9 @@ def pdp(
         values.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
+    quick : bool, optional (default=False)
+        Whether to use a quicker method for pdp, however the results may not be as
+        accurate.
     display : bool, optional (default=True)
         Whether to display figure or now.
 
@@ -527,10 +531,9 @@ def pdp(
     if not model_features:
         raise ValueError("Model does not have feature names.")
     logger.debug(f"Model features for pdp: {model_features}")
-    X = df[model_features]
 
-    # check X is not empty
-    if X.empty:
+    # check df is not empty
+    if df[model_features].empty:
         raise ValueError("DataFrame is empty.")
 
     # x_axis processing
@@ -538,14 +541,18 @@ def pdp(
     if mapping and x_axis in mapping:
         x_axis_type = mapping[x_axis]["type"]
         if x_axis_type == "ohe":
-            x_axis_cols = [col for col in X.columns if col.startswith(x_axis + "_")]
+            x_axis_cols = [col for col in df.columns if col.startswith(x_axis + "_")]
             x_axis_values = [col[len(x_axis + "_") :] for col in x_axis_cols]
         else:
-            x_axis_values = list(X[x_axis].unique())
-    elif x_axis in X.select_dtypes(exclude=[np.number]).columns.tolist():
-        x_axis_values = list(X[x_axis].unique())
+            x_axis_values = list(df[x_axis].unique())
+    elif x_axis in df.select_dtypes(exclude=[np.number]).columns:
+        x_axis_values = list(df[x_axis].unique())
     else:
-        x_axis_values = np.linspace(X[x_axis].min(), X[x_axis].max(), 100)
+        # linspace is creating float falues
+        if pd.api.types.is_integer_dtype(df[x_axis].dtype):
+            df[x_axis] = df[x_axis].astype(float)
+        x_axis_values = np.linspace(df[x_axis].min(), df[x_axis].max(), 100)
+    X = df[model_features]
 
     # line_color processing
     if line_color:
@@ -566,6 +573,11 @@ def pdp(
             .reset_index()
             .sort_values(by=grouped_features)
         )
+
+    # quick method for pdp
+    if quick:
+        logger.warning("Using a quick method for pdp. Results may not be as accurate.")
+        X_temp = X.apply(lambda x: helpers._weighted_mean(x, weights=weights))
 
     # calculate predictions of feature by looping through the feature values
     # and using the average of the other features
@@ -593,8 +605,11 @@ def pdp(
                 X_temp = X_temp.to_frame().T
 
             # predict the value and then average the predictions
-            pred = model.predict(X_temp)
-            pred = helpers._weighted_mean(pred, weights=weights)
+            if quick:
+                pred = model.predict(X_temp)[0]
+            else:
+                pred = model.predict(X_temp)
+                pred = helpers._weighted_mean(pred, weights=weights)
             pred_dict = {
                 x_axis: value,
                 line_color: line_value,
