@@ -767,6 +767,7 @@ def target(
     numerator=None,
     denominator=None,
     normalize=None,
+    add_line=False,
 ):
     """
     Create multiplot showing variable relationship with target.
@@ -779,18 +780,20 @@ def target(
     ----------
     df : pd.DataFrame
         The DataFrame to use.
-    target : str
+    target : list
         The target variable.
     features : list, optional
         The features to use for the plot. Default is to use all features.
     cols : int, optional
         The number of columns to use for the subplots.
-    numerator : str, optional
+    numerator : list, optional
         The column name to use for the numerator values.
-    denominator : str, optional
+    denominator : list, optional
         The column name to use for the expected values.
     normalize : list, optional
         The columns to normalize.
+    add_line : bool, optional
+        Whether to add a line to the chart at y-axis of 1.
 
     Returns
     -------
@@ -803,76 +806,139 @@ def target(
         features = df.columns
     if normalize is None:
         normalize = []
-    use_num_and_den = True if numerator and denominator else False
+    features = [*features, "_aggregate"]
+    df.loc[:, "_aggregate"] = 1
 
     # validations
-    if target not in [*list(df.columns), "ratio", "risk"]:
-        raise ValueError(
-            f"Target '{target}' needs to be in DataFrame columns, 'ratio', or 'risk'"
+    if len(target) != len(denominator) and len(denominator) != 0:
+        logger.debug(
+            f"Target is updated to match denominator length: {len(denominator)}"
         )
+        target = [target[0]] * len(denominator)
+    if len(numerator) != len(denominator) and len(denominator) != 0:
+        logger.debug(
+            f"Numerator is updated to match denominator length: {len(denominator)}"
+        )
+        numerator = [numerator[0]] * len(denominator)
     if not set(features).issubset(df.columns):
         missing_features = set(features) - set(df.columns)
         raise ValueError(f"Features {missing_features} not in DataFrame columns.")
     if not set(normalize).issubset(df.columns):
         missing_features = set(normalize) - set(df.columns)
         raise ValueError(f"Normalize {missing_features} not in DataFrame columns.")
-    if target in ["ratio", "risk"] and (numerator is None or denominator is None):
-        raise ValueError("Numerator/Denominator is required for ratio or risk target.")
+
+    for idx, _ in enumerate(target):
+        if target[idx] not in [*list(df.columns), "ratio", "risk"]:
+            raise ValueError(
+                f"Target '{target[idx]}' needs to be in DataFrame columns, "
+                f"'ratio', or 'risk'"
+            )
+        if target[idx] in ["ratio", "risk"] and (
+            numerator[idx] is None or denominator[idx] is None
+        ):
+            raise ValueError(
+                "Numerator/Denominator is required for ratio or risk target."
+            )
+        if target[idx] not in ["ratio", "risk"] and (
+            numerator[idx] or denominator[idx]
+        ):
+            logger.warning(
+                "Parameters 'numerator' and 'denominator' are ignored if target is "
+                "not 'ratio' or 'risk'."
+            )
 
     # normalize if requested
     if normalize:
-        df = experience.normalize(
-            df, features=normalize, numerator=numerator, denominator=denominator
-        )
-        numerator = f"{numerator}_norm"
+        for idx, _ in enumerate(target):
+            df = experience.normalize(
+                df,
+                features=normalize,
+                numerator=numerator[idx],
+                denominator=denominator[idx],
+                suffix=f"{idx}",
+            )
+            numerator[idx] = f"{numerator[idx]}_norm_{idx}"
 
-    # Number of rows for the subplot grid
+    # number of rows for the subplot grid
     num_plots = len(features)
     num_rows = math.ceil(num_plots / cols)
 
-    # Create a subplot grid
+    # create a subplot grid
     fig = make_subplots(rows=num_rows, cols=cols, subplot_titles=features)
+    legend_added = set()
+    # color scale to cycel through
+    # https://plotly.com/python/discrete-color/
+    color_scale = px.colors.qualitative.D3
 
-    # Create each plot
+    # create each plot for the feature
     for i, feature in enumerate(features, 1):
         row = (i - 1) // cols + 1
         col = (i - 1) % cols + 1
 
-        if use_num_and_den and target == "ratio":
-            grouped_data = (
-                df.groupby(feature, observed=True)[[numerator, denominator]]
-                .sum()
-                .reset_index()
-            ).sort_values(by=feature)
-            grouped_data[target] = grouped_data[numerator] / grouped_data[denominator]
-        elif use_num_and_den and target == "risk":
-            grouped_data = (
-                df.groupby(feature, observed=True)[[numerator, denominator]]
-                .sum()
-                .reset_index()
-            ).sort_values(by=feature)
-            total_target = (
-                grouped_data[numerator].sum() / grouped_data[denominator].sum()
-            )
-            grouped_data[target] = (
-                grouped_data[numerator] / grouped_data[denominator]
-            ) / total_target
-        else:
-            grouped_data = (
-                df.groupby(feature, observed=True)[target].mean().reset_index()
-            ).sort_values(by=feature)
-        fig.add_trace(
-            go.Scatter(
-                x=grouped_data[feature],
-                y=grouped_data[target],
-                mode="lines",
-                name=feature,
-            ),
-            row=row,
-            col=col,
-        )
+        # create line for targets
+        for idx, _ in enumerate(target):
+            if target[idx] in ["ratio", "risk"]:
+                grouped_data = (
+                    df.groupby(feature, observed=True)[
+                        [numerator[idx], denominator[idx]]
+                    ]
+                    .sum()
+                    .reset_index()
+                )
+                if target[idx] == "ratio":
+                    grouped_data[target[idx]] = (
+                        grouped_data[numerator[idx]] / grouped_data[denominator[idx]]
+                    )
+                elif target[idx] == "risk":
+                    grouped_data[target[idx]] = (
+                        grouped_data[numerator[idx]] / grouped_data[denominator[idx]]
+                    ) / (df[numerator[idx]].sum() / df[denominator[idx]].sum())
+            else:
+                grouped_data = (
+                    df.groupby(feature, observed=True)[target[idx]].mean().reset_index()
+                )
 
-    # Update layout
+            # adding trace for current target within the subplot for the feature
+            target_name = f"{target[idx]}_{idx}"
+            fig.add_trace(
+                go.Scatter(
+                    x=grouped_data[feature],
+                    y=grouped_data[target[idx]],
+                    mode="lines" if not feature == "_aggregate" else "markers",
+                    name=target_name,
+                    line={"color": color_scale[idx % len(color_scale)]},
+                    showlegend=target_name not in legend_added,
+                ),
+                row=row,
+                col=col,
+            )
+            # add trace for line
+            if add_line:
+                line_name = "y=1"
+                if pd.api.types.is_numeric_dtype(grouped_data[feature]):
+                    add_line_x = [
+                        grouped_data[feature].min(),
+                        grouped_data[feature].max(),
+                    ]
+                else:
+                    add_line_x = sorted(grouped_data[feature].unique())
+                    add_line_x = [add_line_x[0], add_line_x[-1]]
+                fig.add_trace(
+                    go.Scatter(
+                        x=add_line_x,
+                        y=[1, 1],
+                        mode="lines",
+                        line={"dash": "dot", "color": "grey"},
+                        name=line_name,
+                        showlegend=line_name not in legend_added,
+                    ),
+                    row=row,
+                    col=col,
+                )
+                legend_added.add(line_name)
+            legend_added.add(target_name)
+
+    # update layout
     fig.update_layout(
         height=chart_height * num_rows,
         width=chart_width,
