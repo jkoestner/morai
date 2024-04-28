@@ -486,7 +486,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "pdp_weight_selector"},
                     options=config_dataset["columns"]["measures"],
-                    value=None,
+                    value=config_dataset["defaults"]["denominator"],
                     placeholder="Select Weight",
                 ),
             ],

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from joblib import Parallel, delayed
 from plotly.subplots import make_subplots
 
 from morai.experience import experience
@@ -447,6 +448,7 @@ def pdp(
     mapping=None,
     x_bins=None,
     quick=False,
+    parallel=False,
     display=True,
 ):
     """
@@ -487,6 +489,8 @@ def pdp(
     quick : bool, optional (default=False)
         Whether to use a quicker method for pdp, however the results may not be as
         accurate.
+    parallel : bool, optional (default=False)
+        Whether to use parallel processing for the pdp.
     display : bool, optional (default=True)
         Whether to display figure or now.
 
@@ -505,6 +509,7 @@ def pdp(
     # initialize variables
     x_axis_type = "passthrough"
     line_color_type = "passthrough"
+    x_axis_cols = None
 
     grouped_features = [x_axis]
     weights = None
@@ -577,49 +582,63 @@ def pdp(
     # quick method for pdp
     if quick:
         logger.warning("Using a quick method for pdp. Results may not be as accurate.")
-        X_temp = X.apply(lambda x: helpers._weighted_mean(x, weights=weights))
+        # check which columns are not numeric
+        str_cols = X.select_dtypes(exclude=[np.number]).columns.to_list()
+        if str_cols:
+            logger.warning(
+                f"quick method only works with numeric columns."
+                f"string columns: {str_cols}"
+            )
+            quick = False
+        else:
+            X = (
+                X.apply(lambda x: helpers._weighted_mean(x, weights=weights))
+                .to_frame()
+                .T
+            )
 
     # get the amount of iterations needed by getting combo of x_axis and line_color
     logger.info(f"Creating {len(x_axis_values) * len(line_color_values)} predictions.")
 
     # calculate predictions of feature by looping through the feature values
     # and using the average of the other features
-    preds = []
-    for line_value in line_color_values:
-        for value in x_axis_values:
-            X_temp = X.copy()
-
-            # ohe zeros out the encoded columns and steps through the values
-            if x_axis_type == "ohe":
-                for col in x_axis_cols:
-                    X_temp[col] = 0
-                X_temp[x_axis + "_" + value] = 1
-            else:
-                # avoiding changing category dtype
-                X_temp.iloc[:, X_temp.columns.get_loc(x_axis)] = value
-
-            # creating line_color values
-            if line_color and line_color != "Overall":
-                # avoiding changing category dtype
-                X_temp.iloc[:, X_temp.columns.get_loc(line_color)] = line_value
-
-            # change series to dataframe
-            if isinstance(X_temp, pd.Series):
-                X_temp = X_temp.to_frame().T
-
-            # predict the value and then average the predictions
-            if quick:
-                pred = model.predict(X_temp)[0]
-            else:
-                pred = model.predict(X_temp)
-                pred = helpers._weighted_mean(pred, weights=weights)
-            pred_dict = {
-                x_axis: value,
-                line_color: line_value,
-                "pred": pred,
-            }
-            preds.append(pred_dict)
-            logger.debug(f"predicted color [{line_value}] value [{value}]: {pred}")
+    if parallel:
+        verbose = 0
+        if custom_logger.get_log_level() == "DEBUG":
+            verbose = 10
+        preds = Parallel(n_jobs=-1, verbose=verbose)(
+            delayed(_pdp_make_prediction)(
+                model,
+                X,
+                x_axis,
+                x_axis_type,
+                x_axis_cols,
+                value,
+                line_color,
+                line_value,
+                quick,
+                weights,
+            )
+            for line_value in line_color_values
+            for value in x_axis_values
+        )
+    else:
+        preds = []
+        for line_value in line_color_values:
+            for value in x_axis_values:
+                pred = _pdp_make_prediction(
+                    model,
+                    X,
+                    x_axis,
+                    x_axis_type,
+                    x_axis_cols,
+                    value,
+                    line_color,
+                    line_value,
+                    quick,
+                    weights,
+                )
+                preds.append(pred)
 
     pdp_df = pd.DataFrame(preds)
 
@@ -951,3 +970,45 @@ def target(
     )
 
     return fig
+
+
+def _pdp_make_prediction(
+    model,
+    X,
+    x_axis,
+    x_axis_type,
+    x_axis_cols,
+    value,
+    line_color,
+    line_value,
+    quick,
+    weights,
+):
+    """Make predictions for PDP."""
+    X_temp = X.copy()
+
+    # Handle one-hot encoding
+    if x_axis_type == "ohe":
+        for col in x_axis_cols:
+            X_temp[col] = 0
+        X_temp[x_axis + "_" + value] = 1
+    else:
+        X_temp.iloc[:, X_temp.columns.get_loc(x_axis)] = value
+
+    # Set line color values
+    if line_color and line_color != "Overall":
+        X_temp.iloc[:, X_temp.columns.get_loc(line_color)] = line_value
+
+    # Make predictions
+    if quick:
+        pred = model.predict(X_temp)[0]
+    else:
+        pred = model.predict(X_temp)
+        pred = helpers._weighted_mean(pred, weights=weights)
+    logger.debug(f"predicted color [{line_value}] value [{value}]: {pred}")
+
+    return {
+        x_axis: value,
+        line_color: line_value,
+        "pred": pred,
+    }

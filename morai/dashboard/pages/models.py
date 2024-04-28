@@ -64,6 +64,15 @@ def layout():
                 icon="danger",
                 style={"position": "fixed", "top": 100, "right": 10, "width": 350},
             ),
+            dbc.Toast(
+                ("Column was not included in model"),
+                id="toast-pdp-no-column",
+                header="Input Error",
+                is_open=False,
+                dismissable=True,
+                icon="danger",
+                style={"position": "fixed", "top": 100, "right": 10, "width": 350},
+            ),
             dbc.Accordion(
                 [
                     dbc.AccordionItem(
@@ -131,6 +140,7 @@ def layout():
                                             type="dot",
                                             children=html.Div(id="pdp-chart"),
                                         ),
+                                        style={"overflow": "auto"},
                                         width=8,
                                     ),
                                     dbc.Col(
@@ -433,15 +443,15 @@ def clicked_cell_target_dictionary(cell, model_data, config):
         target="ratio",
         cols=3,
         features=features,
-        numerator=numerator,
-        denominator=denmoninator,
+        numerator=[numerator],
+        denominator=[denmoninator],
     )
 
     return dcc.Graph(figure=target_chart)
 
 
 @callback(
-    Output("pdp-chart", "children"),
+    [Output("pdp-chart", "children"), Output("toast-pdp-no-column", "is_open")],
     Input("button-pdp", "n_clicks"),
     [
         State("store-model-results", "data"),
@@ -499,16 +509,29 @@ def display_pdp(
     mapping = preprocess_dict["mapping"]
     md_encoded = preprocess_dict["md_encoded"]
 
+    # get parameters from config
+    line_color = dh._inputs_parse_id(states_info, "color_selector")
+    weight = dh._inputs_parse_id(states_info, "weights_selector")
+    secondary = dh._inputs_parse_id(states_info, "secondary_selector")
+    x_bins = dh._inputs_parse_id(states_info, "x_bins_selector")
+
+    # verify parameters are in the model
+    if not any(
+        col in mapping.keys() for col in [x_axis_col, line_color, weight, secondary]
+    ):
+        return dash.no_update, True
+
     # create pdp
     pdp_chart = charters.pdp(
         model=model,
         df=md_encoded,
         x_axis=x_axis_col,
-        line_color=dh._inputs_parse_id(states_info, "color_selector"),
-        weight=dh._inputs_parse_id(states_info, "weights_selector"),
-        secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
+        line_color=line_color,
+        weight=weight,
+        secondary=secondary,
         mapping=mapping,
-        x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
+        x_bins=x_bins,
+        quick=True,
     )
 
-    return dcc.Graph(figure=pdp_chart)
+    return dcc.Graph(figure=pdp_chart), False
