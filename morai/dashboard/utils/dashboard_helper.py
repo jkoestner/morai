@@ -71,14 +71,12 @@ def filter_data(df, callback_context, num_to_str_count=num_to_str_count):
     for col in str_cols:
         str_values = _inputs_parse_id(callback_context, col)
         if str_values:
-            print(f"{col} and {str_values}")
             filtered_df = filtered_df[filtered_df[col].isin(str_values)]
 
     # filter numeric columns
     for col in num_cols:
         num_values = _inputs_parse_id(callback_context, col)
         if num_values:
-            print(f"{col} and {num_values}")
             filtered_df = filtered_df[
                 (filtered_df[col] >= num_values[0])
                 & (filtered_df[col] <= num_values[1])
@@ -356,6 +354,22 @@ def generate_selectors(
             if selector_dict.get("color") == True
             else {"display": "none"},
         ),
+        html.Div(
+            id={"type": prefix_group, "index": "target"},
+            children=[
+                html.Label("Target"),
+                dcc.Dropdown(
+                    id={"type": prefix_selector, "index": "target_selector"},
+                    options=["ratio", "risk"] + config_dataset["columns"]["measures"],
+                    value=config["defaults"]["y_axis"],
+                    clearable=False,
+                    placeholder="Select Target",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("target") == True
+            else {"display": "none"},
+        ),
         # additional options
         html.H5("Additional Options"),
         html.Div(
@@ -478,6 +492,38 @@ def generate_selectors(
             ],
             style={"display": "block"}
             if selector_dict.get("pdp_weight") == True
+            else {"display": "none"},
+        ),
+        html.Div(
+            id={"type": prefix_group, "index": "multi_numerator"},
+            children=[
+                html.Label("Multi Numerator"),
+                dcc.Dropdown(
+                    id={"type": prefix_selector, "index": "multi_numerator_selector"},
+                    options=config_dataset["columns"]["measures"],
+                    value=[config["defaults"]["numerator"]],
+                    multi=True,
+                    placeholder="Select Numerators",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("multi_numerator") == True
+            else {"display": "none"},
+        ),
+        html.Div(
+            id={"type": prefix_group, "index": "multi_denominator"},
+            children=[
+                html.Label("Multi Denominator"),
+                dcc.Dropdown(
+                    id={"type": prefix_selector, "index": "multi_denominator_selector"},
+                    options=config_dataset["columns"]["measures"],
+                    value=[config["defaults"]["denominator"]],
+                    multi=True,
+                    placeholder="Select Denominators",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("multi_denominator") == True
             else {"display": "none"},
         ),
     ]

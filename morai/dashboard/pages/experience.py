@@ -78,7 +78,7 @@ def layout():
                             html.Label("tool selector", style={"margin": "10px"}),
                             dcc.Dropdown(
                                 id="tool-selector",
-                                options=["chart", "compare"],
+                                options=["chart", "compare", "target"],
                                 value="chart",
                                 clearable=False,
                                 placeholder="Select Tool",
@@ -205,10 +205,13 @@ def load_data(dataset, config):
         selector_dict={
             "x_axis": True,
             "y_axis": True,
+            "target": False,
             "color": True,
             "chart_type": True,
             "numerator": True,
             "denominator": True,
+            "multi_numerator": False,
+            "multi_denominator": False,
             "secondary": True,
             "x_bins": True,
             "add_line": True,
@@ -309,7 +312,7 @@ def update_tab_content(
                 secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
                 x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
             )
-        else:
+        elif tool == "chart":
             chart = charters.chart(
                 df=filtered_df,
                 x_axis=x_axis,
@@ -331,6 +334,17 @@ def update_tab_content(
                     x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 )
                 chart_secondary = dcc.Graph(figure=chart_secondary)
+        elif tool == "target":
+            chart = charters.target(
+                df=filtered_df,
+                target=[dh._inputs_parse_id(states_info, "target_selector")],
+                features=config_dataset["columns"]["features"],
+                numerator=dh._inputs_parse_id(states_info, "multi_numerator_selector"),
+                denominator=dh._inputs_parse_id(
+                    states_info, "multi_denominator_selector"
+                ),
+                add_line=dh._inputs_parse_id(states_info, "add_line_selector"),
+            )
 
         tab_content = dcc.Graph(figure=chart)
 
@@ -345,7 +359,7 @@ def update_tab_content(
                 x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 display=False,
             )
-        else:
+        elif tool == "chart":
             table = charters.chart(
                 df=filtered_df,
                 x_axis=x_axis,
@@ -357,6 +371,9 @@ def update_tab_content(
                 x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 display=False,
             )
+        elif tool == "target":
+            # give blank table
+            table = filtered_df.head(0)
 
         columnDefs = dash_formats.get_column_defs(table)
         tab_content = dag.AgGrid(
@@ -412,11 +429,19 @@ def toggle_tool(tool, all_selectors):
         "secondary",
         "x_bins",
     ]
+    target_selectors = [
+        "target",
+        "multi_numerator",
+        "multi_denominator",
+        "add_line",
+    ]
     # determine which selectors to toggle
     if tool == "chart":
         show_selectors = chart_selectors
     elif tool == "compare":
         show_selectors = compare_selectors
+    elif tool == "target":
+        show_selectors = target_selectors
     else:
         return [dash.no_update for _ in all_selectors]
 
