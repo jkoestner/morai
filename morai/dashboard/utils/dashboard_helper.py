@@ -299,7 +299,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "x_axis_selector"},
                     options=config_dataset["columns"]["features"],
-                    value=config["defaults"]["x_axis"],
+                    value=config_dataset["defaults"]["x_axis"],
                     clearable=False,
                     placeholder="Select X-Axis",
                 ),
@@ -315,7 +315,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "y_axis_selector"},
                     options=["ratio", "risk"] + config_dataset["columns"]["measures"],
-                    value=config["defaults"]["y_axis"],
+                    value=config_dataset["defaults"]["y_axis"],
                     clearable=False,
                     placeholder="Select Y-Axis",
                 ),
@@ -361,7 +361,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "target_selector"},
                     options=["ratio", "risk"] + config_dataset["columns"]["measures"],
-                    value=config["defaults"]["y_axis"],
+                    value=config_dataset["defaults"]["y_axis"],
                     clearable=False,
                     placeholder="Select Target",
                 ),
@@ -379,7 +379,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "numerator_selector"},
                     options=config_dataset["columns"]["measures"],
-                    value=config["defaults"]["numerator"],
+                    value=config_dataset["defaults"]["numerator"],
                     placeholder="Select Numerator",
                 ),
             ],
@@ -394,7 +394,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "denominator_selector"},
                     options=config_dataset["columns"]["measures"],
-                    value=config["defaults"]["denominator"],
+                    value=config_dataset["defaults"]["denominator"],
                     placeholder="Select Denominator",
                 ),
             ],
@@ -453,7 +453,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "rates_selector"},
                     options=config_dataset["columns"]["rates"],
-                    value=config["defaults"]["rates"],
+                    value=config_dataset["defaults"]["rates"],
                     clearable=False,
                     multi=True,
                     placeholder="Select Rates",
@@ -470,7 +470,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "weights_selector"},
                     options=config_dataset["columns"]["measures"],
-                    value=config["defaults"]["weights"],
+                    value=config_dataset["defaults"]["weights"],
                     multi=True,
                     placeholder="Select Weights",
                 ),
@@ -501,7 +501,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "multi_numerator_selector"},
                     options=config_dataset["columns"]["measures"],
-                    value=[config["defaults"]["numerator"]],
+                    value=[config_dataset["defaults"]["numerator"]],
                     multi=True,
                     placeholder="Select Numerators",
                 ),
@@ -517,7 +517,7 @@ def generate_selectors(
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "multi_denominator_selector"},
                     options=config_dataset["columns"]["measures"],
-                    value=[config["defaults"]["denominator"]],
+                    value=[config_dataset["defaults"]["denominator"]],
                     multi=True,
                     placeholder="Select Denominators",
                 ),

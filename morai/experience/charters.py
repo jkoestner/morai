@@ -579,6 +579,9 @@ def pdp(
         logger.warning("Using a quick method for pdp. Results may not be as accurate.")
         X_temp = X.apply(lambda x: helpers._weighted_mean(x, weights=weights))
 
+    # get the amount of iterations needed by getting combo of x_axis and line_color
+    logger.info(f"Creating {len(x_axis_values) * len(line_color_values)} predictions.")
+
     # calculate predictions of feature by looping through the feature values
     # and using the average of the other features
     preds = []
@@ -780,7 +783,7 @@ def target(
     ----------
     df : pd.DataFrame
         The DataFrame to use.
-    target : list
+    target : list or str
         The target variable.
     features : list, optional
         The features to use for the plot. Default is to use all features.
@@ -808,6 +811,8 @@ def target(
         normalize = []
     features = [*features, "_aggregate"]
     df.loc[:, "_aggregate"] = 1
+    if isinstance(target, str):
+        target = [target]
 
     # validations
     if len(target) != len(denominator) and len(denominator) != 0:

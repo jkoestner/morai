@@ -134,7 +134,7 @@ def update_charts(pathname, dataset, config):
         dataset,
         cols=3,
         features=num_cols,
-        sum_var="amount_exposed",
+        sum_var=config_dataset["columns"]["exposure_amt"],
     )
 
     chart_freq_cat = charters.frequency(dataset, cols=3, sum_var="amount_exposed")
@@ -144,8 +144,8 @@ def update_charts(pathname, dataset, config):
         target="risk",
         cols=3,
         features=features,
-        numerator="death_claim_amount",
-        denominator="amount_exposed",
+        numerator=[config_dataset["defaults"]["numerator"]],
+        denominator=[config_dataset["defaults"]["denominator"]],
     )
 
     chart_freq_num = dcc.Graph(figure=chart_freq_num)

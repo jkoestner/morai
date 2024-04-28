@@ -35,6 +35,15 @@ datasets:
       expecteds_amt: exp_amt_vbt15
       actuals_cnt: death_count
       exposure_cnt: policies_exposed
+    defaults:
+      numerator: death_claim_amount
+      denominator: amount_exposed
+      x_axis: observation_year
+      y_axis: ratio
+      rates:
+      - ae_vbt15
+      weights:
+      - exp_amt_vbt15
   model_data:
     filename: model_data.parquet
     description: Mortality data that used the "mortality_grouped" as the source data.
@@ -93,12 +102,12 @@ datasets:
       expecteds_amt: exp_amt_vbt15
       actuals_cnt: death_count
       exposure_cnt: policies_exposed
-defaults:
-  numerator: death_claim_amount
-  denominator: amount_exposed
-  x_axis: observation_year
-  y_axis: ratio
-  rates:
-  - ae_vbt15
-  weights:
-  - exp_amt_vbt15
+    defaults:
+      numerator: death_claim_amount
+      denominator: amount_exposed
+      x_axis: observation_year
+      y_axis: ratio
+      rates:
+      - ae_vbt15
+      weights:
+      - exp_amt_vbt15
