@@ -143,6 +143,7 @@ class ModelResults:
 
     def __init__(self, filepath=None, metrics=None):
         self.filepath = filepath
+
         # load model results from file
         if filepath is not None:
             filepath = helpers.test_path(filepath)
@@ -157,13 +158,21 @@ class ModelResults:
             scorecard_df = pd.read_json(
                 StringIO(json.dumps(data["scorecard"])), orient="split"
             )
+            scorecard_df.columns = pd.MultiIndex.from_tuples(scorecard_df.columns)
+            importance_df = pd.read_json(
+                StringIO(json.dumps(data["importance"])), orient="split"
+            )
 
             self.model = model_df
             self.scorecard = scorecard_df
-            self.metrics = scorecard_df.columns.tolist().remove("model_name")
+            self.importance = importance_df
+            self.metrics = list(
+                {col[1] for col in scorecard_df.columns if col[1] != ""}
+            )
         else:
             self.model = pd.DataFrame()
             self.scorecard = pd.DataFrame()
+            self.importance = pd.DataFrame()
             self.metrics = metrics
 
     def add_model(
@@ -171,10 +180,10 @@ class ModelResults:
         model_name,
         data_path,
         data_shape,
-        feature_dict,
+        preprocess_dict,
+        model_params,
         scorecard,
-        preprocess_params=None,
-        model_params=None,
+        importance=None,
     ):
         """
         Add the model.
@@ -187,14 +196,14 @@ class ModelResults:
             The data path
         data_shape : tuple
             The data shape
-        feature_dict : dict
-            The feature dictionary
+        preprocess_dict : dict
+            The preprocess dictionary
+        model_params : dict
+            The model parameters
         scorecard : pd.DataFrame
             The scorecard row
-        preprocess_params : dict, optional (default=None)
-            The preprocessing parameters
-        model_params : dict, optional (default=None)
-            The model parameters
+        importance : pd.DataFrame, optional (default=None)
+            The importance of the features
 
         Returns
         -------
@@ -209,7 +218,18 @@ class ModelResults:
             return
 
         logger.info(f"Adding model '{model_name}'")
-        # adding model row
+
+        # check if preprocess_dict is None
+        if preprocess_dict is None:
+            preprocess_params = None
+            feature_dict = None
+            model_features = None
+        else:
+            preprocess_params = preprocess_dict["params"]
+            feature_dict = preprocess_dict["feature_dict"]
+            model_features = preprocess_dict["model_features"]
+
+        # initialize model row
         model_row = pd.DataFrame(
             [
                 {
@@ -219,22 +239,38 @@ class ModelResults:
                     "preprocess_params": preprocess_params,
                     "feature_dict": feature_dict,
                     "model_params": model_params,
+                    "model_features": model_features,
                     "date_added": pd.Timestamp.now(),
                 }
             ]
         ).dropna(axis="columns", how="all")
-        # adding scorecard row
+
+        # initialize scorecard row and put model_name in the first column
         scorecard_row = scorecard.dropna(axis="columns", how="all")
         scorecard_row.insert(0, "model_name", model_name)
+
+        # initialize importance row
+        importance_row = pd.DataFrame(
+            [
+                {
+                    "model_name": model_name,
+                    "importance": importance,
+                }
+            ]
+        ).dropna(axis="columns", how="all")
 
         # appending to the model and scorecard
         if self.model.empty or self.scorecard.empty:
             self.model = model_row
             self.scorecard = scorecard_row
+            self.importance = importance_row
         else:
             self.model = pd.concat([self.model, model_row], ignore_index=True)
             self.scorecard = pd.concat(
                 [self.scorecard, scorecard_row], ignore_index=True
+            )
+            self.importance = pd.concat(
+                [self.importance, importance_row], ignore_index=True
             )
 
     def remove_model(self, model_name):
@@ -254,6 +290,7 @@ class ModelResults:
         logger.info(f"Removing model '{model_name}'")
         self.model = self.model[self.model["model_name"] != model_name]
         self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
+        self.importance = self.importance[self.importance["model_name"] != model_name]
 
     def save_model(self, filepath=None):
         """
@@ -283,11 +320,29 @@ class ModelResults:
         # saving the results
         model_json = json.loads(self.model.to_json(orient="split", index=False))
         scorecard_json = json.loads(self.scorecard.to_json(orient="split", index=False))
-        model_results = {"model": model_json, "scorecard": scorecard_json}
+        importance_json = json.loads(
+            self.importance.to_json(orient="split", index=False)
+        )
+        model_results = {
+            "model": model_json,
+            "scorecard": scorecard_json,
+            "importance": importance_json,
+        }
         with open(filepath, "w") as file:
             json.dump(model_results, file, indent=4)
 
-    def get_scorecard(self, y_true, y_pred, metrics=None, model=None, **kwargs):
+    def get_scorecard(
+        self,
+        y_true_train,
+        y_pred_train,
+        weights_train=None,
+        y_true_test=None,
+        y_pred_test=None,
+        weights_test=None,
+        metrics=None,
+        model=None,
+        **kwargs,
+    ):
         """
         Get the metrics.
 
@@ -302,10 +357,18 @@ class ModelResults:
 
         Parameters
         ----------
-        y_true : series
+        y_true_train : series
             The actual column name
-        y_pred : series
+        y_pred_train : series
             The predicted column name
+        weights_train : series, optional (default=None)
+            The train weights column name
+        y_true_test : series, optional (default=None)
+            The test actual column name
+        y_pred_test : series, optional (default=None)
+            The test predicted column name
+        weights_test : series, optional (default=None)
+            The test weights column name
         model : model
             there are some models that provide metrics which we can use
         metrics : list
@@ -321,28 +384,63 @@ class ModelResults:
         """
         if metrics is None:
             metrics = self.metrics
-        metric_dict = {}
-        for metric in metrics:
-            if metric == "smape":
-                metric_dict[metric] = smape(y_true, y_pred)
-            elif metric == "ae":
-                metric_dict[metric] = ae(y_true, y_pred)
-            elif metric == "aic":
-                try:
-                    metric_dict[metric] = model.aic if model is not None else None
-                except AttributeError:
-                    logger.error(
-                        f"Model {model} does not have AIC attribute, returning None"
-                    )
-                    metric_dict[metric] = None
-            else:
-                try:
-                    metric_dict[metric] = getattr(skm, metric)(y_true, y_pred, **kwargs)
-                except AttributeError:
-                    logger.error(f"Metric {metric} not found in sklearn.metrics")
-                    metric_dict[metric] = None
+        results = {}
 
-        scorecard = pd.DataFrame([metric_dict])
+        # apply weights to predictions
+        if weights_train is not None:
+            if weights_test is None:
+                raise ValueError("weights_test must be provided if weights_train is")
+            y_true_train = y_true_train * weights_train
+            y_pred_train = y_pred_train * weights_train
+            y_true_test = y_true_test * weights_test
+            y_pred_test = y_pred_test * weights_test
+
+        def calculate_metrics(y_true, y_pred, prefix):
+            metric_dict = {}
+            for metric in metrics:
+                if metric == "smape":
+                    metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred)
+                elif metric == "shape":
+                    metric_dict[f"{prefix}_{metric}"] = y_true.shape[0]
+                elif metric == "ae":
+                    metric_dict[f"{prefix}_{metric}"] = ae(y_true, y_pred)
+                elif metric == "aic":
+                    try:
+                        metric_dict[f"{prefix}_{metric}"] = (
+                            model.aic if model is not None else None
+                        )
+                    except AttributeError:
+                        logger.error(
+                            f"Model `{model}` does not have AIC attribute, "
+                            f"returning None"
+                        )
+                        metric_dict[f"{prefix}_{metric}"] = None
+                else:
+                    try:
+                        metric_dict[f"{prefix}_{metric}"] = getattr(skm, metric)(
+                            y_true, y_pred, **kwargs
+                        )
+                    except AttributeError:
+                        logger.error(f"Metric `{metric}` not found in sklearn.metrics")
+                        metric_dict[f"{prefix}_{metric}"] = None
+            return metric_dict
+
+        # calculate train
+        results.update(calculate_metrics(y_true_train, y_pred_train, "train"))
+
+        # calculate test if provided
+        if y_true_test is not None and y_pred_test is not None:
+            results.update(calculate_metrics(y_true_test, y_pred_test, "test"))
+
+        # create dataframe
+        scorecard = pd.DataFrame([results])
+        scorecard.columns = pd.MultiIndex.from_tuples(
+            [
+                (c.split("_", 1)[0], c.split("_", 1)[1]) if "_" in c else (c, "")
+                for c in scorecard.columns
+            ]
+        )
+
         return scorecard
 
     def check_duplicate_name(self, model_name):

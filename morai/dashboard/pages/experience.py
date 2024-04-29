@@ -26,14 +26,6 @@ logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/experience", title="morai - Experience", order=2)
 
-# create cards - TODO (make dynamic)
-card_list = [
-    "policies_exposed",
-    "death_count",
-    "amount_exposed",
-    "death_claim_amount",
-]
-
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
 #  | |   / _` | | | |/ _ \| | | | __|
@@ -86,7 +78,7 @@ def layout():
                             html.Label("tool selector", style={"margin": "10px"}),
                             dcc.Dropdown(
                                 id="tool-selector",
-                                options=["chart", "compare"],
+                                options=["chart", "compare", "target"],
                                 value="chart",
                                 clearable=False,
                                 placeholder="Select Tool",
@@ -102,7 +94,24 @@ def layout():
                     # selectors
                     dbc.Col(
                         html.Div(
-                            id="selectors",
+                            [
+                                html.Button(
+                                    "Update Content",
+                                    id="update-content-button",
+                                    n_clicks=0,
+                                    className="btn btn-primary",
+                                ),
+                                html.H5(
+                                    "Selectors",
+                                    style={
+                                        "border-bottom": "1px solid black",
+                                        "padding-bottom": "5px",
+                                    },
+                                ),
+                                html.Div(
+                                    id="chart-selectors",
+                                ),
+                            ],
                             className="m-2 bg-light border p-1",
                         ),
                         width=2,
@@ -150,7 +159,7 @@ def layout():
                                     className="btn btn-primary",
                                 ),
                                 html.Div(
-                                    id="filters",
+                                    id="chart-filters",
                                 ),
                             ],
                             className="m-2 bg-light border p-1",
@@ -174,8 +183,8 @@ def layout():
 @callback(
     [
         Output("store-exp-filter", "data"),
-        Output("selectors", "children"),
-        Output("filters", "children"),
+        Output("chart-selectors", "children"),
+        Output("chart-filters", "children"),
         Output("card", "children"),
     ],
     [Input("store-dataset", "data")],
@@ -189,13 +198,31 @@ def load_data(dataset, config):
     logger.debug("generate selectors and filters")
 
     # create filters and selectors
-    filter_dict = dh.generate_filters(dataset)
+    filter_dict = dh.generate_filters(df=dataset, prefix="chart", config=config)
     selectors_default = dh.generate_selectors(
-        df=dataset,
-        filter_dict=filter_dict,
         config=config,
+        prefix="chart",
+        selector_dict={
+            "x_axis": True,
+            "y_axis": True,
+            "target": False,
+            "color": True,
+            "chart_type": True,
+            "numerator": True,
+            "denominator": True,
+            "multi_numerator": False,
+            "multi_denominator": False,
+            "secondary": True,
+            "x_bins": True,
+            "add_line": True,
+            "rates": False,
+            "weights": False,
+        },
     )
     filters = filter_dict["filters"]
+
+    # create card
+    card_list = dh.get_card_list(config)
 
     card = dh.generate_card(
         df=dataset,
@@ -216,20 +243,23 @@ def load_data(dataset, config):
 @callback(
     [
         Output("tab-content", "children"),
-        Output("filtered-card", "children"),
         Output("chart-secondary", "children"),
+        Output("filtered-card", "children"),
+    ],
+    [
+        # tabs
+        Input("tabs", "active_tab"),
+        # update button
+        Input("update-content-button", "n_clicks"),
     ],
     [
         # tools
-        Input("tool-selector", "value"),
+        State("tool-selector", "value"),
         # selectors
-        Input({"type": "selector", "index": ALL}, "value"),
-        Input({"type": "str-filter", "index": ALL}, "value"),
-        Input({"type": "num-filter", "index": ALL}, "value"),
-        # tabs
-        Input("tabs", "active_tab"),
-    ],
-    [
+        State({"type": "chart-selector", "index": ALL}, "value"),
+        State({"type": "chart-str-filter", "index": ALL}, "value"),
+        State({"type": "chart-num-filter", "index": ALL}, "value"),
+        # stores
         State("store-dataset", "data"),
         State("store-exp-filter", "data"),
         State("store-config", "data"),
@@ -237,11 +267,12 @@ def load_data(dataset, config):
     prevent_initial_call=True,
 )
 def update_tab_content(
+    active_tab,
+    n_clicks,
     tool,
     selectors,
     str_filters,
     num_filters,
-    active_tab,
     dataset,
     filter_dict,
     config,
@@ -249,24 +280,18 @@ def update_tab_content(
     """Create chart and table for experience analysis."""
     logger.debug("creating tab content")
     config_dataset = config["datasets"][config["general"]["dataset"]]
-    # inputs
-    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
-    x_axis = dh._inputs_parse_id(inputs_info, "x_axis_selector")
-    y_axis = dh._inputs_parse_id(inputs_info, "y_axis_selector")
+
+    # callback context
+    states_info = dh._inputs_flatten_list(callback_context.states_list)
+    x_axis = dh._inputs_parse_id(states_info, "x_axis_selector")
+    y_axis = dh._inputs_parse_id(states_info, "y_axis_selector")
     chart_secondary = None
+
     # filter the dataset
-    filtered_df = dataset.copy()
-    for col in filter_dict["str_cols"]:
-        str_values = dh._inputs_parse_id(inputs_info, col)
-        if str_values:
-            filtered_df = filtered_df[filtered_df[col].isin(str_values)]
-    for col in filter_dict["num_cols"]:
-        num_values = dh._inputs_parse_id(inputs_info, col)
-        if num_values:
-            filtered_df = filtered_df[
-                (filtered_df[col] >= num_values[0])
-                & (filtered_df[col] <= num_values[1])
-            ]
+    filtered_df = dh.filter_data(df=dataset, callback_context=states_info)
+
+    # create cards
+    card_list = dh.get_card_list(config)
     filtered_card = dh.generate_card(
         df=filtered_df,
         card_list=card_list,
@@ -282,33 +307,44 @@ def update_tab_content(
             chart = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=dh._inputs_parse_id(inputs_info, "rates_selector"),
-                weights=dh._inputs_parse_id(inputs_info, "weights_selector"),
-                secondary=dh._inputs_parse_id(inputs_info, "secondary_selector"),
-                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                rates=dh._inputs_parse_id(states_info, "rates_selector"),
+                weights=dh._inputs_parse_id(states_info, "weights_selector"),
+                secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
+                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
             )
-        else:
+        elif tool == "chart":
             chart = charters.chart(
                 df=filtered_df,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                color=dh._inputs_parse_id(inputs_info, "color_selector"),
-                type=dh._inputs_parse_id(inputs_info, "chart_type_selector"),
-                numerator=dh._inputs_parse_id(inputs_info, "numerator_selector"),
-                denominator=dh._inputs_parse_id(inputs_info, "denominator_selector"),
-                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
-                add_line=dh._inputs_parse_id(inputs_info, "add_line_selector"),
+                color=dh._inputs_parse_id(states_info, "color_selector"),
+                type=dh._inputs_parse_id(states_info, "chart_type_selector"),
+                numerator=dh._inputs_parse_id(states_info, "numerator_selector"),
+                denominator=dh._inputs_parse_id(states_info, "denominator_selector"),
+                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
+                add_line=dh._inputs_parse_id(states_info, "add_line_selector"),
             )
-            if dh._inputs_parse_id(inputs_info, "secondary_selector"):
+            if dh._inputs_parse_id(states_info, "secondary_selector"):
                 chart_secondary = charters.chart(
                     df=filtered_df,
                     x_axis=x_axis,
-                    y_axis=dh._inputs_parse_id(inputs_info, "secondary_selector"),
-                    color=dh._inputs_parse_id(inputs_info, "color_selector"),
+                    y_axis=dh._inputs_parse_id(states_info, "secondary_selector"),
+                    color=dh._inputs_parse_id(states_info, "color_selector"),
                     type="bar",
-                    x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                    x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 )
                 chart_secondary = dcc.Graph(figure=chart_secondary)
+        elif tool == "target":
+            chart = charters.target(
+                df=filtered_df,
+                target=[dh._inputs_parse_id(states_info, "target_selector")],
+                features=config_dataset["columns"]["features"],
+                numerator=dh._inputs_parse_id(states_info, "multi_numerator_selector"),
+                denominator=dh._inputs_parse_id(
+                    states_info, "multi_denominator_selector"
+                ),
+                add_line=dh._inputs_parse_id(states_info, "add_line_selector"),
+            )
 
         tab_content = dcc.Graph(figure=chart)
 
@@ -317,24 +353,27 @@ def update_tab_content(
             table = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=dh._inputs_parse_id(inputs_info, "rates_selector"),
-                weights=dh._inputs_parse_id(inputs_info, "weights_selector"),
-                secondary=dh._inputs_parse_id(inputs_info, "secondary_selector"),
-                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                rates=dh._inputs_parse_id(states_info, "rates_selector"),
+                weights=dh._inputs_parse_id(states_info, "weights_selector"),
+                secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
+                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 display=False,
             )
-        else:
+        elif tool == "chart":
             table = charters.chart(
                 df=filtered_df,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                color=dh._inputs_parse_id(inputs_info, "color_selector"),
-                type=dh._inputs_parse_id(inputs_info, "chart_type_selector"),
-                numerator=dh._inputs_parse_id(inputs_info, "numerator_selector"),
-                denominator=dh._inputs_parse_id(inputs_info, "denominator_selector"),
-                x_bins=dh._inputs_parse_id(inputs_info, "x_bins_selector"),
+                color=dh._inputs_parse_id(states_info, "color_selector"),
+                type=dh._inputs_parse_id(states_info, "chart_type_selector"),
+                numerator=dh._inputs_parse_id(states_info, "numerator_selector"),
+                denominator=dh._inputs_parse_id(states_info, "denominator_selector"),
+                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 display=False,
             )
+        elif tool == "target":
+            # give blank table
+            table = filtered_df.head(0)
 
         columnDefs = dash_formats.get_column_defs(table)
         tab_content = dag.AgGrid(
@@ -360,13 +399,13 @@ def update_tab_content(
     else:
         tab_content = None
 
-    return tab_content, filtered_card, chart_secondary
+    return tab_content, chart_secondary, filtered_card
 
 
 @callback(
-    Output({"type": "selector-group", "index": ALL}, "style"),
+    Output({"type": "chart-selector-group", "index": ALL}, "style"),
     [Input("tool-selector", "value")],
-    [State({"type": "selector-group", "index": ALL}, "id")],
+    [State({"type": "chart-selector-group", "index": ALL}, "id")],
     prevent_initial_call=True,
 )
 def toggle_tool(tool, all_selectors):
@@ -390,11 +429,19 @@ def toggle_tool(tool, all_selectors):
         "secondary",
         "x_bins",
     ]
+    target_selectors = [
+        "target",
+        "multi_numerator",
+        "multi_denominator",
+        "add_line",
+    ]
     # determine which selectors to toggle
     if tool == "chart":
         show_selectors = chart_selectors
     elif tool == "compare":
         show_selectors = compare_selectors
+    elif tool == "target":
+        show_selectors = target_selectors
     else:
         return [dash.no_update for _ in all_selectors]
 
@@ -412,8 +459,8 @@ def toggle_tool(tool, all_selectors):
 
 @callback(
     [
-        Output({"type": "str-filter", "index": ALL}, "value"),
-        Output({"type": "num-filter", "index": ALL}, "value"),
+        Output({"type": "chart-str-filter", "index": ALL}, "value"),
+        Output({"type": "chart-num-filter", "index": ALL}, "value"),
     ],
     [Input("reset-filters-button", "n_clicks")],
     [State("store-dataset", "data"), State("store-exp-filter", "data")],

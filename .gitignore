@@ -3,17 +3,21 @@
 *.ipynb_checkpoints
 .DS_Store
 .env
+files/dataset/*
+files/models/*
+files/partition/*
+files/result/*
 
 # folders
 .pytest_cache/
 .vscode/
 _build/
 _pycache_/
-files/
 docs/coverage/
 morai/dashboard/file_system_backend/
 notebooks/working/
 
 
 # include tests/files/
+!.gitkeep
 !tests/files/

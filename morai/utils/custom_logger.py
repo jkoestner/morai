@@ -93,6 +93,31 @@ def set_log_level(new_level, module_prefix="morai"):
                 logger.setLevel(numeric_level)
 
 
+def get_log_level(module_prefix="morai"):
+    """
+    Get the log level.
+
+    Parameters
+    ----------
+    module_prefix : str
+        the module logger prefix to get the log level for
+
+    Returns
+    -------
+    str
+        the log level
+
+    """
+    log_level = None
+    for logger_name, logger in logging.Logger.manager.loggerDict.items():
+        # Check if the logger's name starts with the specified prefix
+        if logger_name.startswith(module_prefix):
+            if isinstance(logger, logging.Logger):
+                log_level = logging.getLevelName(logger.getEffectiveLevel())
+                break
+    return log_level
+
+
 def test_logger():
     """Test the logger."""
     logger = setup_logging(__name__)

@@ -119,25 +119,22 @@ def set_active_link(hash, href):
         Output("chart-target", "children"),
     ],
     [Input("url", "pathname")],
-    [State("store-dataset", "data")],
+    [State("store-dataset", "data"), State("store-config", "data")],
 )
-def update_charts(pathname, dataset):
+def update_charts(pathname, dataset, config):
     """Update charts when page is loaded."""
     if pathname != "/explore" or dataset is None:
         raise dash.exceptions.PreventUpdate
     logger.debug("update explore charts")
+    config_dataset = config["datasets"][config["general"]["dataset"]]
+    features = config_dataset["columns"]["features"]
+    num_cols = dataset[features].select_dtypes(include=["number"]).columns.tolist()
     # charts
     chart_freq_num = charters.frequency(
         dataset,
         cols=3,
-        features=[
-            "observation_year",
-            "issue_age",
-            "duration",
-            "issue_year",
-            "attained_age",
-        ],
-        sum_var="amount_exposed",
+        features=num_cols,
+        sum_var=config_dataset["columns"]["exposure_amt"],
     )
 
     chart_freq_cat = charters.frequency(dataset, cols=3, sum_var="amount_exposed")
@@ -146,22 +143,9 @@ def update_charts(pathname, dataset):
         df=dataset,
         target="risk",
         cols=3,
-        features=[
-            "observation_year",
-            "sex",
-            "smoker_status",
-            "insurance_plan",
-            "issue_age",
-            "duration",
-            "face_amount_band",
-            "issue_year",
-            "attained_age",
-            "soa_post_lvl_ind",
-            "number_of_pfd_classes",
-            "preferred_class",
-        ],
-        numerator="death_claim_amount",
-        denominator="amount_exposed",
+        features=features,
+        numerator=[config_dataset["defaults"]["numerator"]],
+        denominator=[config_dataset["defaults"]["denominator"]],
     )
 
     chart_freq_num = dcc.Graph(figure=chart_freq_num)
@@ -180,7 +164,7 @@ def update_charts(pathname, dataset):
 )
 def update_dataset_description(pathname, config):
     """Update charts when page is loaded."""
-    if pathname not in ["/explore", "/experience"]:
+    if pathname not in ["/explore", "/experience", "/model"]:
         raise dash.exceptions.PreventUpdate
 
     filename = "No dataset loaded"

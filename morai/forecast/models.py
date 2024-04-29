@@ -6,6 +6,8 @@ import plotly.express as px
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
+from morai.experience import tables
+from morai.forecast import preprocessors
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
@@ -16,16 +18,52 @@ class GLM:
 
     def __init__(
         self,
-        X,
-        y,
-        weights=None,
-        r_style=False,
-        mapping=None,
-        family=None,
-        **kwargs,
+    ):
+        """Initialize the model."""
+        self.r_style = None
+        self.mapping = None
+        self.model = None
+
+    def fit(
+        self, X, y, weights=None, family=None, r_style=False, mapping=None, **kwargs
     ):
         """
-        Initialize the model.
+        Fit the GLM model.
+
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
+        weights : pd.Series, optional
+            The weights
+        family : sm.families, optional
+            The family to use for the GLM model
+        r_style : bool, optional
+            Whether to use R-style formulas
+        mapping : dict, optional
+            The mapping of the features to the encoding and only needed
+            if r_style is True
+        kwargs : dict, optional
+            Additional keyword arguments to apply to the model
+
+        Returns
+        -------
+        model : GLM
+            The GLM model
+
+        """
+        logger.info("fiting the model")
+        self.r_style = r_style
+        self.mapping = mapping
+        model = self._setup_model(X, y, weights, family, **kwargs)
+        model = model.fit()
+        self.model = model
+
+        return model
+
+    def get_formula(self, X, y):
+        """
+        Get the formula for the GLM model.
 
         Parameters
         ----------
@@ -33,91 +71,6 @@ class GLM:
             The features
         y : pd.Series
             The target
-        weights : pd.Series, optional
-            The weights
-        r_style : bool, optional
-            Whether to use R-style formulas
-        mapping : dict, optional
-            The mapping of the features to the encoding and only needed
-            if r_style is True
-        family : sm.families, optional
-            The family to use for the GLM model
-        kwargs : dict, optional
-            Additional keyword arguments
-
-        """
-        logger.info("initialzed GLM and add constant to X")
-        self.X = sm.add_constant(X)
-        self.y = y
-        self.weights = weights
-        self.r_style = r_style
-        self.mapping = mapping
-        self.model = self.setup_model(family=family, **kwargs)
-
-    def setup_model(self, family=None, **kwargs):
-        """
-        Set up the GLM model.
-
-        Returns
-        -------
-        model : GLM
-            The GLM model
-        Family : sm.families
-            The family
-        kwargs : dict
-            Additional keyword arguments
-
-        """
-        X = self.X
-        y = self.y
-        weights = self.weights
-        if family is None:
-            family = sm.families.Binomial()
-        logger.info(f"setup GLM model with statsmodels and {family} family...")
-
-        # using either r-style or python-style formula
-        if self.r_style:
-            model_data = pd.concat([y, X], axis=1)
-            formula = self.get_formula()
-            model = smf.glm(
-                formula=formula,
-                data=model_data,
-                family=family,
-                freq_weights=weights,
-                **kwargs,
-            )
-        else:
-            model = sm.GLM(
-                endog=y,
-                exog=X,
-                family=sm.families.Binomial(),
-                freq_weights=weights,
-                **kwargs,
-            )
-
-        self.model = model
-
-        return model
-
-    def fit(self):
-        """
-        Fit the GLM model.
-
-        Returns
-        -------
-        model : GLM
-            The GLM model
-
-        """
-        logger.info("fit the model")
-        model = self.model.fit()
-        self.model = model
-
-        return model
-
-    def get_formula(self):
-        """
-        Get the formula for the GLM model.
 
         Returns
         -------
@@ -125,8 +78,6 @@ class GLM:
             The formula
 
         """
-        y = self.y
-        X = self.X
         # creating formula that uses categories and passthrough
         if self.mapping:
             cat_pass_keys = {
@@ -200,6 +151,55 @@ class GLM:
             )
 
         return odds_ratio
+
+    def _setup_model(self, X, y, weights=None, family=None, **kwargs):
+        """
+        Set up the GLM model.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
+        weights : pd.Series, optional
+            The weights
+        family : sm.families, optional
+            The family to use for the GLM model
+        kwargs : dict, optional
+            Additional keyword arguments to apply to the model
+
+        Returns
+        -------
+        model : GLM
+            The GLM model
+
+        """
+        if family is None:
+            family = sm.families.Binomial()
+        logger.info(f"setup GLM model with statsmodels and {family} family...")
+
+        # using either r-style or python-style formula
+        if self.r_style:
+            model_data = pd.concat([y, X], axis=1)
+            formula = self.get_formula(X, y)
+            model = smf.glm(
+                formula=formula,
+                data=model_data,
+                family=family,
+                freq_weights=weights,
+                **kwargs,
+            )
+        else:
+            model = sm.GLM(
+                endog=y,
+                exog=X,
+                family=sm.families.Binomial(),
+                freq_weights=weights,
+                **kwargs,
+            )
+
+        return model
 
 
 class LeeCarter:
@@ -840,3 +840,65 @@ class CBD:
 
         """
         return np.log(a / (1 - a))
+
+
+def generate_table(model, mapping, feature_dict, params, grid=None):
+    """
+    Generate a 1-d mortality table based on model predictions.
+
+    Parameters
+    ----------
+    model : model
+        The model to use for generating the table
+    mapping : dict
+        The mapping of the features to predict on with corresponding values
+    feature_dict : dict
+        The dictionary of features to use for the model
+    params : dict
+        The parameters to use for the model
+    grid : pd.DataFrame, optional
+        The grid to use for the table
+
+    Returns
+    -------
+    table : pd.DataFrame
+        The 1-d mortality table
+
+    """
+    logger.info(f"generating table for model {type(model).__name__}")
+    if not hasattr(model, "predict"):
+        raise ValueError("model does not have a predict method")
+
+    # remove unneeded keys
+    feature_dict = {
+        k: v for k, v in feature_dict.items() if k not in ["target", "weight"]
+    }
+
+    # create the grid from the mapping
+    if grid is None:
+        grid = tables.create_grid(mapping=mapping)
+        grid = grid.drop(columns=["vals"])
+
+    # get the original order of the columns
+    model_cols = [col for cols in feature_dict.values() for col in cols]
+    model_data = grid.loc[:, model_cols]
+    model_data = tables.remove_duplicates(model_data, suppress_log=True)
+    logger.info(f"model data shape: {model_data.shape}")
+
+    # preprocess the data and predict
+    try:
+        preprocess_dict = preprocessors.preprocess_data(
+            model_data=model_data, feature_dict=feature_dict, **params
+        )
+        predictions = preprocess_dict["md_encoded"]
+        predictions["vals"] = model.predict(predictions)
+    except Exception as e:
+        raise ValueError("Error during preprocessing or prediction") from e
+    predictions = preprocessors.remap_values(df=predictions, mapping=mapping)
+
+    # create the table
+    table = grid.merge(predictions, on=model_cols, how="left")
+    table = table.sort_index()
+    logger.info(f"table shape: {table.shape}")
+
+    return table

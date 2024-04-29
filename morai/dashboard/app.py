@@ -55,9 +55,26 @@ navbar = dbc.Navbar(
             dbc.Row(
                 [
                     dbc.Col(
-                        html.Img(src=app.get_asset_url("morai_logo.ico"), height="30px")
+                        html.Img(src=app.get_asset_url("morai_logo.ico"), height="40px")
                     ),
-                    dbc.Col(dbc.NavbarBrand("morai", className="ms-3 fs-3")),
+                    dbc.Col(
+                        [
+                            dbc.NavbarBrand("morai", className="ms-3 fs-3"),
+                            dbc.NavLink(
+                                html.Img(
+                                    src=app.get_asset_url("github-mark-white.png"),
+                                    height="20px",
+                                ),
+                                href="https://github.com/jkoestner/morai",
+                                target="_blank",
+                                className="ms-2",
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "alignItems": "center",
+                        },
+                    ),
                 ],
                 align="center",
                 className="g-0",

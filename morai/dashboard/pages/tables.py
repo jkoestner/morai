@@ -6,20 +6,25 @@ Issue age, duration, and attained age are needed to compare mortality tables.
 
 from io import StringIO
 
+import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 import pandas as pd
 from dash_extensions.enrich import (
+    ALL,
     Input,
     Output,
     State,
     callback,
+    callback_context,
     dcc,
     html,
 )
 
+from morai.dashboard.components import dash_formats
+from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters, tables
-from morai.utils import custom_logger
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -38,7 +43,9 @@ def layout():
     """Table layout."""
     return html.Div(
         [
-            dcc.Store(id="store-tables", storage_type="session"),
+            dcc.Store(id="store-table-compare", storage_type="session"),
+            dcc.Store(id="store-table-1", storage_type="session"),
+            dcc.Store(id="store-table-2", storage_type="session"),
             # -----------------------------------------------------------
             html.H4(
                 "Table Viewer",
@@ -80,30 +87,51 @@ def layout():
             dbc.Row(
                 [
                     dbc.Col(
+                        dcc.RadioItems(
+                            id="table-1-radio",
+                            options=["soa table", "file"],
+                            value="soa table",
+                        ),
+                        width=1,
+                    ),
+                    dbc.Col(
                         dbc.Card(
                             [
                                 dbc.CardHeader("Morality Table 1"),
                                 dbc.CardBody(
-                                    dbc.Input(
-                                        type="number",
-                                        id="table-1-id",
-                                        placeholder="example 3249",
-                                    ),
+                                    children=None,
+                                    id="table-1-card",
                                 ),
                             ],
                             color="light",
                         ),
-                        width="auto",
+                        width=2,
                     ),
                     dbc.Col(
                         dbc.Card(
                             [
                                 dbc.CardHeader("Table Description"),
-                                dbc.CardBody(html.P(id="table-1-desc", children=" ")),
+                                dbc.CardBody(
+                                    children=None,
+                                    id="table-1-desc",
+                                ),
                             ],
                             color="light",
                         ),
                         width=6,
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            [
+                                dbc.CardHeader("Filters Table-1"),
+                                dbc.CardBody(
+                                    children=None,
+                                    id="table-1-filters",
+                                ),
+                            ],
+                            color="light",
+                        ),
+                        width=2,
                     ),
                 ],
                 className="mb-2",
@@ -111,30 +139,51 @@ def layout():
             dbc.Row(
                 [
                     dbc.Col(
+                        dcc.RadioItems(
+                            id="table-2-radio",
+                            options=["soa table", "file"],
+                            value="soa table",
+                        ),
+                        width=1,
+                    ),
+                    dbc.Col(
                         dbc.Card(
                             [
                                 dbc.CardHeader("Morality Table 2"),
                                 dbc.CardBody(
-                                    dbc.Input(
-                                        type="number",
-                                        id="table-2-id",
-                                        placeholder="example 3252",
-                                    ),
+                                    children=None,
+                                    id="table-2-card",
                                 ),
                             ],
                             color="light",
                         ),
-                        width="auto",
+                        width=2,
                     ),
                     dbc.Col(
                         dbc.Card(
                             [
                                 dbc.CardHeader("Table Description"),
-                                dbc.CardBody(html.P(id="table-2-desc", children=" ")),
+                                dbc.CardBody(
+                                    children=None,
+                                    id="table-2-desc",
+                                ),
                             ],
                             color="light",
                         ),
                         width=6,
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            [
+                                dbc.CardHeader("Filters Table-2"),
+                                dbc.CardBody(
+                                    children=None,
+                                    id="table-2-filters",
+                                ),
+                            ],
+                            color="light",
+                        ),
+                        width=2,
                     ),
                 ],
                 className="mb-2",
@@ -167,13 +216,6 @@ def layout():
                 [
                     dbc.Col(
                         dcc.Loading(
-                            id="loading-graph-compare-duration",
-                            type="dot",
-                            children=html.Div(id="graph-compare-duration"),
-                        ),
-                    ),
-                    dbc.Col(
-                        dcc.Loading(
                             id="loading-graph-compare-age",
                             type="dot",
                             children=html.Div(id="graph-compare-age"),
@@ -181,6 +223,24 @@ def layout():
                     ),
                 ],
                 className="mb-2",
+            ),
+            dbc.Row(
+                [
+                    dbc.Tabs(
+                        [
+                            dbc.Tab(label="Table-1", tab_id="tab-table-1"),
+                            dbc.Tab(label="Table-2", tab_id="tab-table-2"),
+                            dbc.Tab(label="Compare", tab_id="tab-table-compare"),
+                        ],
+                        id="tabs-tables",
+                        active_tab="tab-table-1",
+                    ),
+                    dcc.Loading(
+                        id="loading-tables-tab-content",
+                        type="dot",
+                        children=html.Div(id="tables-tab-content"),
+                    ),
+                ],
             ),
         ],
         className="container",
@@ -195,46 +255,246 @@ def layout():
 
 
 @callback(
+    [Output("table-1-card", "children")],
+    [Input("table-1-radio", "value")],
+)
+def set_table_1_input(value):
+    """Set the table 1 input based on the radio button."""
+    if value == "soa table":
+        input_box = dbc.Input(
+            type="number",
+            id="table-1-id",
+            placeholder="example 3249",
+        )
+    else:
+        input_box = (
+            dcc.Dropdown(
+                id="table-1-id",
+                options=[
+                    {"label": key, "value": key}
+                    for key in dh.list_files_in_folder(
+                        helpers.FILES_PATH / "dataset" / "tables"
+                    )
+                    if key.endswith(".csv")
+                ],
+                placeholder="Select a file",
+            ),
+        )
+    return input_box
+
+
+@callback(
+    [Output("table-2-card", "children")],
+    [Input("table-2-radio", "value")],
+)
+def set_table_2_input(value):
+    """Set the table 2 input based on the radio button."""
+    if value == "soa table":
+        input_box = dbc.Input(
+            type="number",
+            id="table-2-id",
+            placeholder="example 3252",
+        )
+    else:
+        input_box = (
+            dcc.Dropdown(
+                id="table-2-id",
+                options=[
+                    {"label": key, "value": key}
+                    for key in dh.list_files_in_folder(
+                        helpers.FILES_PATH / "dataset" / "tables"
+                    )
+                    if key.endswith(".csv")
+                ],
+                placeholder="Select a file",
+            ),
+        )
+    return input_box
+
+
+@callback(
     [
-        Output("store-tables", "data"),
-        Output("table-1-desc", "children"),
-        Output("table-2-desc", "children"),
+        Output("store-table-1", "data"),
+        Output("store-table-2", "data"),
         Output("toast-null-tables", "is_open"),
         Output("toast-table-not-found", "is_open"),
     ],
     [Input("compare-button", "n_clicks")],
-    [State("table-1-id", "value"), State("table-2-id", "value")],
+    [
+        State("table-1-id", "value"),
+        State("table-2-id", "value"),
+    ],
     prevent_initial_call=True,
 )
 def get_table_data(n_clicks, table1_id, table2_id):
     """Get the table data and create a compare dataframe."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
+    no_upate_tuple = (dash.no_update,) * 2
 
     if table1_id is None or table2_id is None:
-        return dash.no_update, dash.no_update, dash.no_update, True, False
+        return (*no_upate_tuple, True, False)
 
-    # get the tables and compare them
+    # process tables
     mt = tables.MortTable()
-    try:
-        table_1 = mt.build_table(table_list=[table1_id], extend=True)
-        table_2 = mt.build_table(table_list=[table2_id], extend=True)
-    except FileNotFoundError:
-        logger.warning(f"Table not found: {table1_id} or {table2_id}")
-        return dash.no_update, dash.no_update, dash.no_update, False, True
-    table_1_desc = mt.get_soa_xml(table1_id).ContentClassification.TableDescription
-    table_2_desc = mt.get_soa_xml(table2_id).ContentClassification.TableDescription
-    compare_df = tables.compare_tables(table_1, table_2)
 
-    # serialize the compare_df
-    compare_df = compare_df.to_json(orient="split")
+    # table_1
+    if isinstance(table1_id, str):
+        try:
+            table_1 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table1_id)
+        except FileNotFoundError:
+            logger.warning(f"Table not found: {table1_id}")
+            return (*no_upate_tuple, False, True)
+        # add age and duration columns if not present
+        table_1 = tables.add_aa_ia_dur_cols(table_1)
+    else:
+        try:
+            table_1 = mt.build_table(table_list=[table1_id], extend=True)
+        except FileNotFoundError:
+            logger.warning(f"Table not found: {table1_id}")
+            return (*no_upate_tuple, False, True)
+
+    # table_2
+    if isinstance(table2_id, str):
+        try:
+            table_2 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table2_id)
+        except FileNotFoundError:
+            logger.warning(f"Table not found: {table2_id}")
+            return (*no_upate_tuple, False, True)
+        # add age and duration columns if not present
+        table_2 = tables.add_aa_ia_dur_cols(table_2)
+    else:
+        try:
+            table_2 = mt.build_table(table_list=[table2_id], extend=True)
+        except FileNotFoundError:
+            logger.warning(f"Table not found: {table2_id}")
+            return (*no_upate_tuple, False, True)
+
+    # serialize the dataframes
+    table_1 = table_1.to_json(orient="split")
+    table_2 = table_2.to_json(orient="split")
 
     return (
-        compare_df,
-        table_1_desc,
-        table_2_desc,
+        table_1,
+        table_2,
         False,
         False,
     )
+
+
+@callback(
+    [Output("table-1-filters", "children"), Output("table-2-filters", "children")],
+    [Input("store-table-1", "data"), Input("store-table-2", "data")],
+    prevent_initial_call=True,
+)
+def create_filters(table_1, table_2):
+    """Create the filters for the tables."""
+    # deserialize the tables
+    table_1 = pd.read_json(StringIO(table_1), orient="split")
+    table_2 = pd.read_json(StringIO(table_2), orient="split")
+
+    # create the filters
+    filters_1 = dh.generate_filters(
+        df=table_1,
+        prefix="table-1",
+        exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
+    ).get("filters")
+    filters_2 = dh.generate_filters(
+        df=table_2,
+        prefix="table-2",
+        exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
+    ).get("filters")
+
+    return filters_1, filters_2
+
+
+@callback(
+    [Output("table-1-desc", "children"), Output("table-2-desc", "children")],
+    [
+        Input({"type": "table-1-str-filter", "index": ALL}, "value"),
+        Input({"type": "table-1-num-filter", "index": ALL}, "value"),
+        Input({"type": "table-2-str-filter", "index": ALL}, "value"),
+        Input({"type": "table-2-num-filter", "index": ALL}, "value"),
+        Input("table-1-filters", "children"),
+    ],
+    [
+        State("store-table-1", "data"),
+        State("store-table-2", "data"),
+        State("table-1-id", "value"),
+        State("table-2-id", "value"),
+    ],
+    prevent_initial_call=True,
+)
+def update_table_descriptions(
+    table_1_filter_str,
+    table_1_filter_num,
+    table_2_filter_str,
+    table_2_filter_num,
+    table_1_filters,
+    table_1,
+    table_2,
+    table1_id,
+    table2_id,
+):
+    """Update the table descriptions."""
+    mt = tables.MortTable()
+    # callback context
+    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+
+    # deserialize the tables
+    table_1 = pd.read_json(StringIO(table_1), orient="split")
+    table_2 = pd.read_json(StringIO(table_2), orient="split")
+
+    # filter the dataset
+    filtered_table_1 = dh.filter_data(df=table_1, callback_context=inputs_info)
+    filtered_table_2 = dh.filter_data(df=table_2, callback_context=inputs_info)
+
+    # table description 1
+    if isinstance(table1_id, str):
+        table_1_desc = table1_id
+    else:
+        table_1_desc = mt.get_soa_xml(table1_id).ContentClassification.TableDescription
+    table_1_cols = {
+        col: len(filtered_table_1[col].unique())
+        for col in filtered_table_1.columns
+        if col != "vals"
+    }
+    desc_1 = html.Div(
+        [
+            html.B("Table Description:"),
+            html.Span(f" {table_1_desc}"),
+            html.Br(),
+            html.B("Table Shape:"),
+            html.Span(f" {filtered_table_1.shape}"),
+            html.Br(),
+            html.B("Columns:"),
+            html.Span(f" {table_1_cols}"),
+        ]
+    )
+
+    # table description 2
+    if isinstance(table2_id, str):
+        table_2_desc = table2_id
+    else:
+        table_2_desc = mt.get_soa_xml(table2_id).ContentClassification.TableDescription
+    table_2_cols = {
+        col: len(filtered_table_2[col].unique())
+        for col in filtered_table_2.columns
+        if col != "vals"
+    }
+    desc_2 = html.Div(
+        [
+            html.B("Table Description:"),
+            html.Span(f" {table_2_desc}"),
+            html.Br(),
+            html.B("Table Shape:"),
+            html.Span(f" {filtered_table_2.shape}"),
+            html.Br(),
+            html.B("Columns:"),
+            html.Span(f" {table_2_cols}"),
+        ]
+    )
+
+    return desc_1, desc_2
 
 
 @callback(
@@ -244,13 +504,37 @@ def get_table_data(n_clicks, table1_id, table2_id):
         Output("slider-issue-age", "max"),
         Output("slider-issue-age", "value"),
     ],
-    [Input("store-tables", "data")],
+    [
+        Input({"type": "table-1-str-filter", "index": ALL}, "value"),
+        Input({"type": "table-1-num-filter", "index": ALL}, "value"),
+        Input({"type": "table-2-str-filter", "index": ALL}, "value"),
+        Input({"type": "table-2-num-filter", "index": ALL}, "value"),
+        Input("table-1-filters", "children"),
+    ],
+    [State("store-table-1", "data"), State("store-table-2", "data")],
     prevent_initial_call=True,
 )
-def create_contour_and_sliders(compare_df):
+def create_contour_and_sliders(
+    table_1_filter_str,
+    table_1_filter_num,
+    table_2_filter_str,
+    table_2_filter_num,
+    table_1_filters,
+    table_1,
+    table_2,
+):
     """Graph the mortality tables with a contour and comparison."""
-    # deserialize the compare_df
-    compare_df = pd.read_json(StringIO(compare_df), orient="split")
+    # callback context
+    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+
+    # deserialize the tables
+    table_1 = pd.read_json(StringIO(table_1), orient="split")
+    table_2 = pd.read_json(StringIO(table_2), orient="split")
+
+    # filter the dataset
+    filtered_table_1 = dh.filter_data(df=table_1, callback_context=inputs_info)
+    filtered_table_2 = dh.filter_data(df=table_2, callback_context=inputs_info)
+    compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
 
     # get the slider values
     issue_age_min = compare_df["issue_age"].min()
@@ -264,7 +548,9 @@ def create_contour_and_sliders(compare_df):
         y_axis="duration",
         color="ratio",
         type="contour",
-        y_special=False,
+        hovertemplate=(
+            "issue_age: %{x}<br>" "duration: %{y}<br>" "ratio: %{z}<extra></extra>"
+        ),
     )
 
     graph_contour = dcc.Graph(figure=graph_contour)
@@ -279,26 +565,34 @@ def create_contour_and_sliders(compare_df):
 
 @callback(
     [
-        Output("graph-compare-duration", "children"),
         Output("graph-compare-age", "children"),
     ],
     [Input("slider-issue-age", "value")],
-    [State("store-tables", "data")],
+    [
+        State("table-1-filters", "children"),
+        State("table-2-filters", "children"),
+        State("store-table-1", "data"),
+        State("store-table-2", "data"),
+    ],
     prevent_initial_call=True,
 )
-def update_graphs_from_slider(issue_age_value, compare_df):
+def update_graphs_from_slider(
+    issue_age_value, filters_table_1, filters_table_2, table_1, table_2
+):
     """Update the compare duration graph."""
-    # deserialize the compare_df
-    compare_df = pd.read_json(StringIO(compare_df), orient="split")
+    # callback context
+    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+
+    # deserialize the tables
+    table_1 = pd.read_json(StringIO(table_1), orient="split")
+    table_2 = pd.read_json(StringIO(table_2), orient="split")
+
+    # filter the dataset
+    filtered_table_1 = dh.filter_data(df=table_1, callback_context=inputs_info)
+    filtered_table_2 = dh.filter_data(df=table_2, callback_context=inputs_info)
+    compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
 
     # graph the tables
-    graph_compare_duration = charters.compare_rates(
-        compare_df[compare_df["issue_age"] == issue_age_value],
-        x_axis="duration",
-        rates=["table_1", "table_2"],
-        y_log=True,
-    )
-
     graph_compare_age = charters.compare_rates(
         compare_df[compare_df["issue_age"] == issue_age_value],
         x_axis="attained_age",
@@ -306,7 +600,60 @@ def update_graphs_from_slider(issue_age_value, compare_df):
         y_log=True,
     )
 
-    graph_compare_duration = dcc.Graph(figure=graph_compare_duration)
     graph_compare_age = dcc.Graph(figure=graph_compare_age)
 
-    return graph_compare_duration, graph_compare_age
+    return graph_compare_age
+
+
+@callback(
+    [Output("tables-tab-content", "children")],
+    [
+        Input("tabs-tables", "active_tab"),
+        Input({"type": "table-1-str-filter", "index": ALL}, "value"),
+        Input({"type": "table-1-num-filter", "index": ALL}, "value"),
+        Input({"type": "table-2-str-filter", "index": ALL}, "value"),
+        Input({"type": "table-2-num-filter", "index": ALL}, "value"),
+        Input("table-1-filters", "children"),
+    ],
+    [State("store-table-1", "data"), State("store-table-2", "data")],
+    prevent_initial_call=True,
+)
+def update_table_tabs(
+    active_tab,
+    table_1_filter_str,
+    table_1_filter_num,
+    table_2_filter_str,
+    table_2_filter_num,
+    table_1_filters,
+    table_1,
+    table_2,
+):
+    """Update the tables tab content."""
+    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+
+    # deserialize the tables
+    table_1 = pd.read_json(StringIO(table_1), orient="split")
+    table_2 = pd.read_json(StringIO(table_2), orient="split")
+
+    # filter the dataset
+    filtered_table_1 = dh.filter_data(df=table_1, callback_context=inputs_info)
+    filtered_table_2 = dh.filter_data(df=table_2, callback_context=inputs_info)
+    compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
+
+    if active_tab == "tab-table-1":
+        table = filtered_table_1
+    elif active_tab == "tab-table-2":
+        table = filtered_table_2
+    else:
+        table = compare_df
+
+    # deserialize the table
+    columnDefs = dash_formats.get_column_defs(table)
+    tab_content = dag.AgGrid(
+        rowData=table.to_dict("records"),
+        columnDefs=columnDefs,
+        defaultColDef={"resizable": True, "sortable": True, "filter": True},
+        dashGridOptions={"pagination": True},
+    )
+
+    return tab_content

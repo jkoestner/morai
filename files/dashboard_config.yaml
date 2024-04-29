@@ -1,0 +1,113 @@
+general:
+  dataset: mortality_grouped
+datasets:
+  mortality_grouped:
+    filename: mortality_grouped.parquet
+    description: Mortality data that used the "MIB_NAIC_20240119_2009_19.txt" as the
+      source data.  The data was grouped and also filtered using a "base" filter.
+      The grouped data  was also 10% sampled subset of the original.
+    columns:
+      features:
+      - attained_age
+      - duration
+      - face_amount_band
+      - insurance_plan
+      - issue_age
+      - issue_year
+      - number_of_pfd_classes
+      - observation_year
+      - preferred_class
+      - sex
+      - smoker_status
+      - soa_post_lvl_ind
+      measures:
+      - amount_exposed
+      - death_claim_amount
+      - death_count
+      - policies_exposed
+      - exp_amt_vbt15
+      rates:
+      - ae_vbt15
+      - qx_raw
+      - qx_vbt15
+      actuals_amt: death_claim_amount
+      exposure_amt: amount_exposed
+      expecteds_amt: exp_amt_vbt15
+      actuals_cnt: death_count
+      exposure_cnt: policies_exposed
+    defaults:
+      numerator: death_claim_amount
+      denominator: amount_exposed
+      x_axis: observation_year
+      y_axis: ratio
+      rates:
+      - ae_vbt15
+      weights:
+      - exp_amt_vbt15
+  model_data:
+    filename: model_data.parquet
+    description: Mortality data that used the "mortality_grouped" as the source data.
+      The data was predicted on a number of models. The data was further filtered
+      with attained age between 50 to 95. Issue age is filtered between 30 and 80. 
+    columns:
+      features:
+      - attained_age
+      - duration
+      - face_amount_band
+      - insurance_plan
+      - issue_age
+      - issue_year
+      - number_of_pfd_classes
+      - observation_year
+      - preferred_class
+      - sex
+      - smoker_status
+      - soa_post_lvl_ind
+      - capped_duration
+      measures:
+      - amount_exposed
+      - death_claim_amount
+      - death_count
+      - policies_exposed
+      - exp_amt_vbt15
+      - exp_amt_glm
+      - exp_amt_lr
+      - exp_amt_tree
+      - exp_amt_rf
+      - exp_amt_lgb
+      - exp_amt_xgb
+      - exp_amt_lc
+      - exp_amt_cbd
+      rates:
+      - ae_vbt15
+      - ae_glm
+      - ae_lr
+      - ae_tree
+      - ae_rf
+      - ae_lgb
+      - ae_xgb
+      - qx_raw
+      - qx_vbt15
+      - qx_log_raw
+      - qx_glm
+      - qx_lr
+      - qx_tree
+      - qx_rf
+      - qx_lgb
+      - qx_xgb
+      - qx_lc
+      - qx_cbd
+      actuals_amt: death_claim_amount
+      exposure_amt: amount_exposed
+      expecteds_amt: exp_amt_vbt15
+      actuals_cnt: death_count
+      exposure_cnt: policies_exposed
+    defaults:
+      numerator: death_claim_amount
+      denominator: amount_exposed
+      x_axis: observation_year
+      y_axis: ratio
+      rates:
+      - ae_vbt15
+      weights:
+      - exp_amt_vbt15

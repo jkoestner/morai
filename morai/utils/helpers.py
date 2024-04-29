@@ -180,3 +180,25 @@ def _weighted_mean(values, weights=None):
         return np.nan
     else:
         return np.average(values, weights=weights)
+
+
+def _convert_object_to_category(df, column):
+    """
+    Convert the column to a category if it is an object.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to convert.
+    column : str
+        The column to convert.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        The DataFrame with the column converted to a category.
+
+    """
+    if df[column].dtype == "object":
+        df[column] = df[column].astype("category")
+    return df
