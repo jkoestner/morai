@@ -10,15 +10,18 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ## Table of Contents
-- [Overview](#overview)
-- [Installation](#installation)
-  - [Local Install](#local-install)
-  - [Docker Install](#docker-install)
-- [Usage](#usage)
-  - [CLI](#cli)
-- [Other Tools](#other-tools)
-  - [Jupyter Lab Usage](#jupyter-lab-usage)
-  - [Logging](#logging)
+- [Morai](#morai)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Installation](#installation)
+    - [Local Install](#local-install)
+    - [Docker Install](#docker-install)
+  - [Usage](#usage)
+    - [CLI](#cli)
+  - [Other Tools](#other-tools)
+    - [Jupyter Lab Usage](#jupyter-lab-usage)
+    - [Logging](#logging)
+    - [Coverage](#coverage)
 
 ## Overview
 
@@ -68,9 +71,6 @@ pip install -e .
 
 ### Docker Install
 The package can also be run in docker which provides a containerized environment, and can host the web dashboard.
-
-To run the web dashboard there are a few prerequisites.
-  - Docker
 
 ```bash
 version: "3.8"

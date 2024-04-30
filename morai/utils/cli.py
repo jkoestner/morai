@@ -30,7 +30,7 @@ def cli():
     args = parser.parse_args()
 
     if args.command == "dashboard":
-        app.run_server(debug=True)
+        app.app.run_server(debug=True)
 
 
 if __name__ == "__main__":
