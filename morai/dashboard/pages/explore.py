@@ -137,7 +137,9 @@ def update_charts(pathname, dataset, config):
         sum_var=config_dataset["columns"]["exposure_amt"],
     )
 
-    chart_freq_cat = charters.frequency(dataset, cols=3, sum_var="amount_exposed")
+    chart_freq_cat = charters.frequency(
+        dataset, cols=3, sum_var=config_dataset["columns"]["exposure_amt"]
+    )
 
     chart_target = charters.target(
         df=dataset,

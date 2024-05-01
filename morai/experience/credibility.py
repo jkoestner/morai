@@ -9,7 +9,7 @@ logger = custom_logger.setup_logging(__name__)
 
 def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1):
     """
-    Determine the credibility of a measure based on the number of observations.
+    Determine the credibility of a measure based on limited fluctuation.
 
     This is also known as "classical credibility". It is a method to determine
     the probablity (p) that the measure is within a certain range (r) of the
@@ -72,5 +72,50 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1):
 
     # calculate the credibility and cap at 1
     df["credibility_lf"] = ((df[measure] / full_credibility) ** 0.5).clip(upper=1)
+
+    return df
+
+
+def asymptotic(df, measure, k):
+    """
+    Determine the credibility of a measure using asymptotic credibility.
+
+    fomula to calculate z, where k is chosen subjectively by practitioner:
+    z = n / (n + k)
+
+    The z value can then be used to blend a measure with a prior measure.
+    new_estimate = z * measure + (1 - z) * prior
+
+    Strengths:
+    ----------
+    - simple to calculate
+    - credibility reaches 1 assymptotically
+
+    Weaknesses:
+    ------------
+    - not statistically based
+
+    Reference:
+    ----------
+    https://www.soa.org/globalassets/assets/files/resources/tables-calcs-tools/credibility-methods-life-health-pensions.pdf
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the data.
+    measure : str
+        Column name of the measure.
+    k : float
+        Constant for the credibility.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with additional columns for credibility measures.
+
+    """
+    # calculate the credibility
+    logger.info(f"Using 'asymptotic credibility' with constant: {k}.")
+    df["credibility_as"] = df[measure] / (df[measure] + k)
 
     return df

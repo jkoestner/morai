@@ -274,6 +274,9 @@ def compare_rates(
 
     """
     df = df.copy()
+    if df.empty:
+        logger.warning("DataFrame is empty.")
+        return go.Figure()
     # check if feature, secondary, line_feature is string and is in dataframe
     parameters = [x_axis, secondary, line_feature]
     for parameter in parameters:
@@ -299,26 +302,23 @@ def compare_rates(
     if x_bins:
         logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
         df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)
-    grouped_df = (
-        df.groupby(groupby_features, observed=True)
-        .apply(
-            lambda x: pd.Series(
-                {
-                    **{
-                        rate: helpers._weighted_mean(x[rate], weights=x[weight])
-                        if weight
-                        else x[rate].mean()
-                        for rate, weight in zip(
-                            rates,
-                            [None] * len(rates) if weights is None else weights,
-                        )
-                    },
-                    **({secondary: x[secondary].sum()} if secondary else {}),
-                }
-            )
+    grouped_df = df.groupby(groupby_features, observed=True).apply(
+        lambda x: pd.Series(
+            {
+                **{
+                    rate: helpers._weighted_mean(x[rate], weights=x[weight])
+                    if weight
+                    else x[rate].mean()
+                    for rate, weight in zip(
+                        rates,
+                        [None] * len(rates) if weights is None else weights,
+                    )
+                },
+                **({secondary: x[secondary].sum()} if secondary else {}),
+            }
         )
-        .reset_index()
     )
+    grouped_df = grouped_df.reset_index()
 
     # Create a subplot with a secondary y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])

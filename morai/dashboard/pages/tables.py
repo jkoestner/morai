@@ -9,6 +9,7 @@ from io import StringIO
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import numpy as np
 import pandas as pd
 from dash_extensions.enrich import (
     ALL,
@@ -46,6 +47,8 @@ def layout():
             dcc.Store(id="store-table-compare", storage_type="session"),
             dcc.Store(id="store-table-1", storage_type="session"),
             dcc.Store(id="store-table-2", storage_type="session"),
+            dcc.Store(id="store-table-1-select", storage_type="session"),
+            dcc.Store(id="store-table-2-select", storage_type="session"),
             # -----------------------------------------------------------
             html.H4(
                 "Table Viewer",
@@ -316,6 +319,8 @@ def set_table_2_input(value):
     [
         Output("store-table-1", "data"),
         Output("store-table-2", "data"),
+        Output("store-table-1-select", "data"),
+        Output("store-table-2-select", "data"),
         Output("toast-null-tables", "is_open"),
         Output("toast-table-not-found", "is_open"),
     ],
@@ -329,7 +334,7 @@ def set_table_2_input(value):
 def get_table_data(n_clicks, table1_id, table2_id):
     """Get the table data and create a compare dataframe."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
-    no_upate_tuple = (dash.no_update,) * 2
+    no_upate_tuple = (dash.no_update,) * 4
 
     if table1_id is None or table2_id is None:
         return (*no_upate_tuple, True, False)
@@ -341,6 +346,7 @@ def get_table_data(n_clicks, table1_id, table2_id):
     if isinstance(table1_id, str):
         try:
             table_1 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table1_id)
+            table_1_select_period = "Unknown"
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
             return (*no_upate_tuple, False, True)
@@ -349,6 +355,7 @@ def get_table_data(n_clicks, table1_id, table2_id):
     else:
         try:
             table_1 = mt.build_table(table_list=[table1_id], extend=True)
+            table_1_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
             return (*no_upate_tuple, False, True)
@@ -357,6 +364,7 @@ def get_table_data(n_clicks, table1_id, table2_id):
     if isinstance(table2_id, str):
         try:
             table_2 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table2_id)
+            table_2_select_period = "Unknown"
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
             return (*no_upate_tuple, False, True)
@@ -365,6 +373,7 @@ def get_table_data(n_clicks, table1_id, table2_id):
     else:
         try:
             table_2 = mt.build_table(table_list=[table2_id], extend=True)
+            table_2_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
             return (*no_upate_tuple, False, True)
@@ -376,6 +385,8 @@ def get_table_data(n_clicks, table1_id, table2_id):
     return (
         table_1,
         table_2,
+        table_1_select_period,
+        table_2_select_period,
         False,
         False,
     )
@@ -421,6 +432,8 @@ def create_filters(table_1, table_2):
         State("store-table-2", "data"),
         State("table-1-id", "value"),
         State("table-2-id", "value"),
+        State("store-table-1-select", "data"),
+        State("store-table-2-select", "data"),
     ],
     prevent_initial_call=True,
 )
@@ -434,25 +447,35 @@ def update_table_descriptions(
     table_2,
     table1_id,
     table2_id,
+    table_1_select_period,
+    table_2_select_period,
 ):
     """Update the table descriptions."""
     mt = tables.MortTable()
+
     # callback context
     inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+    filters_table_1 = dh._inputs_parse_type(
+        inputs_info, "table-1-num-filter"
+    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
+    filters_table_2 = dh._inputs_parse_type(
+        inputs_info, "table-2-num-filter"
+    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
 
     # deserialize the tables
     table_1 = pd.read_json(StringIO(table_1), orient="split")
     table_2 = pd.read_json(StringIO(table_2), orient="split")
 
-    # filter the dataset
-    filtered_table_1 = dh.filter_data(df=table_1, callback_context=inputs_info)
-    filtered_table_2 = dh.filter_data(df=table_2, callback_context=inputs_info)
+    # filter the datasets
+    filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
+    filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
 
     # table description 1
     if isinstance(table1_id, str):
         table_1_desc = table1_id
     else:
-        table_1_desc = mt.get_soa_xml(table1_id).ContentClassification.TableDescription
+        soa_xml = mt.get_soa_xml(table1_id)
+        table_1_desc = soa_xml.ContentClassification.TableDescription
     table_1_cols = {
         col: len(filtered_table_1[col].unique())
         for col in filtered_table_1.columns
@@ -468,6 +491,9 @@ def update_table_descriptions(
             html.Br(),
             html.B("Columns:"),
             html.Span(f" {table_1_cols}"),
+            html.Br(),
+            html.B("Select Period:"),
+            html.Span(f" {table_1_select_period}"),
         ]
     )
 
@@ -475,7 +501,8 @@ def update_table_descriptions(
     if isinstance(table2_id, str):
         table_2_desc = table2_id
     else:
-        table_2_desc = mt.get_soa_xml(table2_id).ContentClassification.TableDescription
+        soa_xml = mt.get_soa_xml(table2_id)
+        table_2_desc = soa_xml.ContentClassification.TableDescription
     table_2_cols = {
         col: len(filtered_table_2[col].unique())
         for col in filtered_table_2.columns
@@ -491,6 +518,9 @@ def update_table_descriptions(
             html.Br(),
             html.B("Columns:"),
             html.Span(f" {table_2_cols}"),
+            html.Br(),
+            html.B("Select Period:"),
+            html.Span(f" {table_2_select_period}"),
         ]
     )
 
@@ -526,20 +556,38 @@ def create_contour_and_sliders(
     """Graph the mortality tables with a contour and comparison."""
     # callback context
     inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+    filters_table_1 = dh._inputs_parse_type(
+        inputs_info, "table-1-num-filter"
+    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
+    filters_table_2 = dh._inputs_parse_type(
+        inputs_info, "table-2-num-filter"
+    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
 
     # deserialize the tables
     table_1 = pd.read_json(StringIO(table_1), orient="split")
     table_2 = pd.read_json(StringIO(table_2), orient="split")
 
-    # filter the dataset
-    filtered_table_1 = dh.filter_data(df=table_1, callback_context=inputs_info)
-    filtered_table_2 = dh.filter_data(df=table_2, callback_context=inputs_info)
+    # filter the datasets
+    filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
+    filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
     compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
 
     # get the slider values
     issue_age_min = compare_df["issue_age"].min()
     issue_age_max = compare_df["issue_age"].max()
     issue_age_value = issue_age_min
+
+    # adding additional hover data
+    grouped_data = (
+        compare_df.groupby(["issue_age", "duration"], observed=True)["ratio"]
+        .agg("sum")
+        .reset_index()
+    )
+    grouped_data = grouped_data.pivot(
+        index="duration", columns="issue_age", values="ratio"
+    )
+    issue_age, duration = np.meshgrid(grouped_data.columns, grouped_data.index)
+    attained_age = issue_age + duration
 
     # graph the tables
     graph_contour = charters.chart(
@@ -548,8 +596,13 @@ def create_contour_and_sliders(
         y_axis="duration",
         color="ratio",
         type="contour",
+        agg="mean",
+        customdata=attained_age,
         hovertemplate=(
-            "issue_age: %{x}<br>" "duration: %{y}<br>" "ratio: %{z}<extra></extra>"
+            "issue_age: %{x}<br>"
+            "duration: %{y}<br>"
+            "attained_age: %{customdata}<br>"
+            "ratio: %{z}<extra></extra>"
         ),
     )
 
@@ -582,14 +635,20 @@ def update_graphs_from_slider(
     """Update the compare duration graph."""
     # callback context
     inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+    filters_table_1 = dh._inputs_parse_type(
+        inputs_info, "table-1-num-filter"
+    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
+    filters_table_2 = dh._inputs_parse_type(
+        inputs_info, "table-2-num-filter"
+    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
 
     # deserialize the tables
     table_1 = pd.read_json(StringIO(table_1), orient="split")
     table_2 = pd.read_json(StringIO(table_2), orient="split")
 
-    # filter the dataset
-    filtered_table_1 = dh.filter_data(df=table_1, callback_context=inputs_info)
-    filtered_table_2 = dh.filter_data(df=table_2, callback_context=inputs_info)
+    # filter the datasets
+    filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
+    filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
     compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
 
     # graph the tables
@@ -629,15 +688,22 @@ def update_table_tabs(
     table_2,
 ):
     """Update the tables tab content."""
+    # callback context
     inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+    filters_table_1 = dh._inputs_parse_type(
+        inputs_info, "table-1-num-filter"
+    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
+    filters_table_2 = dh._inputs_parse_type(
+        inputs_info, "table-2-num-filter"
+    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
 
     # deserialize the tables
     table_1 = pd.read_json(StringIO(table_1), orient="split")
     table_2 = pd.read_json(StringIO(table_2), orient="split")
 
-    # filter the dataset
-    filtered_table_1 = dh.filter_data(df=table_1, callback_context=inputs_info)
-    filtered_table_2 = dh.filter_data(df=table_2, callback_context=inputs_info)
+    # filter the datasets
+    filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
+    filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
     compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
 
     if active_tab == "tab-table-1":
