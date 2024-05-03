@@ -4,13 +4,12 @@ Tables dashboard.
 Issue age, duration, and attained age are needed to compare mortality tables.
 """
 
-from io import StringIO
-
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 import numpy as np
 import pandas as pd
+import polars as pl
 from dash_extensions.enrich import (
     ALL,
     Input,
@@ -45,8 +44,6 @@ def layout():
     return html.Div(
         [
             dcc.Store(id="store-table-compare", storage_type="session"),
-            dcc.Store(id="store-table-1", storage_type="session"),
-            dcc.Store(id="store-table-2", storage_type="session"),
             dcc.Store(id="store-table-1-select", storage_type="session"),
             dcc.Store(id="store-table-2-select", storage_type="session"),
             # -----------------------------------------------------------
@@ -82,10 +79,19 @@ def layout():
                     ),
                 ],
             ),
-            dbc.Col(
-                dbc.Button("Compare", id="compare-button", color="primary"),
-                width="auto",
-                className="mb-2",
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Button("Compare", id="compare-button", color="primary"),
+                        width=9,
+                        className="mb-1",
+                    ),
+                    dbc.Col(
+                        dbc.Button("Filter", id="filter-button", color="primary"),
+                        width=1,
+                        className="mb-1",
+                    ),
+                ],
             ),
             dbc.Row(
                 [
@@ -224,6 +230,13 @@ def layout():
                             children=html.Div(id="graph-compare-age"),
                         ),
                     ),
+                    dbc.Col(
+                        dcc.Loading(
+                            id="loading-graph-compare-age-log",
+                            type="dot",
+                            children=html.Div(id="graph-compare-age-log"),
+                        ),
+                    ),
                 ],
                 className="mb-2",
             ),
@@ -317,30 +330,268 @@ def set_table_2_input(value):
 
 @callback(
     [
-        Output("store-table-1", "data"),
-        Output("store-table-2", "data"),
         Output("store-table-1-select", "data"),
         Output("store-table-2-select", "data"),
+        Output("table-1-filters", "children"),
+        Output("table-2-filters", "children"),
+        Output("store-table-compare", "data"),
+        Output("table-1-desc", "children"),
+        Output("table-2-desc", "children"),
         Output("toast-null-tables", "is_open"),
         Output("toast-table-not-found", "is_open"),
     ],
-    [Input("compare-button", "n_clicks")],
+    [Input("compare-button", "n_clicks"), Input("filter-button", "n_clicks")],
     [
         State("table-1-id", "value"),
         State("table-2-id", "value"),
+        State({"type": "table-1-str-filter", "index": ALL}, "value"),
+        State({"type": "table-1-num-filter", "index": ALL}, "value"),
+        State({"type": "table-2-str-filter", "index": ALL}, "value"),
+        State({"type": "table-2-num-filter", "index": ALL}, "value"),
     ],
     prevent_initial_call=True,
 )
-def get_table_data(n_clicks, table1_id, table2_id):
-    """Get the table data and create a compare dataframe."""
+def get_tables(
+    n_clicks,
+    filter_button,
+    table1_id,
+    table2_id,
+    filter_table_1_str,
+    filter_table_1_num,
+    filter_table_2_str,
+    filter_table_2_num,
+):
+    """Get the initial table data."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
-    no_upate_tuple = (dash.no_update,) * 4
+    no_upate_tuple = (dash.no_update,) * 7
+    warning_tuple = (False, False)
 
     if table1_id is None or table2_id is None:
-        return (*no_upate_tuple, True, False)
+        warning_tuple = (True, False)
 
+    # load tables
+    table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple = (
+        load_tables(table1_id, table2_id)
+    )
+
+    if True in warning_tuple:
+        return (*no_upate_tuple, *warning_tuple)
+
+    # generate filters
+    if callback_context.triggered_id == "compare-button":
+        filters_1 = dh.generate_filters(
+            df=table_1,
+            prefix="table-1",
+            exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
+        ).get("filters")
+        filters_2 = dh.generate_filters(
+            df=table_2,
+            prefix="table-2",
+            exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
+        ).get("filters")
+    else:
+        filters_1 = dash.no_update
+        filters_2 = dash.no_update
+
+    # filter the datasets
+    filtered_table_1, filtered_table_2, compare_df = filter_tables(
+        table_1, table_2, filter_list=callback_context.states_list
+    )
+
+    compare_df = (
+        compare_df.groupby(["issue_age", "duration", "attained_age"], observed=True)[
+            ["ratio", "table_1", "table_2"]
+        ]
+        .agg("mean")
+        .reset_index()
+    )
+
+    # table descriptions
+    desc_1, desc_2 = get_table_desc(
+        table1_id,
+        table2_id,
+        filtered_table_1,
+        filtered_table_2,
+        table_1_select_period,
+        table_2_select_period,
+    )
+
+    return (
+        table_1_select_period,
+        table_2_select_period,
+        filters_1,
+        filters_2,
+        compare_df.to_dict("records"),
+        desc_1,
+        desc_2,
+        False,
+        False,
+    )
+
+
+@callback(
+    [
+        Output("graph-contour", "children"),
+        Output("slider-issue-age", "min"),
+        Output("slider-issue-age", "max"),
+        Output("slider-issue-age", "value"),
+    ],
+    [Input("store-table-compare", "data")],
+    prevent_initial_call=True,
+)
+def create_contour(
+    compare_df,
+):
+    """Graph the mortality tables with a contour and comparison."""
+    compare_df = pd.DataFrame(compare_df)
+
+    # get the slider values
+    issue_age_min = compare_df["issue_age"].min()
+    issue_age_max = compare_df["issue_age"].max()
+    issue_age_value = issue_age_min
+
+    # adding additional hover data
+    grouped_data = (
+        compare_df.groupby(["issue_age", "duration"], observed=True)["ratio"]
+        .agg("sum")
+        .reset_index()
+    )
+    grouped_data = grouped_data.pivot(
+        index="duration", columns="issue_age", values="ratio"
+    )
+    issue_age, duration = np.meshgrid(grouped_data.columns, grouped_data.index)
+    attained_age = issue_age + duration
+
+    # graph the tables
+    graph_contour = charters.chart(
+        compare_df,
+        x_axis="issue_age",
+        y_axis="duration",
+        color="ratio",
+        type="contour",
+        agg="mean",
+        customdata=attained_age,
+        hovertemplate=(
+            "issue_age: %{x}<br>"
+            "duration: %{y}<br>"
+            "attained_age: %{customdata}<br>"
+            "ratio: %{z}<extra></extra>"
+        ),
+    )
+
+    graph_contour = dcc.Graph(figure=graph_contour)
+
+    return (
+        graph_contour,
+        issue_age_min,
+        issue_age_max,
+        issue_age_value,
+    )
+
+
+@callback(
+    [
+        Output("graph-compare-age", "children"),
+        Output("graph-compare-age-log", "children"),
+    ],
+    [Input("slider-issue-age", "value")],
+    [
+        State("store-table-compare", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def update_graphs_from_slider(issue_age_value, compare_df):
+    """Update the compare duration graph."""
+    compare_df = pd.DataFrame(compare_df)
+
+    # graph the tables
+    graph_compare_age = charters.compare_rates(
+        compare_df[compare_df["issue_age"] == issue_age_value],
+        x_axis="attained_age",
+        rates=["table_1", "table_2"],
+        y_log=False,
+    )
+    graph_compare_age_log = charters.compare_rates(
+        compare_df[compare_df["issue_age"] == issue_age_value],
+        x_axis="attained_age",
+        rates=["table_1", "table_2"],
+        y_log=True,
+    )
+
+    graph_compare_age = dcc.Graph(figure=graph_compare_age)
+    graph_compare_age_log = dcc.Graph(figure=graph_compare_age_log)
+
+    return graph_compare_age, graph_compare_age_log
+
+
+@callback(
+    [Output("tables-tab-content", "children")],
+    [
+        Input("tabs-tables", "active_tab"),
+        Input("store-table-compare", "data"),
+    ],
+    [
+        State("table-1-id", "value"),
+        State("table-2-id", "value"),
+        State({"type": "table-1-str-filter", "index": ALL}, "value"),
+        State({"type": "table-1-num-filter", "index": ALL}, "value"),
+        State({"type": "table-2-str-filter", "index": ALL}, "value"),
+        State({"type": "table-2-num-filter", "index": ALL}, "value"),
+    ],
+    prevent_initial_call=True,
+)
+def update_table_tabs(
+    active_tab,
+    compare_df,
+    table1_id,
+    table2_id,
+    table_1_filter_str,
+    table_1_filter_num,
+    table_2_filter_str,
+    table_2_filter_num,
+):
+    """Update the tables tab content."""
+    # load tables
+    table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple = (
+        load_tables(table1_id, table2_id)
+    )
+
+    # filter the datasets
+    filtered_table_1, filtered_table_2, compare_df = filter_tables(
+        table_1, table_2, filter_list=callback_context.states_list
+    )
+
+    if active_tab == "tab-table-1":
+        table = filtered_table_1
+    elif active_tab == "tab-table-2":
+        table = filtered_table_2
+    else:
+        table = compare_df
+
+    # deserialize the table
+    columnDefs = dash_formats.get_column_defs(table)
+    tab_content = dag.AgGrid(
+        rowData=table.to_dict("records"),
+        columnDefs=columnDefs,
+        defaultColDef={"resizable": True, "sortable": True, "filter": True},
+        dashGridOptions={"pagination": True},
+    )
+
+    return tab_content
+
+
+#   _____                 _   _
+#  |  ___|   _ _ __   ___| |_(_) ___  _ __  ___
+#  | |_ | | | | '_ \ / __| __| |/ _ \| '_ \/ __|
+#  |  _|| |_| | | | | (__| |_| | (_) | | | \__ \
+#  |_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
+
+
+def load_tables(table1_id, table2_id):
+    """Get the table data and create a compare dataframe."""
     # process tables
     mt = tables.MortTable()
+    warning_tuple = (False, False)
 
     # table_1
     if isinstance(table1_id, str):
@@ -349,7 +600,7 @@ def get_table_data(n_clicks, table1_id, table2_id):
             table_1_select_period = "Unknown"
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
-            return (*no_upate_tuple, False, True)
+            warning_tuple = (False, True)
         # add age and duration columns if not present
         table_1 = tables.add_aa_ia_dur_cols(table_1)
     else:
@@ -358,7 +609,7 @@ def get_table_data(n_clicks, table1_id, table2_id):
             table_1_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
-            return (*no_upate_tuple, False, True)
+            warning_tuple = (False, True)
 
     # table_2
     if isinstance(table2_id, str):
@@ -367,7 +618,7 @@ def get_table_data(n_clicks, table1_id, table2_id):
             table_2_select_period = "Unknown"
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
-            return (*no_upate_tuple, False, True)
+            warning_tuple = (False, True)
         # add age and duration columns if not present
         table_2 = tables.add_aa_ia_dur_cols(table_2)
     else:
@@ -376,85 +627,15 @@ def get_table_data(n_clicks, table1_id, table2_id):
             table_2_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
-            return (*no_upate_tuple, False, True)
+            warning_tuple = (False, True)
 
-    # serialize the dataframes
-    table_1 = table_1.to_json(orient="split")
-    table_2 = table_2.to_json(orient="split")
-
-    return (
-        table_1,
-        table_2,
-        table_1_select_period,
-        table_2_select_period,
-        False,
-        False,
-    )
+    return table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple
 
 
-@callback(
-    [Output("table-1-filters", "children"), Output("table-2-filters", "children")],
-    [Input("store-table-1", "data"), Input("store-table-2", "data")],
-    prevent_initial_call=True,
-)
-def create_filters(table_1, table_2):
-    """Create the filters for the tables."""
-    # deserialize the tables
-    table_1 = pd.read_json(StringIO(table_1), orient="split")
-    table_2 = pd.read_json(StringIO(table_2), orient="split")
-
-    # create the filters
-    filters_1 = dh.generate_filters(
-        df=table_1,
-        prefix="table-1",
-        exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
-    ).get("filters")
-    filters_2 = dh.generate_filters(
-        df=table_2,
-        prefix="table-2",
-        exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
-    ).get("filters")
-
-    return filters_1, filters_2
-
-
-@callback(
-    [Output("table-1-desc", "children"), Output("table-2-desc", "children")],
-    [
-        Input({"type": "table-1-str-filter", "index": ALL}, "value"),
-        Input({"type": "table-1-num-filter", "index": ALL}, "value"),
-        Input({"type": "table-2-str-filter", "index": ALL}, "value"),
-        Input({"type": "table-2-num-filter", "index": ALL}, "value"),
-        Input("table-1-filters", "children"),
-    ],
-    [
-        State("store-table-1", "data"),
-        State("store-table-2", "data"),
-        State("table-1-id", "value"),
-        State("table-2-id", "value"),
-        State("store-table-1-select", "data"),
-        State("store-table-2-select", "data"),
-    ],
-    prevent_initial_call=True,
-)
-def update_table_descriptions(
-    table_1_filter_str,
-    table_1_filter_num,
-    table_2_filter_str,
-    table_2_filter_num,
-    table_1_filters,
-    table_1,
-    table_2,
-    table1_id,
-    table2_id,
-    table_1_select_period,
-    table_2_select_period,
-):
-    """Update the table descriptions."""
-    mt = tables.MortTable()
-
+def filter_tables(table_1, table_2, filter_list):
+    """Load and filter the tables."""
     # callback context
-    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
+    inputs_info = dh._inputs_flatten_list(filter_list)
     filters_table_1 = dh._inputs_parse_type(
         inputs_info, "table-1-num-filter"
     ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
@@ -462,13 +643,24 @@ def update_table_descriptions(
         inputs_info, "table-2-num-filter"
     ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
 
-    # deserialize the tables
-    table_1 = pd.read_json(StringIO(table_1), orient="split")
-    table_2 = pd.read_json(StringIO(table_2), orient="split")
-
     # filter the datasets
     filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
     filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
+    compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
+
+    return filtered_table_1, filtered_table_2, compare_df
+
+
+def get_table_desc(
+    table1_id,
+    table2_id,
+    filtered_table_1,
+    filtered_table_2,
+    table_1_select_period,
+    table_2_select_period,
+):
+    """Get the table descriptions."""
+    mt = tables.MortTable()
 
     # table description 1
     if isinstance(table1_id, str):
@@ -525,201 +717,3 @@ def update_table_descriptions(
     )
 
     return desc_1, desc_2
-
-
-@callback(
-    [
-        Output("graph-contour", "children"),
-        Output("slider-issue-age", "min"),
-        Output("slider-issue-age", "max"),
-        Output("slider-issue-age", "value"),
-    ],
-    [
-        Input({"type": "table-1-str-filter", "index": ALL}, "value"),
-        Input({"type": "table-1-num-filter", "index": ALL}, "value"),
-        Input({"type": "table-2-str-filter", "index": ALL}, "value"),
-        Input({"type": "table-2-num-filter", "index": ALL}, "value"),
-        Input("table-1-filters", "children"),
-    ],
-    [State("store-table-1", "data"), State("store-table-2", "data")],
-    prevent_initial_call=True,
-)
-def create_contour_and_sliders(
-    table_1_filter_str,
-    table_1_filter_num,
-    table_2_filter_str,
-    table_2_filter_num,
-    table_1_filters,
-    table_1,
-    table_2,
-):
-    """Graph the mortality tables with a contour and comparison."""
-    # callback context
-    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
-    filters_table_1 = dh._inputs_parse_type(
-        inputs_info, "table-1-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
-    filters_table_2 = dh._inputs_parse_type(
-        inputs_info, "table-2-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
-
-    # deserialize the tables
-    table_1 = pd.read_json(StringIO(table_1), orient="split")
-    table_2 = pd.read_json(StringIO(table_2), orient="split")
-
-    # filter the datasets
-    filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
-    filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
-    compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
-
-    # get the slider values
-    issue_age_min = compare_df["issue_age"].min()
-    issue_age_max = compare_df["issue_age"].max()
-    issue_age_value = issue_age_min
-
-    # adding additional hover data
-    grouped_data = (
-        compare_df.groupby(["issue_age", "duration"], observed=True)["ratio"]
-        .agg("sum")
-        .reset_index()
-    )
-    grouped_data = grouped_data.pivot(
-        index="duration", columns="issue_age", values="ratio"
-    )
-    issue_age, duration = np.meshgrid(grouped_data.columns, grouped_data.index)
-    attained_age = issue_age + duration
-
-    # graph the tables
-    graph_contour = charters.chart(
-        compare_df,
-        x_axis="issue_age",
-        y_axis="duration",
-        color="ratio",
-        type="contour",
-        agg="mean",
-        customdata=attained_age,
-        hovertemplate=(
-            "issue_age: %{x}<br>"
-            "duration: %{y}<br>"
-            "attained_age: %{customdata}<br>"
-            "ratio: %{z}<extra></extra>"
-        ),
-    )
-
-    graph_contour = dcc.Graph(figure=graph_contour)
-
-    return (
-        graph_contour,
-        issue_age_min,
-        issue_age_max,
-        issue_age_value,
-    )
-
-
-@callback(
-    [
-        Output("graph-compare-age", "children"),
-    ],
-    [Input("slider-issue-age", "value")],
-    [
-        State("table-1-filters", "children"),
-        State("table-2-filters", "children"),
-        State("store-table-1", "data"),
-        State("store-table-2", "data"),
-    ],
-    prevent_initial_call=True,
-)
-def update_graphs_from_slider(
-    issue_age_value, filters_table_1, filters_table_2, table_1, table_2
-):
-    """Update the compare duration graph."""
-    # callback context
-    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
-    filters_table_1 = dh._inputs_parse_type(
-        inputs_info, "table-1-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
-    filters_table_2 = dh._inputs_parse_type(
-        inputs_info, "table-2-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
-
-    # deserialize the tables
-    table_1 = pd.read_json(StringIO(table_1), orient="split")
-    table_2 = pd.read_json(StringIO(table_2), orient="split")
-
-    # filter the datasets
-    filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
-    filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
-    compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
-
-    # graph the tables
-    graph_compare_age = charters.compare_rates(
-        compare_df[compare_df["issue_age"] == issue_age_value],
-        x_axis="attained_age",
-        rates=["table_1", "table_2"],
-        y_log=True,
-    )
-
-    graph_compare_age = dcc.Graph(figure=graph_compare_age)
-
-    return graph_compare_age
-
-
-@callback(
-    [Output("tables-tab-content", "children")],
-    [
-        Input("tabs-tables", "active_tab"),
-        Input({"type": "table-1-str-filter", "index": ALL}, "value"),
-        Input({"type": "table-1-num-filter", "index": ALL}, "value"),
-        Input({"type": "table-2-str-filter", "index": ALL}, "value"),
-        Input({"type": "table-2-num-filter", "index": ALL}, "value"),
-        Input("table-1-filters", "children"),
-    ],
-    [State("store-table-1", "data"), State("store-table-2", "data")],
-    prevent_initial_call=True,
-)
-def update_table_tabs(
-    active_tab,
-    table_1_filter_str,
-    table_1_filter_num,
-    table_2_filter_str,
-    table_2_filter_num,
-    table_1_filters,
-    table_1,
-    table_2,
-):
-    """Update the tables tab content."""
-    # callback context
-    inputs_info = dh._inputs_flatten_list(callback_context.inputs_list)
-    filters_table_1 = dh._inputs_parse_type(
-        inputs_info, "table-1-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
-    filters_table_2 = dh._inputs_parse_type(
-        inputs_info, "table-2-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
-
-    # deserialize the tables
-    table_1 = pd.read_json(StringIO(table_1), orient="split")
-    table_2 = pd.read_json(StringIO(table_2), orient="split")
-
-    # filter the datasets
-    filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
-    filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
-    compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
-
-    if active_tab == "tab-table-1":
-        table = filtered_table_1
-    elif active_tab == "tab-table-2":
-        table = filtered_table_2
-    else:
-        table = compare_df
-
-    # deserialize the table
-    columnDefs = dash_formats.get_column_defs(table)
-    tab_content = dag.AgGrid(
-        rowData=table.to_dict("records"),
-        columnDefs=columnDefs,
-        defaultColDef={"resizable": True, "sortable": True, "filter": True},
-        dashGridOptions={"pagination": True},
-    )
-
-    return tab_content
