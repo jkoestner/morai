@@ -197,10 +197,20 @@ def layout():
                 ],
                 className="mb-2",
             ),
+            html.H5(
+                "Table Comparison Contour",
+                id="section-table-contour",
+                className="bg-secondary text-white p-2 mb-2",
+            ),
             dcc.Loading(
                 id="loading-graph-contour",
                 type="dot",
                 children=html.Div(id="graph-contour"),
+            ),
+            html.H5(
+                "Table Plot Age",
+                id="section-table-contour",
+                className="bg-secondary text-white p-2 mb-2",
             ),
             dbc.Row(
                 dbc.Col(
@@ -240,6 +250,17 @@ def layout():
                 ],
                 className="mb-2",
             ),
+            html.H5(
+                "Table Select/Ultimate Compare",
+                id="section-table-contour",
+                className="bg-secondary text-white p-2 mb-2",
+            ),
+            html.P(
+                [
+                    "The select and ultimate ratio is the ratio of the ",
+                    "[ultimate attained age] / [select attained age].",
+                ],
+            ),
             dbc.Row(
                 [
                     dbc.Col(
@@ -258,6 +279,11 @@ def layout():
                     ),
                 ],
                 className="mb-2",
+            ),
+            html.H5(
+                "Table Data",
+                id="section-table-contour",
+                className="bg-secondary text-white p-2 mb-2",
             ),
             dbc.Row(
                 [
@@ -766,38 +792,19 @@ def get_table_desc(
 
 def get_su_graph(df, select_period, title):
     """Get the select and ultimate graph."""
-    # getting the ultimate period
-    if isinstance(select_period, str):
-        select_period = 25
-    ultimate_period = select_period + 1
-    ult = df[df["duration"] == ultimate_period].rename(columns={"vals": "vals_ult"})
-
-    # drop duration type columns if they exist
-    drop_cols = [
-        col
-        for col in ult.columns
-        if any(keyword in col for keyword in ["duration", "attained_age"])
-    ]
-    if drop_cols:
-        ult = ult.drop(columns=drop_cols)
-    merge_cols = [col for col in ult.columns if col != "vals_ult"]
-
-    # merge the ultimate values
-    df = df.merge(ult, on=merge_cols)
-    df["su_ratio"] = df["vals_ult"] / df["vals"]
-    df = df[df["duration"] <= ultimate_period]
+    df = tables.get_su_table(df, select_period)
 
     # plot the chart
     fig = charters.chart(
         df,
-        x_axis="duration",
-        y_axis="issue_age",
+        x_axis="issue_age",
+        y_axis="duration",
         color="su_ratio",
         type="contour",
         agg="mean",
         title=title,
         hovertemplate=(
-            "duration: %{x}<br>" "issue_age: %{y}<br>" "ratio: %{z}<extra></extra>"
+            "issue_age: %{x}<br>" "duration: %{y}<br>" "ratio: %{z}<extra></extra>"
         ),
     )
     return dcc.Graph(figure=fig)

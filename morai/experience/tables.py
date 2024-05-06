@@ -613,3 +613,46 @@ def output_table(df, name="table.csv"):
     path = helpers.FILES_PATH / "dataset" / "tables" / name
     df.to_csv(path, index=False)
     logger.info(f"Output table to: {path}")
+
+
+def get_su_table(df, select_period):
+    """
+    Calculate the select and ultimate ratio.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame.
+    select_period : int
+        The select period.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        The DataFrame with the ratio column.
+
+    """
+    # getting the ultimate period and table
+    if isinstance(select_period, str):
+        logger.debug(f"select period is: '{select_period}'. Defaulting to '25'")
+        select_period = 25
+    logger.debug(
+        f"calculating select ultimate ratio for select period: '{select_period}'"
+    )
+    ultimate_period = select_period + 1
+    ult = df[df["issue_age"] == 0].rename(columns={"vals": "vals_ult"})
+    drop_cols = [
+        col
+        for col in ult.columns
+        if any(keyword in col for keyword in ["duration", "issue_age"])
+    ]
+    if drop_cols:
+        ult = ult.drop(columns=drop_cols)
+
+    # merge the ultimate values and calculate the ratio
+    merge_cols = [col for col in ult.columns if col != "vals_ult"]
+    df = df.merge(ult, on=merge_cols, how="left")
+    df["su_ratio"] = df["vals_ult"] / df["vals"]
+    df = df[df["duration"] <= ultimate_period]
+
+    return df
