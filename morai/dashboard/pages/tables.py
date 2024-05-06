@@ -242,6 +242,25 @@ def layout():
             ),
             dbc.Row(
                 [
+                    dbc.Col(
+                        dcc.Loading(
+                            id="loading-graph-su-table-1",
+                            type="dot",
+                            children=html.Div(id="graph-su-table-1"),
+                        ),
+                    ),
+                    dbc.Col(
+                        dcc.Loading(
+                            id="loading-graph-su-table-2",
+                            type="dot",
+                            children=html.Div(id="graph-su-table-2"),
+                        ),
+                    ),
+                ],
+                className="mb-2",
+            ),
+            dbc.Row(
+                [
                     dbc.Tabs(
                         [
                             dbc.Tab(label="Table-1", tab_id="tab-table-1"),
@@ -249,7 +268,7 @@ def layout():
                             dbc.Tab(label="Compare", tab_id="tab-table-compare"),
                         ],
                         id="tabs-tables",
-                        active_tab="tab-table-1",
+                        active_tab="tab-table-compare",
                     ),
                     dcc.Loading(
                         id="loading-tables-tab-content",
@@ -337,6 +356,8 @@ def set_table_2_input(value):
         Output("store-table-compare", "data"),
         Output("table-1-desc", "children"),
         Output("table-2-desc", "children"),
+        Output("graph-su-table-1", "children"),
+        Output("graph-su-table-2", "children"),
         Output("toast-null-tables", "is_open"),
         Output("toast-table-not-found", "is_open"),
     ],
@@ -351,7 +372,7 @@ def set_table_2_input(value):
     ],
     prevent_initial_call=True,
 )
-def get_tables(
+def initialize_tables(
     n_clicks,
     filter_button,
     table1_id,
@@ -363,7 +384,7 @@ def get_tables(
 ):
     """Get the initial table data."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
-    no_upate_tuple = (dash.no_update,) * 7
+    no_upate_tuple = (dash.no_update,) * 9
     warning_tuple = (False, False)
 
     if table1_id is None or table2_id is None:
@@ -416,6 +437,14 @@ def get_tables(
         table_2_select_period,
     )
 
+    # select/ultimate graphs
+    graph_su_table_1 = get_su_graph(
+        filtered_table_1, table_1_select_period, title="Select/Ultimate Contour Table 1"
+    )
+    graph_su_table_2 = get_su_graph(
+        filtered_table_2, table_2_select_period, title="Select/Ultimate Contour Table 2"
+    )
+
     return (
         table_1_select_period,
         table_2_select_period,
@@ -424,6 +453,8 @@ def get_tables(
         compare_df.to_dict("records"),
         desc_1,
         desc_2,
+        graph_su_table_1,
+        graph_su_table_2,
         False,
         False,
     )
@@ -450,7 +481,7 @@ def create_contour(
     issue_age_max = compare_df["issue_age"].max()
     issue_age_value = issue_age_min
 
-    # adding additional hover data
+    # adding attained_age to additional hover data
     grouped_data = (
         compare_df.groupby(["issue_age", "duration"], observed=True)["ratio"]
         .agg("sum")
@@ -551,22 +582,29 @@ def update_table_tabs(
     table_2_filter_num,
 ):
     """Update the tables tab content."""
-    # load tables
-    table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple = (
-        load_tables(table1_id, table2_id)
-    )
+    if callback_context.triggered_id == "tabs-tables":
+        # load tables
+        (
+            table_1,
+            table_2,
+            table_1_select_period,
+            table_2_select_period,
+            warning_tuple,
+        ) = load_tables(table1_id, table2_id)
 
-    # filter the datasets
-    filtered_table_1, filtered_table_2, compare_df = filter_tables(
-        table_1, table_2, filter_list=callback_context.states_list
-    )
+        # filter the datasets
+        filtered_table_1, filtered_table_2, compare_df = filter_tables(
+            table_1, table_2, filter_list=callback_context.states_list
+        )
 
-    if active_tab == "tab-table-1":
-        table = filtered_table_1
-    elif active_tab == "tab-table-2":
-        table = filtered_table_2
+        if active_tab == "tab-table-1":
+            table = filtered_table_1
+        elif active_tab == "tab-table-2":
+            table = filtered_table_2
+        else:
+            table = compare_df
     else:
-        table = compare_df
+        table = pd.DataFrame(compare_df)
 
     # deserialize the table
     columnDefs = dash_formats.get_column_defs(table)
@@ -594,10 +632,12 @@ def load_tables(table1_id, table2_id):
     warning_tuple = (False, False)
 
     # table_1
+    logger.debug(f"loading table 1: {table1_id}")
     if isinstance(table1_id, str):
         try:
-            table_1 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table1_id)
+            table_1 = pl.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table1_id)
             table_1_select_period = "Unknown"
+            table_1 = table_1.to_pandas()
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
             warning_tuple = (False, True)
@@ -605,17 +645,19 @@ def load_tables(table1_id, table2_id):
         table_1 = tables.add_aa_ia_dur_cols(table_1)
     else:
         try:
-            table_1 = mt.build_table(table_list=[table1_id], extend=True)
+            table_1 = mt.build_table(table_list=[table1_id], extend=False)
             table_1_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
             warning_tuple = (False, True)
 
     # table_2
+    logger.debug(f"loading table 2: {table2_id}")
     if isinstance(table2_id, str):
         try:
-            table_2 = pd.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table2_id)
+            table_2 = pl.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table2_id)
             table_2_select_period = "Unknown"
+            table_2 = table_2.to_pandas()
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
             warning_tuple = (False, True)
@@ -623,7 +665,7 @@ def load_tables(table1_id, table2_id):
         table_2 = tables.add_aa_ia_dur_cols(table_2)
     else:
         try:
-            table_2 = mt.build_table(table_list=[table2_id], extend=True)
+            table_2 = mt.build_table(table_list=[table2_id], extend=False)
             table_2_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
@@ -646,6 +688,9 @@ def filter_tables(table_1, table_2, filter_list):
     # filter the datasets
     filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
     filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
+
+    # compare the tables
+    logger.debug("comparing tables")
     compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
 
     return filtered_table_1, filtered_table_2, compare_df
@@ -717,3 +762,42 @@ def get_table_desc(
     )
 
     return desc_1, desc_2
+
+
+def get_su_graph(df, select_period, title):
+    """Get the select and ultimate graph."""
+    # getting the ultimate period
+    if isinstance(select_period, str):
+        select_period = 25
+    ultimate_period = select_period + 1
+    ult = df[df["duration"] == ultimate_period].rename(columns={"vals": "vals_ult"})
+
+    # drop duration type columns if they exist
+    drop_cols = [
+        col
+        for col in ult.columns
+        if any(keyword in col for keyword in ["duration", "attained_age"])
+    ]
+    if drop_cols:
+        ult = ult.drop(columns=drop_cols)
+    merge_cols = [col for col in ult.columns if col != "vals_ult"]
+
+    # merge the ultimate values
+    df = df.merge(ult, on=merge_cols)
+    df["su_ratio"] = df["vals_ult"] / df["vals"]
+    df = df[df["duration"] <= ultimate_period]
+
+    # plot the chart
+    fig = charters.chart(
+        df,
+        x_axis="duration",
+        y_axis="issue_age",
+        color="su_ratio",
+        type="contour",
+        agg="mean",
+        title=title,
+        hovertemplate=(
+            "duration: %{x}<br>" "issue_age: %{y}<br>" "ratio: %{z}<extra></extra>"
+        ),
+    )
+    return dcc.Graph(figure=fig)
