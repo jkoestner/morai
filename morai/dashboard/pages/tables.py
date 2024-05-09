@@ -209,7 +209,7 @@ def layout():
             ),
             html.H5(
                 "Table Plot Age",
-                id="section-table-contour",
+                id="section-table-plot",
                 className="bg-secondary text-white p-2 mb-2",
             ),
             dbc.Row(
@@ -252,7 +252,7 @@ def layout():
             ),
             html.H5(
                 "Table Select/Ultimate Compare",
-                id="section-table-contour",
+                id="section-table-su",
                 className="bg-secondary text-white p-2 mb-2",
             ),
             html.P(
@@ -282,7 +282,7 @@ def layout():
             ),
             html.H5(
                 "Table Data",
-                id="section-table-contour",
+                id="section-table-data",
                 className="bg-secondary text-white p-2 mb-2",
             ),
             dbc.Row(

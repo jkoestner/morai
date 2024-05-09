@@ -635,7 +635,8 @@ def get_su_table(df, select_period):
     # getting the ultimate period and table
     if isinstance(select_period, str):
         logger.debug(f"select period is: '{select_period}'. Defaulting to '25'")
-        select_period = 25
+        # max duration
+        select_period = df["duration"].max()
     logger.debug(
         f"calculating select ultimate ratio for select period: '{select_period}'"
     )
