@@ -48,6 +48,7 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1):
         Column name of the measure.
     p : float, optional
         Probability of the measure being within the range.
+        Default is 90% which equates to a z-score of 1.645.
     r : float, optional
         The range the measure is within.
     sd : float, optional
@@ -119,3 +120,58 @@ def asymptotic(df, measure, k):
     df["credibility_as"] = df[measure] / (df[measure] + k)
 
     return df
+
+
+def vm20_buhlmann(a, b, c):
+    """
+    Determine the credibility of a measure using the SOA VM-20 method.
+
+    The SOA provides an approximation for the Bühlmann Empirical Bayesian Method.
+
+    References
+    ----------
+      https://content.naic.org/pbr_data.htm
+        2024 Valuation Manual, Section VM-20, Subsection 9.C.5.a (page 20-59)
+      https://www.soa.org/493869/globalassets/assets/files/research/projects/research-cred-theory-pract.pdf
+        development of the approximation method
+
+    fomula to calculate z:
+    z = A / (A + ((1.090 * B) - (1.204 * C)) / (0.019604 * A))
+
+    The z value can then be used to blend a measure with a prior measure.
+    new_estimate = z * measure + (1 - z) * prior
+
+    A = Σ(amount insured) * (exposure) * (mortality)
+    B = Σ(amount insured)^2 * (exposure) * (mortality)
+    C = Σ(amount insured)^2 * (exposure)^2 * (mortality)^2
+
+    Strengths:
+    ----------
+    - simple to calculate
+
+    Weaknesses:
+    ------------
+    - not statistically based
+
+    Parameters
+    ----------
+    a : float
+        the mortality weighted sum of the amount insured.
+    b : float
+        the mortality weighted sum of the amount insured squared.
+    c : float
+        the mortality weighted sum of the amount insured squared and exposure squared.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with additional columns for credibility measures.
+
+    """
+    # calculate the credibility
+    logger.info(
+        f"Using 'SOA VM-20 credibility' with constants: a: {a}, b: {b}, c: {c}."
+    )
+    z = a / (a + ((1.090 * b) - (1.204 * c)) / (0.019604 * a))
+
+    return z

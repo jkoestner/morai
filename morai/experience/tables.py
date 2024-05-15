@@ -634,14 +634,19 @@ def get_su_table(df, select_period):
     """
     # getting the ultimate period and table
     if isinstance(select_period, str):
-        logger.debug(f"select period is: '{select_period}'. Defaulting to '25'")
+        logger.debug(
+            f"select period is: '{select_period}'. Defaulting to 'max duration'"
+        )
         # max duration
         select_period = df["duration"].max()
+
+    # the minimum issue age will have the longest duration values
     logger.debug(
         f"calculating select ultimate ratio for select period: '{select_period}'"
     )
-    ultimate_period = select_period + 1
-    ult = df[df["issue_age"] == 0].rename(columns={"vals": "vals_ult"})
+    ult = df[df["issue_age"] == df["issue_age"].min()].rename(
+        columns={"vals": "vals_ult"}
+    )
     drop_cols = [
         col
         for col in ult.columns
@@ -654,6 +659,6 @@ def get_su_table(df, select_period):
     merge_cols = [col for col in ult.columns if col != "vals_ult"]
     df = df.merge(ult, on=merge_cols, how="left")
     df["su_ratio"] = df["vals_ult"] / df["vals"]
-    df = df[df["duration"] <= ultimate_period]
+    df = df[df["duration"] <= (select_period + 1)]
 
     return df

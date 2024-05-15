@@ -441,17 +441,29 @@ def initialize_tables(
         filters_2 = dash.no_update
 
     # filter the datasets
-    filtered_table_1, filtered_table_2, compare_df = filter_tables(
+    filtered_table_1, filtered_table_2 = filter_tables(
         table_1, table_2, filter_list=callback_context.states_list
     )
 
-    compare_df = (
-        compare_df.groupby(["issue_age", "duration", "attained_age"], observed=True)[
-            ["ratio", "table_1", "table_2"]
-        ]
+    # group the datasets
+    grouped_table_1 = (
+        filtered_table_1.groupby(
+            ["issue_age", "duration", "attained_age"], observed=True
+        )["vals"]
         .agg("mean")
         .reset_index()
     )
+
+    grouped_table_2 = (
+        filtered_table_2.groupby(
+            ["issue_age", "duration", "attained_age"], observed=True
+        )["vals"]
+        .agg("mean")
+        .reset_index()
+    )
+
+    # compare the tables
+    compare_df = tables.compare_tables(grouped_table_1, grouped_table_2)
 
     # table descriptions
     desc_1, desc_2 = get_table_desc(
@@ -465,10 +477,10 @@ def initialize_tables(
 
     # select/ultimate graphs
     graph_su_table_1 = get_su_graph(
-        filtered_table_1, table_1_select_period, title="Select/Ultimate Contour Table 1"
+        grouped_table_1, table_1_select_period, title="Select/Ultimate Contour Table 1"
     )
     graph_su_table_2 = get_su_graph(
-        filtered_table_2, table_2_select_period, title="Select/Ultimate Contour Table 2"
+        grouped_table_2, table_2_select_period, title="Select/Ultimate Contour Table 2"
     )
 
     return (
@@ -619,9 +631,29 @@ def update_table_tabs(
         ) = load_tables(table1_id, table2_id)
 
         # filter the datasets
-        filtered_table_1, filtered_table_2, compare_df = filter_tables(
+        filtered_table_1, filtered_table_2 = filter_tables(
             table_1, table_2, filter_list=callback_context.states_list
         )
+
+        # group the datasets
+        grouped_table_1 = (
+            filtered_table_1.groupby(
+                ["issue_age", "duration", "attained_age"], observed=True
+            )["vals"]
+            .agg("mean")
+            .reset_index()
+        )
+
+        grouped_table_2 = (
+            filtered_table_2.groupby(
+                ["issue_age", "duration", "attained_age"], observed=True
+            )["vals"]
+            .agg("mean")
+            .reset_index()
+        )
+
+        # compare the tables
+        compare_df = tables.compare_tables(grouped_table_1, grouped_table_2)
 
         if active_tab == "tab-table-1":
             table = filtered_table_1
@@ -715,11 +747,7 @@ def filter_tables(table_1, table_2, filter_list):
     filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
     filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
 
-    # compare the tables
-    logger.debug("comparing tables")
-    compare_df = tables.compare_tables(filtered_table_1, filtered_table_2)
-
-    return filtered_table_1, filtered_table_2, compare_df
+    return filtered_table_1, filtered_table_2
 
 
 def get_table_desc(
@@ -807,4 +835,20 @@ def get_su_graph(df, select_period, title):
             "issue_age: %{x}<br>" "duration: %{y}<br>" "ratio: %{z}<extra></extra>"
         ),
     )
+
+    # colorscale that pivots around 1
+    z_min = np.nanmin(fig.data[0].z)
+    z_max = np.nanmax(fig.data[0].z)
+    colorscale = [
+        [0, "white"],
+        [(1 - z_min) / (z_max - z_min), "dimgray"],
+        [(1 - z_min + 0.01) / (z_max - z_min), "royalblue"],
+        [min((2 - z_min) / (z_max - z_min), 1), "cornflowerblue"],
+        [min((3 - z_min) / (z_max - z_min), 1), "lightseagreen"],
+        [min((4 - z_min) / (z_max - z_min), 1), "yellowgreen"],
+        [min((5 - z_min) / (z_max - z_min), 1), "sandybrown"],
+        [1, "red"],
+    ]
+    fig.update_traces(contours_coloring="heatmap", colorscale=colorscale)
+
     return dcc.Graph(figure=fig)
