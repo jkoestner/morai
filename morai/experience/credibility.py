@@ -52,9 +52,9 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1):
     r : float, optional
         The range the measure is within.
     sd : float, optional
-        Standard deviation of the measure.
+        Standard deviation of the measure. (Assuming Poisson if not provided.)
     u : float, optional
-        Mean of the measure.
+        Mean of the measure. (Assuming Poisson if not provided.)
 
     Returns
     -------
@@ -122,18 +122,11 @@ def asymptotic(df, measure, k):
     return df
 
 
-def vm20_buhlmann(a, b, c):
+def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None):
     """
     Determine the credibility of a measure using the SOA VM-20 method.
 
     The SOA provides an approximation for the Bühlmann Empirical Bayesian Method.
-
-    References
-    ----------
-      https://content.naic.org/pbr_data.htm
-        2024 Valuation Manual, Section VM-20, Subsection 9.C.5.a (page 20-59)
-      https://www.soa.org/493869/globalassets/assets/files/research/projects/research-cred-theory-pract.pdf
-        development of the approximation method
 
     fomula to calculate z:
     z = A / (A + ((1.090 * B) - (1.204 * C)) / (0.019604 * A))
@@ -141,26 +134,40 @@ def vm20_buhlmann(a, b, c):
     The z value can then be used to blend a measure with a prior measure.
     new_estimate = z * measure + (1 - z) * prior
 
-    A = Σ(amount insured) * (exposure) * (mortality)
-    B = Σ(amount insured)^2 * (exposure) * (mortality)
-    C = Σ(amount insured)^2 * (exposure)^2 * (mortality)^2
+    A = Σ[(face_amount) * (exposure) * (mortality rate)]
+    B = Σ[(face_amount)^2 * (exposure) * (mortality rate)]
+    C = A^2
 
-    Strengths:
-    ----------
+    Notes
+    -----
+    If exposure is not provided, it is assumed to be 1. This will underestimate
+    the variance, however will be relatively close.
+
+    Strengths
+    ---------
     - simple to calculate
 
-    Weaknesses:
-    ------------
-    - not statistically based
+    Weaknesses
+    ----------
+    - approximation
+
+    References
+    ----------
+      https://content.naic.org/pbr_data.htm
+        2024 Valuation Manual, Section VM-20, Subsection 9.C.5.a (page 20-59)
+      https://www.soa.org/493869/globalassets/assets/files/research/projects/research-cred-theory-pract.pdf
+        describes the development of the approximation method
 
     Parameters
     ----------
-    a : float
-        the mortality weighted sum of the amount insured.
-    b : float
-        the mortality weighted sum of the amount insured squared.
-    c : float
-        the mortality weighted sum of the amount insured squared and exposure squared.
+    df : pd.DataFrame
+        DataFrame with the data.
+    amount_col : str
+        Column name of the amount.
+    rate_col : str
+        Column name of the rate.
+    exposure_col : str
+        Column name of the exposure.
 
     Returns
     -------
@@ -168,10 +175,31 @@ def vm20_buhlmann(a, b, c):
         DataFrame with additional columns for credibility measures.
 
     """
-    # calculate the credibility
-    logger.info(
-        f"Using 'SOA VM-20 credibility' with constants: a: {a}, b: {b}, c: {c}."
-    )
-    z = a / (a + ((1.090 * b) - (1.204 * c)) / (0.019604 * a))
+    # assign values and check columns
+    logger.info("Using 'SOA VM-20 credibility'")
+    # check if the columns exist
+    if amount_col not in df.columns or rate_col not in df.columns:
+        raise ValueError(
+            f"Columns {amount_col} and {rate_col} must be in the DataFrame."
+        )
+    amount = df[amount_col]
+    rate = df[rate_col]
+    if exposure_col is None:
+        logger.warning(
+            "Using approximation for credibility, due to the exposure "
+            "string was not provided."
+        )
+        exposure = 1
+    else:
+        exposure = df[exposure_col]
 
-    return z
+    # calculate the vm20 parameters
+    a = amount * exposure * rate
+    b = amount**2 * exposure * rate
+    c = a**2
+
+    # calculate the credibility
+    z = a / (a + ((1.090 * b) - (1.204 * c)) / (0.019604 * a))
+    df["credibility_vm20"] = z
+
+    return df
