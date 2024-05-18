@@ -143,6 +143,8 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None):
     If exposure is not provided, it is assumed to be 1. This will underestimate
     the variance, however will be relatively close.
 
+    Needs to be based on seriatim data and not aggregated data.
+
     Strengths
     ---------
     - simple to calculate
@@ -178,10 +180,13 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None):
     # assign values and check columns
     logger.info("Using 'SOA VM-20 credibility'")
     # check if the columns exist
-    if amount_col not in df.columns or rate_col not in df.columns:
+    missing_cols = [col for col in [amount_col, rate_col] if col not in df.columns]
+    if missing_cols:
         raise ValueError(
-            f"Columns {amount_col} and {rate_col} must be in the DataFrame."
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
         )
+
+    # parameters
     amount = df[amount_col]
     rate = df[rate_col]
     if exposure_col is None:
