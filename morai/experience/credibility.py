@@ -7,7 +7,7 @@ from morai.utils import custom_logger
 logger = custom_logger.setup_logging(__name__)
 
 
-def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1):
+def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1, groupby_cols=None):
     """
     Determine the credibility of a measure based on limited fluctuation.
 
@@ -55,6 +55,8 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1):
         Standard deviation of the measure. (Assuming Poisson if not provided.)
     u : float, optional
         Mean of the measure. (Assuming Poisson if not provided.)
+    groupby_cols : list, optional
+        Columns to group by before calculating the credibility.
 
     Returns
     -------
@@ -66,10 +68,14 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1):
     z_score = stats.norm.ppf(1 - (1 - p) / 2)
     full_credibility = (z_score / r) ** 2 * (sd**2 / u)
     logger.info(
-        f"Full credibility threshold "
-        f"using 'limited fluctuation': {full_credibility}. "
-        f"Using probability: {p} and range: {r}."
+        f"Credibility calculated using 'limited fluctuation' on '{measure}'.\n"
+        f"Dataframe does not need to be seriatim.\n"
+        f"Full credibility threshold: {full_credibility}.\n"
+        f"Probability: {p}\n"
+        f"Range: {r}."
     )
+    if groupby_cols:
+        df = df.groupby(groupby_cols)[[measure]].sum().reset_index()
 
     # calculate the credibility and cap at 1
     df["credibility_lf"] = ((df[measure] / full_credibility) ** 0.5).clip(upper=1)
@@ -77,7 +83,7 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1):
     return df
 
 
-def asymptotic(df, measure, k):
+def asymptotic(df, measure, k=270, groupby_cols=None):
     """
     Determine the credibility of a measure using asymptotic credibility.
 
@@ -106,8 +112,14 @@ def asymptotic(df, measure, k):
         DataFrame with the data.
     measure : str
         Column name of the measure.
-    k : float
+    k : float, optional
         Constant for the credibility.
+        Default is 270.
+            270 was chosen as the default because this will produce 50% credibility
+            at the same point that 50% would be calculated using the
+            limited fluctuation method.
+    groupby_cols : list, optional
+        Columns to group by before calculating the credibility.
 
     Returns
     -------
@@ -116,13 +128,19 @@ def asymptotic(df, measure, k):
 
     """
     # calculate the credibility
-    logger.info(f"Using 'asymptotic credibility' with constant: {k}.")
+    logger.info(
+        f"Credibility calculated using 'asymptotic' on '{measure}'.\n"
+        f"Dataframe does not need to be seriatim.\n"
+        f"Constant k: {k}."
+    )
+    if groupby_cols:
+        df = df.groupby(groupby_cols)[[measure]].sum().reset_index()
     df["credibility_as"] = df[measure] / (df[measure] + k)
 
     return df
 
 
-def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None):
+def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None, groupby_cols=None):
     """
     Determine the credibility of a measure using the SOA VM-20 method.
 
@@ -136,14 +154,13 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None):
 
     A = Σ[(face_amount) * (exposure) * (mortality rate)]
     B = Σ[(face_amount)^2 * (exposure) * (mortality rate)]
-    C = A^2
+    C = Σ[(face_amount)^2 * (exposure)^2 * (mortality rate)^2]
 
     Notes
     -----
-    If exposure is not provided, it is assumed to be 1. This will underestimate
-    the variance, however will be relatively close.
+    If exposure is not provided, it is assumed to be 1.
 
-    Needs to be based on seriatim data and not aggregated data.
+    Should be based on seriatim data.
 
     Strengths
     ---------
@@ -165,11 +182,13 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None):
     df : pd.DataFrame
         DataFrame with the data.
     amount_col : str
-        Column name of the amount.
+        Column name of the 'amount' field.
     rate_col : str
-        Column name of the rate.
+        Column name of the 'rate' field.
     exposure_col : str
-        Column name of the exposure.
+        Column name of the 'exposure' field.
+    groupby_cols : list, optional
+        Columns to group by before calculating the credibility.
 
     Returns
     -------
@@ -177,34 +196,45 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None):
         DataFrame with additional columns for credibility measures.
 
     """
-    # assign values and check columns
-    logger.info("Using 'SOA VM-20 credibility'")
+    logger.info(
+        "Credibility calculated using 'SOA VM-20'.\n" "Dataframe should be seriatim.\n"
+    )
+    vm20_df = df.copy()
     # check if the columns exist
-    missing_cols = [col for col in [amount_col, rate_col] if col not in df.columns]
+    if groupby_cols is None:
+        vm20_df["aggregate"] = "all"
+        groupby_cols = ["aggregate"]
+
+    missing_cols = [
+        col
+        for col in [amount_col, rate_col, *groupby_cols]
+        if col not in vm20_df.columns
+    ]
     if missing_cols:
         raise ValueError(
             f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
         )
 
     # parameters
-    amount = df[amount_col]
-    rate = df[rate_col]
     if exposure_col is None:
         logger.warning(
             "Using approximation for credibility, due to the exposure "
             "string was not provided."
         )
-        exposure = 1
-    else:
-        exposure = df[exposure_col]
+        vm20_df["exposure"] = 1
 
     # calculate the vm20 parameters
-    a = amount * exposure * rate
-    b = amount**2 * exposure * rate
-    c = a**2
+    vm20_df["a"] = vm20_df["amount"] * vm20_df["exposure"] * vm20_df["rate"]
+    vm20_df["b"] = vm20_df["amount"] ** 2 * vm20_df["exposure"] * vm20_df["rate"]
+    vm20_df["c"] = vm20_df["a"] ** 2
+
+    # group by and sum the vm20 parameters
+    vm20_df = vm20_df.groupby(groupby_cols)[["a", "b", "c"]].sum().reset_index()
 
     # calculate the credibility
-    z = a / (a + ((1.090 * b) - (1.204 * c)) / (0.019604 * a))
-    df["credibility_vm20"] = z
+    vm20_df["credibility_vm20"] = vm20_df["a"] / (
+        vm20_df["a"]
+        + ((1.090 * vm20_df["b"]) - (1.204 * vm20_df["c"])) / (0.019604 * vm20_df["a"])
+    )
 
-    return df
+    return vm20_df

@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from joblib import Parallel, delayed
 from plotly.subplots import make_subplots
 
-from morai.experience import credibility, experience
+from morai.experience import experience
 from morai.forecast import preprocessors
 from morai.utils import custom_logger, helpers
 

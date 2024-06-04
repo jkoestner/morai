@@ -163,52 +163,6 @@ def calc_variance(df, amount_col, rate_col, exposure_col):
     return variance
 
 
-def calc_skewness(df, amount_col, rate_col, exposure_col):
-    """
-    Calculate the skewness of a binomial distribution.
-
-    skewness = (2 * rate - 1) / (amount^2 * exposure * rate * (1 - rate)) ^ 0.5
-
-    Notes
-    -----
-    Needs to be based on seriatim data and not aggregated data.
-
-    Reference
-    ---------
-    https://proofwiki.org/wiki/Skewness_of_Binomial_Distribution
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with the data.
-    amount_col : str
-        Column name of the face amount.
-    rate_col : str
-        Column name of the rate.
-    exposure_col : str
-        Column name of the exposure.
-
-    Returns
-    -------
-    skewness : pd.Series
-        Series with the skewness values.
-
-
-    """
-    # check the columns exist
-    missing_cols = [col for col in [amount_col, rate_col] if col not in df.columns]
-    if missing_cols:
-        raise ValueError(
-            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
-        )
-
-    # calculate the skewness
-    variance = calc_variance(df, amount_col, rate_col, exposure_col)
-    skewness = (df[rate_col] * 2 - 1) / (variance) ** 0.5
-
-    return skewness
-
-
 def calc_moments(df, amount_col, rate_col, exposure_col):
     """
     Calculate the moment variables of a binomial distribution.
@@ -227,6 +181,9 @@ def calc_moments(df, amount_col, rate_col, exposure_col):
     Notes
     -----
     Needs to be based on seriatim data and not aggregated data.
+
+    skewnes can also be calculated as:
+    skewness = (2 * rate - 1) / (amount^2 * exposure * rate * (1 - rate)) ^ 0.5
 
     Reference
     ---------
@@ -259,6 +216,9 @@ def calc_moments(df, amount_col, rate_col, exposure_col):
         )
 
     # calculate the moments
+    logger.info(
+        "Calculating moments for the binomial distribution, need to be seriatim data."
+    )
     moment_1 = df[amount_col] * df[exposure_col] * df[rate_col]
     moment_2_p1 = df[amount_col] ** 2 * df[exposure_col] * df[rate_col]
     moment_2_p2 = df[amount_col] ** 2 * df[exposure_col] * df[rate_col] ** 2
