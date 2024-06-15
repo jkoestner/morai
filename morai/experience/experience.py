@@ -116,7 +116,7 @@ def calc_relative_risk(df, features, numerator, denominator=None):
     return df
 
 
-def calc_variance(df, amount_col, rate_col, exposure_col):
+def calc_variance(df, rate_col, exposure_col, amount_col=None):
     """
     Calculate the variance of a binomial distribution.
 
@@ -135,12 +135,12 @@ def calc_variance(df, amount_col, rate_col, exposure_col):
     ----------
     df : pd.DataFrame
         DataFrame with the data.
-    amount_col : str
-        Column name of the face amount.
     rate_col : str
         Column name of the rate.
     exposure_col : str
         Column name of the exposure.
+    amount_col : str, optional
+        Column name of the face amount.
 
     Returns
     -------
@@ -149,21 +149,20 @@ def calc_variance(df, amount_col, rate_col, exposure_col):
 
     """
     # check the columns exist
-    missing_cols = [col for col in [amount_col, rate_col] if col not in df.columns]
+    missing_cols = [col for col in [rate_col, exposure_col] if col not in df.columns]
     if missing_cols:
         raise ValueError(
             f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
         )
+    amount = 1 if amount_col is None else df[amount_col]
 
     # calculate the variance
-    variance = (
-        df[amount_col] ** 2 * df[exposure_col] * df[rate_col] * (1 - df[rate_col])
-    )
+    variance = amount**2 * df[exposure_col] * df[rate_col] * (1 - df[rate_col])
 
     return variance
 
 
-def calc_moments(df, amount_col, rate_col, exposure_col):
+def calc_moments(df, rate_col, exposure_col, amount_col=None, sffx=None):
     """
     Calculate the moment variables of a binomial distribution.
 
@@ -194,12 +193,14 @@ def calc_moments(df, amount_col, rate_col, exposure_col):
     ----------
     df : pd.DataFrame
         DataFrame with the data.
-    amount_col : str
-        Column name of the face amount.
     rate_col : str
         Column name of the rate.
     exposure_col : str
         Column name of the exposure.
+    amount_col : str, optional
+        Column name of the face amount.
+    sffx : str, optional
+        Suffix for the moment columns.
 
     Returns
     -------
@@ -209,29 +210,35 @@ def calc_moments(df, amount_col, rate_col, exposure_col):
 
     """
     # check the columns exist
-    missing_cols = [col for col in [amount_col, rate_col] if col not in df.columns]
+    missing_cols = [col for col in [rate_col, exposure_col] if col not in df.columns]
     if missing_cols:
         raise ValueError(
             f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
         )
+    if sffx is None:
+        sffx = ""
+    else:
+        sffx = f"_{sffx}"
+        logger.info(f"Adding the label: '{sffx}' to the moment columns.")
+    amount = 1 if amount_col is None else df[amount_col]
 
     # calculate the moments
     logger.info(
         "Calculating moments for the binomial distribution, need to be seriatim data."
     )
-    moment_1 = df[amount_col] * df[exposure_col] * df[rate_col]
-    moment_2_p1 = df[amount_col] ** 2 * df[exposure_col] * df[rate_col]
-    moment_2_p2 = df[amount_col] ** 2 * df[exposure_col] * df[rate_col] ** 2
-    moment_3_p1 = df[amount_col] ** 3 * df[exposure_col] * df[rate_col]
-    moment_3_p2 = df[amount_col] ** 3 * df[exposure_col] * df[rate_col] ** 2
-    moment_3_p3 = df[amount_col] ** 3 * df[exposure_col] * df[rate_col] ** 3
+    moment_1 = amount * df[exposure_col] * df[rate_col]
+    moment_2_p1 = amount**2 * df[exposure_col] * df[rate_col]
+    moment_2_p2 = amount**2 * df[exposure_col] * df[rate_col] ** 2
+    moment_3_p1 = amount**3 * df[exposure_col] * df[rate_col]
+    moment_3_p2 = amount**3 * df[exposure_col] * df[rate_col] ** 2
+    moment_3_p3 = amount**3 * df[exposure_col] * df[rate_col] ** 3
 
     # add the moments to the dataframe
-    df["moment_1"] = moment_1
-    df["moment_2_p1"] = moment_2_p1
-    df["moment_2_p2"] = moment_2_p2
-    df["moment_3_p1"] = moment_3_p1
-    df["moment_3_p2"] = moment_3_p2
-    df["moment_3_p3"] = moment_3_p3
+    df[f"moment{sffx}_1"] = moment_1
+    df[f"moment{sffx}_2_p1"] = moment_2_p1
+    df[f"moment{sffx}_2_p2"] = moment_2_p2
+    df[f"moment{sffx}_3_p1"] = moment_3_p1
+    df[f"moment{sffx}_3_p2"] = moment_3_p2
+    df[f"moment{sffx}_3_p3"] = moment_3_p3
 
     return df

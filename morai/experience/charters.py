@@ -781,6 +781,71 @@ def scatter(df, target, features, sample_nbr=100, cols=3):
     return fig
 
 
+def matrix(df, threshold=0.5, title="Matrix Heatmap"):
+    """
+    Create a heatmap of a matrix dataframe.
+
+    Used to show pairwise correlation of features.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to use that is a matrix.
+    threshold : float, optional
+        The threshold to use for the heatmap.
+    title : str, optional
+        The title of the chart.
+
+    Returns
+    -------
+    fig : Figure
+        The chart
+
+    """
+    # mask the upper triangle
+    mask = np.triu(np.ones_like(df, dtype=bool))
+    df = df.mask(mask)
+
+    # create the plot
+    fig = px.imshow(
+        df,
+        labels={"x": "features", "y": "features", "color": "value"},
+        color_continuous_scale="Blues",
+        zmin=-1,
+        zmax=1,
+        aspect="auto",
+    )
+
+    fig.update_layout(
+        title=title,
+        plot_bgcolor="gray",
+        xaxis={"showgrid": False},
+        yaxis={"showgrid": False},
+    )
+
+    # Add annotations for significant correlations
+    for i in range(df.shape[0]):
+        for j in range(df.shape[1]):
+            if not mask[i, j]:
+                if df.iloc[i, j] < -threshold or df.iloc[i, j] > threshold:
+                    fig.add_annotation(
+                        x=df.columns[j],
+                        y=df.index[i],
+                        text=f"{df.iloc[i, j]:.2f}",
+                        showarrow=False,
+                        font={"color": "red"},
+                    )
+                else:
+                    fig.add_annotation(
+                        x=df.columns[j],
+                        y=df.index[i],
+                        text=f"{df.iloc[i, j]:.2f}",
+                        showarrow=False,
+                    )
+
+    return fig
+
+
 def target(
     df,
     target,

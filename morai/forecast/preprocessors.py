@@ -34,6 +34,8 @@ def preprocess_data(
         There are some preset options that will process the data for features
         considering the model type so the feature_dict doesn't have to be changed
         multiple times.
+        - 'tree' : doesn't need to use 'nominal' or 'ohe' and instead uses 'ordinal'
+        - 'pass' : makes all features passthrough
 
     Returns
     -------

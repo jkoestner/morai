@@ -11,6 +11,8 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1, groupby_cols=Non
     """
     Determine the credibility of a measure based on limited fluctuation.
 
+    Does not need to be seriatim.
+
     This is also known as "classical credibility". It is a method to determine
     the probablity (p) that the measure is within a certain range (r) of the
     unknown true value. This then determines the credibility of the measure (z).
@@ -30,10 +32,10 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1, groupby_cols=Non
 
     Weaknesses:
     ------------
-    - the prior measure may not be applicable
-    - the prior measure may not be fully credible
     - counts can overstate the credibility
     - credibility reaches 1 prematurely instead of assymptotically
+    - the prior measure may not be applicable
+    - the prior measure may not be fully credible
 
     Reference:
     ----------
@@ -70,12 +72,15 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1, groupby_cols=Non
     logger.info(
         f"Credibility calculated using 'limited fluctuation' on '{measure}'.\n"
         f"Dataframe does not need to be seriatim.\n"
-        f"Full credibility threshold: {full_credibility}.\n"
-        f"Probability: {p}\n"
-        f"Range: {r}."
+        f"Created column 'credibility_lf'.\n"
+        f"Full credibility threshold: {full_credibility:,.1f}\n"
+        f"Probability measure within range: {p:,.1f}\n"
+        f"Range +/-: {r:,.1f}\n"
+        f"Standard deviation: {sd:,.1f}\n"
+        f"Mean: {u:,.1f}"
     )
     if groupby_cols:
-        df = df.groupby(groupby_cols)[[measure]].sum().reset_index()
+        df = df.groupby(groupby_cols, observed=True)[[measure]].sum().reset_index()
 
     # calculate the credibility and cap at 1
     df["credibility_lf"] = ((df[measure] / full_credibility) ** 0.5).clip(upper=1)
@@ -86,6 +91,8 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1, groupby_cols=Non
 def asymptotic(df, measure, k=270, groupby_cols=None):
     """
     Determine the credibility of a measure using asymptotic credibility.
+
+    Does not need to be seriatim.
 
     fomula to calculate z, where k is chosen subjectively by practitioner:
     z = n / (n + k)
@@ -117,7 +124,7 @@ def asymptotic(df, measure, k=270, groupby_cols=None):
         Default is 270.
             270 was chosen as the default because this will produce 50% credibility
             at the same point that 50% would be calculated using the
-            limited fluctuation method.
+            limited fluctuation method using 90% probability and a range of 5%.
     groupby_cols : list, optional
         Columns to group by before calculating the credibility.
 
@@ -131,10 +138,11 @@ def asymptotic(df, measure, k=270, groupby_cols=None):
     logger.info(
         f"Credibility calculated using 'asymptotic' on '{measure}'.\n"
         f"Dataframe does not need to be seriatim.\n"
+        f"Created column 'credibility_as'.\n"
         f"Constant k: {k}."
     )
     if groupby_cols:
-        df = df.groupby(groupby_cols)[[measure]].sum().reset_index()
+        df = df.groupby(groupby_cols, observed=True)[[measure]].sum().reset_index()
     df["credibility_as"] = df[measure] / (df[measure] + k)
 
     return df
@@ -143,6 +151,8 @@ def asymptotic(df, measure, k=270, groupby_cols=None):
 def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None, groupby_cols=None):
     """
     Determine the credibility of a measure using the SOA VM-20 method.
+
+    Should be based on seriatim data.
 
     The SOA provides an approximation for the Bühlmann Empirical Bayesian Method.
 
@@ -159,8 +169,6 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None, groupby_cols=None
     Notes
     -----
     If exposure is not provided, it is assumed to be 1.
-
-    Should be based on seriatim data.
 
     Strengths
     ---------
@@ -197,7 +205,9 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None, groupby_cols=None
 
     """
     logger.info(
-        "Credibility calculated using 'SOA VM-20'.\n" "Dataframe should be seriatim.\n"
+        "Credibility calculated using 'SOA VM-20'.\n"
+        "Created column 'credibility_vm20'.\n"
+        "Dataframe should be seriatim.\n"
     )
     vm20_df = df.copy()
     # check if the columns exist
@@ -226,13 +236,109 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None, groupby_cols=None
     # calculate the vm20 parameters
     vm20_df["a"] = vm20_df["amount"] * vm20_df["exposure"] * vm20_df["rate"]
     vm20_df["b"] = vm20_df["amount"] ** 2 * vm20_df["exposure"] * vm20_df["rate"]
-    vm20_df["c"] = vm20_df["a"] ** 2
+    vm20_df["c"] = (
+        vm20_df["amount"] ** 2 * vm20_df["exposure"] ** 2 * vm20_df["rate"] ** 2
+    )
 
     # group by and sum the vm20 parameters
-    vm20_df = vm20_df.groupby(groupby_cols)[["a", "b", "c"]].sum().reset_index()
+    vm20_df = (
+        vm20_df.groupby(groupby_cols, observed=True)[["a", "b", "c"]]
+        .sum()
+        .reset_index()
+    )
 
     # calculate the credibility
     vm20_df["credibility_vm20"] = vm20_df["a"] / (
+        vm20_df["a"]
+        + ((1.090 * vm20_df["b"]) - (1.204 * vm20_df["c"])) / (0.019604 * vm20_df["a"])
+    )
+
+    return vm20_df
+
+
+def vm20_buhlmann_approx(df, a_col, b_col, c_col, groupby_cols=None):
+    """
+    Determine the credibility of a measure using an SOA VM-20 approximation.
+
+    Does not need to be seriatim.
+
+    The SOA provides an approximation for the Bühlmann Empirical Bayesian Method.
+
+    fomula to calculate z:
+    z = A / (A + ((1.090 * B) - (1.204 * C)) / (0.019604 * A))
+
+    The z value can then be used to blend a measure with a prior measure.
+    new_estimate = z * measure + (1 - z) * prior
+
+    Using non-seriatim data that includes the momemnts we can approximate the
+    parameters A, B, and C, which are used to calculate the credibility.
+
+    A = Σ[(face_amount) * (exposure) * (mortality rate)]
+    moment_1 = amount * exposure * rate
+    A = Σ[moment_1]
+
+    B = Σ[(face_amount)^2 * (exposure) * (mortality rate)]
+    moment_2_p1 = amount^2 * exposure * rate
+    B = Σ[moment_2_p1]
+
+    C = Σ[(face_amount)^2 * (exposure)^2 * (mortality rate)^2]
+    moment_2_p2 = amount^2 * exposure * rate^2
+    C ≈ Σ[moment_2_p2]
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the data.
+    a_col : str
+        Column name of the 'a' field.
+    b_col : str
+        Column name of the 'b' field.
+    c_col : str
+        Column name of the 'c' field.
+    groupby_cols : list, optional
+        Columns to group by before calculating the credibility.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with additional columns for credibility measures.
+
+    """
+    logger.info(
+        "Credibility calculated using 'SOA VM-20 approximation'.\n"
+        "Created column 'credibility_vm20_approx'.\n"
+        "Dataframe does not need to be seriatim.\n"
+    )
+    vm20_df = df.copy()
+    # check if the columns exist
+    if groupby_cols is None:
+        vm20_df["aggregate"] = "all"
+        groupby_cols = ["aggregate"]
+
+    missing_cols = [
+        col
+        for col in [a_col, b_col, c_col, *groupby_cols]
+        if col not in vm20_df.columns
+    ]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
+        )
+
+    # calculate the vm20 parameters
+    vm20_df["a"] = vm20_df[a_col]
+    vm20_df["b"] = vm20_df[b_col]
+    vm20_df["c"] = vm20_df[c_col]
+
+    # group by and sum the vm20 parameters
+    vm20_df = (
+        vm20_df.groupby(groupby_cols, observed=True)[["a", "b", "c"]]
+        .sum()
+        .reset_index()
+    )
+
+    # calculate the credibility
+    vm20_df["credibility_vm20_approx"] = vm20_df["a"] / (
         vm20_df["a"]
         + ((1.090 * vm20_df["b"]) - (1.204 * vm20_df["c"])) / (0.019604 * vm20_df["a"])
     )
