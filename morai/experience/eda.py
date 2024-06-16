@@ -1,44 +1,18 @@
 """Collection of exploratory data analysis (eda) tools."""
 
+import re
+
 import numpy as np
 import pandas as pd
 from joblib import Parallel, cpu_count, delayed
 from scipy.stats import chi2_contingency
 from sklearn.feature_selection import mutual_info_regression
+from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import LabelEncoder
 
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
-
-
-def cramers_v(confusion_matrix):
-    """
-    Calculate Cramer's V for categorical-categorical association.
-
-    Values range from 0 to 1, where 0 means no association and 1 means strong.
-
-    Parameters
-    ----------
-    confusion_matrix : pd.DataFrame
-        The confusion matrix for the categorical variables.
-
-    Returns
-    -------
-    cramers_v : float
-        The Cramer's V value.
-
-    References
-    ----------
-    - https://en.wikipedia.org/wiki/Cram%C3%A9r%27s_V
-
-    """
-    chi2, p, dof, ex = chi2_contingency(confusion_matrix)
-    n = confusion_matrix.sum().sum()
-    phi2 = chi2 / n
-    r, k = confusion_matrix.shape
-    cramers_v = np.sqrt(phi2 / min(k - 1, r - 1))
-    return cramers_v
 
 
 def correlation(
@@ -195,3 +169,155 @@ def mutual_info(df, features=None, n_jobs=None, display=True, threshold=0.5):
         mi_matrix.loc[col_j, col_i] = mi_value
 
     return mi_matrix
+
+
+def cramers_v(confusion_matrix):
+    """
+    Calculate Cramer's V for categorical-categorical association.
+
+    Values range from 0 to 1, where 0 means no association and 1 means strong.
+
+    Parameters
+    ----------
+    confusion_matrix : pd.DataFrame
+        The confusion matrix for the categorical variables.
+
+    Returns
+    -------
+    cramers_v : float
+        The Cramer's V value.
+
+    References
+    ----------
+    - https://en.wikipedia.org/wiki/Cram%C3%A9r%27s_V
+
+    """
+    chi2, p, dof, ex = chi2_contingency(confusion_matrix)
+    n = confusion_matrix.sum().sum()
+    phi2 = chi2 / n
+    r, k = confusion_matrix.shape
+    cramers_v = np.sqrt(phi2 / min(k - 1, r - 1))
+    return cramers_v
+
+
+def gvif(df, features=None, constant_col="constant", numeric_only=True):
+    """
+    Calculate the generalized variance inflation factor (GVIF) for the features.
+
+    A GVIF > 5 or GVIF > 10 are common thresholds for multicollinearity. The formula
+    calculates the VIF for each feature using a linear regression model when the feature
+    is numeric.
+
+    VIF = 1 / (1 - R^2)
+    GVIF = VIF ** (1 / (2 * degrees_of_freedom))
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to use.
+    features : list, optional
+        The features to use for the VIF calculation. Default is to use all features.
+    constant_col : str, optional
+        The constant column name to use for the VIF calculation. Default is "constant".
+        VIF needs to be calculated with an intercept due to using a linear
+        regression model.
+    numeric_only : bool, optional
+        Whether to use only numeric features or all. Default is True.
+
+    Returns
+    -------
+    gvif : pd.DataFrame
+        The GVIF values for the features.
+
+    References
+    ----------
+    - https://en.wikipedia.org/wiki/Variance_inflation_factor
+    - Fox, John. 2016. Applied Regression Analysis and Generalized Linear Models
+    - https://github.com/cran/car/blob/master/R/vif.R
+
+    """
+    df = df.copy()
+    if features is None:
+        features = df.columns
+    else:
+        missing_features = set(features) - set(df.columns)
+        if missing_features:
+            raise ValueError(f"Features {missing_features} not found in the DataFrame.")
+    df = df[features]
+    # add constant column if not present
+    if constant_col not in df.columns:
+        logger.debug(f"Adding a constant column '{constant_col}'.")
+        df[constant_col] = 1
+        features.append(constant_col)
+    if constant_col not in features:
+        features.append(constant_col)
+
+    # get the features to use
+    features_num = df[features].select_dtypes(include=[np.number]).columns
+    features_cat = df[features].select_dtypes(exclude=[np.number]).columns
+    if numeric_only:
+        if len(features_cat) > 0:
+            logger.warning(
+                f"Found '{len(features_cat)}' categorical features that will "
+                f"be ignored."
+            )
+        df = df[features_num]
+        features = features_num
+    else:
+        if len(features_cat) > 0:
+            logger.info(
+                f"Converting '{len(features_cat)}' categorical features to "
+                f"dummy variables."
+            )
+        df = pd.get_dummies(df, columns=features_cat, dtype="int8", drop_first=True)
+
+    # check nas
+    if df.isnull().sum().sum() > 0:
+        raise ValueError("The DataFrame contains missing values.")
+
+    # calculate gvif for each feature
+    logger.info(f"Calculating the GVIF for '{len(features)-1}' features.")
+    gvif_data = []
+    features_exclude_constant = [f for f in features if f not in constant_col]
+    for feature in features_exclude_constant:
+        logger.debug(f"Calculating GVIF for '{feature}'")
+
+        if feature in features_num:
+            X = df.loc[:, df.columns != feature]
+            y = df[feature]
+
+            model = LinearRegression().fit(X, y)
+            r2 = model.score(X, y)
+            gvif_value = 1 / (1 - r2)
+
+        elif feature in features_cat:
+            pattern = re.compile(rf"^{feature}_")
+            dummy_features = [col for col in df.columns if pattern.match(col)]
+            other_columns = [
+                col for col in df.columns if col not in [*dummy_features, constant_col]
+            ]
+
+            def make_positive_semi_definite(matrix, epsilon=1e-10):
+                return matrix + np.eye(matrix.shape[0]) * epsilon
+
+            A = make_positive_semi_definite(df[dummy_features].corr().to_numpy())
+            B = make_positive_semi_definite(df[other_columns].corr().to_numpy())
+            C = make_positive_semi_definite(
+                df[dummy_features + other_columns].corr().to_numpy()
+            )
+
+            det_A = np.linalg.det(A)
+            det_B = np.linalg.det(B)
+            det_C = np.linalg.det(C)
+
+            degrees_of_freedom = len(dummy_features)
+            gvif_unadjust = (det_A * det_B) / det_C
+            gvif_value = gvif_unadjust ** (1 / (2 * degrees_of_freedom))
+        else:
+            raise ValueError(f"Feature '{feature}' not found in the DataFrame.")
+
+        gvif_data.append({"feature": feature, "gvif": gvif_value})
+
+    gvif = pd.DataFrame(gvif_data)
+
+    return gvif

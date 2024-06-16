@@ -41,4 +41,4 @@ def test_vm20_buhlmann():
     partial = credibility.vm20_buhlmann(
         df=cred_df, amount_col="amount", rate_col="rate", exposure_col="exposure"
     )
-    assert partial.iloc[0]["credibility_lf"] == approx(0.3040, abs=1e-4)
+    assert partial.iloc[0]["credibility_vm20"] == approx(0.1682, abs=1e-4)
