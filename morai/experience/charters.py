@@ -1,6 +1,7 @@
 """Collection of visualization tools."""
 
 import math
+from itertools import combinations
 
 import numpy as np
 import pandas as pd
@@ -855,6 +856,7 @@ def target(
     denominator=None,
     normalize=None,
     add_line=False,
+    pairwise=False,
 ):
     """
     Create multiplot showing variable relationship with target.
@@ -881,6 +883,8 @@ def target(
         The columns to normalize.
     add_line : bool, optional
         Whether to add a line to the chart at y-axis of 1.
+    pairwise : bool, optional
+        Whether to create a pairwise plot of the features.
 
     Returns
     -------
@@ -949,18 +953,33 @@ def target(
             numerator[idx] = f"{numerator[idx]}_norm_{idx}"
 
     # number of rows for the subplot grid
-    num_plots = len(features)
-    num_rows = math.ceil(num_plots / cols)
+    if pairwise:
+        features.remove("_aggregate")
+        feature_pairs = [list(pair) for pair in combinations(features, 2)]
+        num_plots = len(feature_pairs)
+        num_rows = math.ceil(num_plots / cols)
+        plot_features = feature_pairs
+        title = f"Pairwise Plots using '{target}'"
+    else:
+        num_plots = len(features)
+        num_rows = math.ceil(num_plots / cols)
+        plot_features = [[feature] for feature in features]
+        title = f"Target Plots using '{target}'"
 
     # create a subplot grid
-    fig = make_subplots(rows=num_rows, cols=cols, subplot_titles=features)
+    logger.info(f"Creating '{num_plots}' target plots.")
+    fig = make_subplots(
+        rows=num_rows,
+        cols=cols,
+        subplot_titles=[", ".join(pair) for pair in plot_features],
+    )
     legend_added = set()
-    # color scale to cycel through
+    # color scale to cycle through
     # https://plotly.com/python/discrete-color/
     color_scale = px.colors.qualitative.D3
 
     # create each plot for the feature
-    for i, feature in enumerate(features, 1):
+    for i, plot_feature in enumerate(plot_features, 1):
         row = (i - 1) // cols + 1
         col = (i - 1) % cols + 1
 
@@ -968,7 +987,7 @@ def target(
         for idx, _ in enumerate(target):
             if target[idx] in ["ratio", "risk"]:
                 grouped_data = (
-                    df.groupby(feature, observed=True)[
+                    df.groupby(plot_feature, observed=True)[
                         [numerator[idx], denominator[idx]]
                     ]
                     .sum()
@@ -984,33 +1003,59 @@ def target(
                     ) / (df[numerator[idx]].sum() / df[denominator[idx]].sum())
             else:
                 grouped_data = (
-                    df.groupby(feature, observed=True)[target[idx]].mean().reset_index()
+                    df.groupby(plot_feature, observed=True)[target[idx]]
+                    .mean()
+                    .reset_index()
                 )
 
             # adding trace for current target within the subplot for the feature
-            target_name = f"{target[idx]}_{idx}"
-            fig.add_trace(
-                go.Scatter(
-                    x=grouped_data[feature],
-                    y=grouped_data[target[idx]],
-                    mode="lines" if not feature == "_aggregate" else "markers",
-                    name=target_name,
-                    line={"color": color_scale[idx % len(color_scale)]},
-                    showlegend=target_name not in legend_added,
-                ),
-                row=row,
-                col=col,
-            )
+            if len(plot_feature) == 2:
+                feature_1, feature_2 = plot_feature
+                feature_x = (
+                    feature_1
+                    if df[feature_1].nunique() > df[feature_2].nunique()
+                    else feature_2
+                )
+                feature_color = feature_2 if feature_x == feature_1 else feature_1
+                target_name = f"{target[idx]}_{idx}"
+                line_fig = px.line(
+                    grouped_data,
+                    x=feature_x,
+                    y=target[idx],
+                    color=feature_color,
+                    title=f"{feature_x} vs {feature_color}",
+                    labels={feature_x: feature_x, target[idx]: target[idx]},
+                )
+
+                for trace in line_fig.data:
+                    trace.showlegend = False
+                    fig.add_trace(trace, row=row, col=col)
+            else:
+                feature = plot_feature[0]
+                target_name = f"{target[idx]}_{idx}"
+                fig.add_trace(
+                    go.Scatter(
+                        x=grouped_data[feature],
+                        y=grouped_data[target[idx]],
+                        mode="lines" if not feature == "_aggregate" else "markers",
+                        name=target_name,
+                        line={"color": color_scale[idx % len(color_scale)]},
+                        showlegend=target_name not in legend_added,
+                    ),
+                    row=row,
+                    col=col,
+                )
+                legend_added.add(target_name)
             # add trace for line
             if add_line:
                 line_name = "y=1"
-                if pd.api.types.is_numeric_dtype(grouped_data[feature]):
+                if pd.api.types.is_numeric_dtype(grouped_data[plot_feature[0]]):
                     add_line_x = [
-                        grouped_data[feature].min(),
-                        grouped_data[feature].max(),
+                        grouped_data[plot_feature[0]].min(),
+                        grouped_data[plot_feature[0]].max(),
                     ]
                 else:
-                    add_line_x = sorted(grouped_data[feature].unique())
+                    add_line_x = sorted(grouped_data[plot_feature[0]].unique())
                     add_line_x = [add_line_x[0], add_line_x[-1]]
                 fig.add_trace(
                     go.Scatter(
@@ -1025,13 +1070,12 @@ def target(
                     col=col,
                 )
                 legend_added.add(line_name)
-            legend_added.add(target_name)
 
     # update layout
     fig.update_layout(
         height=chart_height * num_rows,
         width=chart_width,
-        title_text=f"Target Plots using '{target}'",
+        title_text=title,
     )
 
     return fig
