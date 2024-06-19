@@ -520,7 +520,13 @@ def pdp(
 
     # get the feature names from the model to create X
     model_features = None
-    feature_attrs = ["feature_names_in_", "feature_names", "feature_name", "params"]
+    feature_attrs = [
+        "feature_name",
+        "feature_names",
+        "feature_names_",
+        "feature_names_in_",
+        "params",
+    ]
     for attr in feature_attrs:
         try:
             if attr == "params":
@@ -587,7 +593,7 @@ def pdp(
         str_cols = X.select_dtypes(exclude=[np.number]).columns.to_list()
         if str_cols:
             logger.warning(
-                f"quick method only works with numeric columns."
+                f"quick method only works with numeric columns.\n"
                 f"string columns: {str_cols}"
             )
             quick = False
