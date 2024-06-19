@@ -13,6 +13,7 @@ files/result/*
 .vscode/
 _build/
 _pycache_/
+catboost_info/
 docs/coverage/
 morai/dashboard/file_system_backend/
 notebooks/working/
