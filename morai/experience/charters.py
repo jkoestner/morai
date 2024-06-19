@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from joblib import Parallel, delayed
+from joblib import Parallel, cpu_count, delayed
 from plotly.subplots import make_subplots
 
 from morai.experience import experience
@@ -32,6 +32,7 @@ def chart(
     title=None,
     y_sort=False,
     x_bins=None,
+    y_log=False,
     add_line=False,
     agg="sum",
     display=True,
@@ -72,6 +73,8 @@ def chart(
         Sort the records by the y-axis descending.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
+    y_log : bool, optional (default=False)
+        Whether to log the y-axis.
     add_line : bool, optional (default=False)
         Whether to add a line to the chart at y-axis of 1.
     agg : str, optional (default="sum")
@@ -97,6 +100,10 @@ def chart(
         _color = color
         color = _y_axis
         y_axis = _color
+
+    yaxis_type = "-"
+    if y_log:
+        yaxis_type = "log"
 
     # getting the columns to sum by
     # columns will be y_axis unless y_axis is "ratio" or "risk"
@@ -209,11 +216,14 @@ def chart(
             xaxis_title=x_axis,
             yaxis_title=_y_axis,
         )
-
     else:
         raise ValueError(
             "Unsupported type. Use 'line', 'bar', 'heatmap', or 'contour'."
         )
+
+    fig.update_layout(
+        yaxis_type=yaxis_type,
+    )
 
     # return the dataframe instead of figure
     if not display:
@@ -449,7 +459,7 @@ def pdp(
     mapping=None,
     x_bins=None,
     quick=False,
-    parallel=False,
+    n_jobs=None,
     display=True,
 ):
     """
@@ -490,8 +500,9 @@ def pdp(
     quick : bool, optional (default=False)
         Whether to use a quicker method for pdp, however the results may not be as
         accurate.
-    parallel : bool, optional (default=False)
-        Whether to use parallel processing for the pdp.
+    n_jobs : int, optional
+        Number of parallel jobs to run. If None, the computation is sequential.
+        n_jobs=-1 means using all processors.
     display : bool, optional (default=True)
         Whether to display figure or now.
 
@@ -609,11 +620,14 @@ def pdp(
 
     # calculate predictions of feature by looping through the feature values
     # and using the average of the other features
-    if parallel:
+    if n_jobs:
+        if n_jobs == -1:
+            n_jobs = cpu_count()
+        logger.info(f"Running '{n_jobs}' cores for parallel processing.")
         verbose = 0
         if custom_logger.get_log_level() == "DEBUG":
             verbose = 10
-        preds = Parallel(n_jobs=-1, verbose=verbose)(
+        preds = Parallel(n_jobs=n_jobs, verbose=verbose)(
             delayed(_pdp_make_prediction)(
                 model,
                 X,
@@ -665,6 +679,8 @@ def pdp(
     pdp_df = pdp_df.sort_values(by=grouped_features)
 
     # bin the feature if x_bins is provided
+    # note: can't bin prior to prediction, because the prediction is based on the
+    # model that used the original feature values.
     if x_bins:
         logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
         pdp_df[x_axis] = preprocessors.bin_feature(pdp_df[x_axis], x_bins)
@@ -860,6 +876,7 @@ def target(
     cols=3,
     numerator=None,
     denominator=None,
+    weights=None,
     normalize=None,
     add_line=False,
     pairwise=False,
@@ -884,7 +901,9 @@ def target(
     numerator : list, optional
         The column name to use for the numerator values.
     denominator : list, optional
-        The column name to use for the expected values.
+        The column name to use for the denominator values.
+    weights : list, optional
+        The column name to use for the weights values.
     normalize : list, optional
         The columns to normalize.
     add_line : bool, optional
@@ -903,22 +922,35 @@ def target(
         features = df.columns
     if normalize is None:
         normalize = []
+    if denominator is None:
+        denominator = []
+    if numerator is None:
+        numerator = []
+    if weights is None:
+        weights = []
     features = [*features, "_aggregate"]
     df.loc[:, "_aggregate"] = 1
     if isinstance(target, str):
         target = [target]
+    if isinstance(weights, str):
+        weights = [weights]
 
     # validations
-    if len(target) != len(denominator) and len(denominator) != 0:
+    # make target, weights, numerator same length
+    if len(denominator) != 0 and len(target) != len(denominator):
         logger.debug(
             f"Target is updated to match denominator length: {len(denominator)}"
         )
         target = [target[0]] * len(denominator)
-    if len(numerator) != len(denominator) and len(denominator) != 0:
+    if len(weights) != 0 and len(weights) != len(target):
+        weights = [weights[0]] * len(target)
+    if len(denominator) != 0 and len(numerator) != len(denominator):
         logger.debug(
             f"Numerator is updated to match denominator length: {len(denominator)}"
         )
         numerator = [numerator[0]] * len(denominator)
+
+    # ensure all features are in df
     if not set(features).issubset(df.columns):
         missing_features = set(features) - set(df.columns)
         raise ValueError(f"Features {missing_features} not in DataFrame columns.")
@@ -926,6 +958,7 @@ def target(
         missing_features = set(normalize) - set(df.columns)
         raise ValueError(f"Normalize {missing_features} not in DataFrame columns.")
 
+    # check that the right parameters are set for the function
     for idx, _ in enumerate(target):
         if target[idx] not in [*list(df.columns), "ratio", "risk"]:
             raise ValueError(
@@ -939,7 +972,7 @@ def target(
                 "Numerator/Denominator is required for ratio or risk target."
             )
         if target[idx] not in ["ratio", "risk"] and (
-            numerator[idx] or denominator[idx]
+            len(numerator) + len(denominator) > 0
         ):
             logger.warning(
                 "Parameters 'numerator' and 'denominator' are ignored if target is "
@@ -1007,6 +1040,16 @@ def target(
                     grouped_data[target[idx]] = (
                         grouped_data[numerator[idx]] / grouped_data[denominator[idx]]
                     ) / (df[numerator[idx]].sum() / df[denominator[idx]].sum())
+            elif weights:
+                grouped_data = (
+                    df.groupby(plot_feature, observed=True)[[target[idx], weights[idx]]]
+                    .apply(
+                        lambda x: helpers._weighted_mean(
+                            x.iloc[:, 0], weights=x.iloc[:, 1]
+                        )
+                    )
+                    .reset_index(name=f"{target[idx]}")
+                )
             else:
                 grouped_data = (
                     df.groupby(plot_feature, observed=True)[target[idx]]
