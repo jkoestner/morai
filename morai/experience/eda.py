@@ -1,5 +1,6 @@
 """Collection of exploratory data analysis (eda) tools."""
 
+import itertools
 import re
 
 import numpy as np
@@ -9,6 +10,7 @@ from scipy.stats import chi2_contingency
 from sklearn.feature_selection import mutual_info_regression
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import LabelEncoder
+from tqdm.auto import tqdm
 
 from morai.utils import custom_logger
 
@@ -153,15 +155,21 @@ def mutual_info(df, features=None, n_jobs=None, display=True, threshold=0.5):
         logger.info(f"Using up to '{n_jobs}' parallel jobs for the computation.")
         results = Parallel(n_jobs=n_jobs)(
             delayed(compute_mi)(col_i, col_j, df)
-            for i, col_i in enumerate(df.columns)
-            for j, col_j in enumerate(df.columns[i + 1 :], start=i + 1)
+            for col_i, col_j in tqdm(
+                list(itertools.combinations(features, 2)),
+                desc="Processing",
+                unit="combo",
+            )
         )
     else:
         logger.info("Using sequential computation for the mutual information.")
         results = [
             compute_mi(col_i, col_j, df)
-            for i, col_i in enumerate(df.columns)
-            for j, col_j in enumerate(df.columns[i + 1 :], start=i + 1)
+            for col_i, col_j in tqdm(
+                list(itertools.combinations(features, 2)),
+                desc="Processing",
+                unit="combo",
+            )
         ]
 
     mi_matrix = pd.DataFrame(index=df.columns, columns=df.columns)

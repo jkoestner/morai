@@ -113,6 +113,11 @@ in the conda environment.
 ```
 python -m ipykernel install --user --name=morai
 ```
+
+If plotly images are not showing in the default set up there may need to be some extensions added to JupyterLab.
+The extension particularly needed is the jupyterlab-plotly extension.
+This is also discussed more in this issue: [Plotly Issue](https://github.com/plotly/plotly.py/issues/2672)
+
 ### Logging
 
 If wanting to get more detail in output of messages the logging can increased

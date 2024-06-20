@@ -1,7 +1,7 @@
 """Collection of visualization tools."""
 
+import itertools
 import math
-from itertools import combinations
 
 import numpy as np
 import pandas as pd
@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from joblib import Parallel, cpu_count, delayed
 from plotly.subplots import make_subplots
+from tqdm.auto import tqdm
 
 from morai.experience import experience
 from morai.forecast import preprocessors
@@ -640,26 +641,32 @@ def pdp(
                 quick,
                 weights,
             )
-            for line_value in line_color_values
-            for value in x_axis_values
+            for line_value, value in tqdm(
+                list(itertools.product(line_color_values, x_axis_values)),
+                desc="Processing",
+                unit="combo",
+            )
         )
     else:
         preds = []
-        for line_value in line_color_values:
-            for value in x_axis_values:
-                pred = _pdp_make_prediction(
-                    model,
-                    X,
-                    x_axis,
-                    x_axis_type,
-                    x_axis_cols,
-                    value,
-                    line_color,
-                    line_value,
-                    quick,
-                    weights,
-                )
-                preds.append(pred)
+        for line_value, value in tqdm(
+            list(itertools.product(line_color_values, x_axis_values)),
+            desc="Processing",
+            unit="combo",
+        ):
+            pred = _pdp_make_prediction(
+                model,
+                X,
+                x_axis,
+                x_axis_type,
+                x_axis_cols,
+                value,
+                line_color,
+                line_value,
+                quick,
+                weights,
+            )
+            preds.append(pred)
 
     pdp_df = pd.DataFrame(preds)
 
@@ -696,12 +703,14 @@ def pdp(
             )
 
     # create the plots
-    colorscale = px.colors.qualitative.G10
+    colorscale = px.colors.qualitative.Light24
+    num_colors = len(colorscale)
     rows = 2 if secondary else 1
     fig = make_subplots(rows=rows, cols=1)
 
     # add the line plot
     for index, line_color_value in enumerate(pdp_df[line_color].unique()):
+        color_index = index % num_colors
         df_subset = pdp_df[pdp_df[line_color] == line_color_value]
         fig.add_trace(
             go.Scatter(
@@ -709,7 +718,7 @@ def pdp(
                 y=df_subset["%_diff"],
                 mode="lines",
                 name=line_color_value,
-                line={"color": colorscale[index]},
+                line={"color": colorscale[color_index]},
             ),
             row=1,
             col=1,
@@ -728,13 +737,14 @@ def pdp(
         logger.info(f"Adding secondary to chart: [{secondary}]")
 
         for index, line_color_value in enumerate(pdp_df[line_color].unique()):
+            color_index = index % num_colors
             df_subset = pdp_df[pdp_df[line_color] == line_color_value]
             fig.add_trace(
                 go.Bar(
                     x=df_subset[x_axis],
                     y=df_subset[secondary],
                     name=line_color_value,
-                    marker={"color": colorscale[index]},
+                    marker={"color": colorscale[color_index]},
                 ),
                 row=2,
                 col=1,
@@ -994,7 +1004,7 @@ def target(
     # number of rows for the subplot grid
     if pairwise:
         features.remove("_aggregate")
-        feature_pairs = [list(pair) for pair in combinations(features, 2)]
+        feature_pairs = [list(pair) for pair in itertools.combinations(features, 2)]
         num_plots = len(feature_pairs)
         num_rows = math.ceil(num_plots / cols)
         plot_features = feature_pairs
