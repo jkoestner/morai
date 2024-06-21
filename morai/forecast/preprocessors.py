@@ -212,8 +212,9 @@ def preprocess_data(
                     "type": "standardized",
                 }
 
-    # conserve model_data column order in X
-    X = X[model_features]
+    # create replicatable order of columns
+    x_sorted_columns = sorted(X.columns)
+    X = X[x_sorted_columns]
 
     # model_data that is encoded
     md_encoded = pd.concat([model_data.drop(columns=model_features), X], axis=1)
