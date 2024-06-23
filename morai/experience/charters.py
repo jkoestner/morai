@@ -565,8 +565,8 @@ def pdp(
     if mapping and x_axis in mapping:
         x_axis_type = mapping[x_axis]["type"]
         if x_axis_type == "ohe":
-            x_axis_cols = [col for col in df.columns if col.startswith(x_axis + "_")]
-            x_axis_values = [col[len(x_axis + "_") :] for col in x_axis_cols]
+            x_axis_cols = list(mapping[x_axis]["values"].values())
+            x_axis_values = list(mapping[x_axis]["values"].keys())
         else:
             x_axis_values = list(df[x_axis].unique())
     elif x_axis in df.select_dtypes(exclude=[np.number]).columns:
@@ -581,6 +581,8 @@ def pdp(
     # line_color processing
     if line_color:
         line_color_type = mapping[line_color]["type"]
+        if line_color_type == "ohe":
+            raise ValueError("One hot encoding not supported for line_color.")
         logger.info(f"Line feature: [{line_color}] type: [{line_color_type}]")
         line_color_values = X[line_color].unique()
     else:
@@ -1157,9 +1159,11 @@ def _pdp_make_prediction(
 
     # Handle one-hot encoding
     if x_axis_type == "ohe":
-        for col in x_axis_cols:
+        for col in x_axis_cols[1:]:
             X_temp[col] = 0
-        X_temp[x_axis + "_" + value] = 1
+        # the dropped first column is a reference column and should have a value of 0
+        if value != x_axis_cols[0][len(x_axis + "_") :]:
+            X_temp[x_axis + "_" + value] = 1
     else:
         X_temp.iloc[:, X_temp.columns.get_loc(x_axis)] = value
 

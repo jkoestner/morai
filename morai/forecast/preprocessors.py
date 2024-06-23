@@ -166,14 +166,20 @@ def preprocess_data(
 
     # nominal - one hot encoded
     if ohe_cols:
-        logger.info(f"nominal - one hot encoded: {ohe_cols}")
+        logger.info(f"nominal - one hot encoded (dropping first col): {ohe_cols}")
+        X = X.drop(columns=ohe_cols)
         for col in ohe_cols:
+            unique_values = sorted(model_data[col].unique())
             mapping[col] = {
-                "values": {k: col + "_" + k for k in sorted(model_data[col].unique())},
+                "values": {k: col + "_" + k for k in unique_values[:]},
                 "type": "ohe",
             }
-        # sparse=True is used to save memory however many models don't support sparse
-        X = pd.get_dummies(X, columns=ohe_cols, dtype="int8", sparse=False)
+            # sparse=True is used to save memory however many models
+            # don't support sparse
+            dummies = pd.get_dummies(
+                model_data[col], prefix=col, dtype="int8", sparse=False
+            )
+            X = pd.concat([X, dummies], axis=1)
 
     # nominal - weighted average target encoded
     if nominal_cols:
@@ -216,8 +222,16 @@ def preprocess_data(
     x_sorted_columns = sorted(X.columns)
     X = X[x_sorted_columns]
 
+    # drop the first column of the one hot encoded columns to avoid multicollinearity
+    if ohe_cols:
+        for col in ohe_cols:
+            first_col = next(iter(mapping[col]["values"].items()))[1]
+            X = X.drop(columns=[first_col])
+
     # model_data that is encoded
     md_encoded = pd.concat([model_data.drop(columns=model_features), X], axis=1)
+
+    # create the dictionaries
     params = {
         "standardize": standardize,
         "preset": preset,
@@ -333,17 +347,14 @@ def remap_values(df, mapping):
         elif isinstance(df, pd.DataFrame):
             # remap one hot encoded columns
             if value_map["type"] == "ohe":
-                df[column] = df.apply(
-                    lambda row, value_map=value_map: next(
-                        (
-                            cat
-                            for cat, col in value_map["values"].items()
-                            if row[col] == 1
-                        ),
-                        None,
-                    ),
-                    axis=1,
-                )
+
+                def remap_row(row, value_map=value_map):
+                    for cat, col in value_map["values"].items():
+                        if row[col] == 1:
+                            return cat
+                    return None
+
+                df[column] = df.apply(remap_row, axis=1)
                 df = df.drop(columns=value_map["values"].values())
             elif column in df.columns:
                 df[column] = df[column].map(reversed_map)

@@ -1,4 +1,24 @@
-"""Credibility measures."""
+"""
+Credibility measures.
+
+Todo:
+----
+- add in more resources including buhlmann credibility
+- CREDIBILITY - HOWARD C. MAHLER AND CURTIS GARY DEAN
+   - https://www.ressources-actuarielles.net/EXT/ISFA/1226.nsf/0/bf4517bb19eee4cec125704600554ce6/$FILE/chapter8.pdf
+- pymc
+   - https://github.com/pymc-devs/pymc?tab=readme-ov-file
+- pymc notebooks
+   - https://github.com/aloctavodia/BAP3/blob/main/exercises/Chapter_01.ipynb
+- A CREDIBILITY APPROACH TO MORTALITY RISK - M.R. HARDY AND H.H. PANJER
+   - https://www.ressources-actuarielles.net/EXT/ISFA/1226.nsf/769998e0a65ea348c1257052003eb94f/3daaa4e8b3c51c64c12570c20061400e/$FILE/Hardy%20Panjer.pdf
+- julia actuarial project
+   - https://juliaactuary.org/posts/bayes-vs-limited-fluctuation/index.html#limited-fluctuation-credibility
+- Chapter 9 Experience Rating Using Credibility
+   - https://openacttexts.github.io/Loss-Data-Analytics/ChapCredibility.html
+- https://www.soa.org/globalassets/assets/files/resources/tables-calcs-tools/credibility-methods-life-health-pensions.pdf
+
+"""
 
 from scipy import stats
 
