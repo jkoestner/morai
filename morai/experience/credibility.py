@@ -364,3 +364,65 @@ def vm20_buhlmann_approx(df, a_col, b_col, c_col, groupby_cols=None):
     )
 
     return vm20_df
+
+
+def buhlmann(df, measure, k, groupby_cols=None):
+    """
+    Determine the credibility of a measure using Bühlmann credibility.
+
+    Does not need to be seriatim.
+
+    Bühlmann credibility is a linear approximation of the Bayesian credibility.
+    K is calculated by taking the ratio of the EPV/VHM. Where EPV is the expected
+    process variance and VHM is the variance of the hypothetical means. The formula to
+    calculate credibility is then the same as the asymptotic credibility.
+
+    fomula to calculate z, where k is chosen subjectively by practitioner:
+    z = n / (n + k)
+
+    The z value can then be used to blend a measure with a prior measure.
+    new_estimate = z * measure + (1 - z) * prior
+
+    Strengths:
+    ----------
+    - all aspects of the method are clearly spelled out.
+    - credibility reaches 1 assymptotically
+
+    Weaknesses:
+    ------------
+    - requires a lot of data to estimate the parameters
+
+    Reference:
+    ----------
+    https://www.ressources-actuarielles.net/EXT/ISFA/1226.nsf/0/bf4517bb19eee4cec125704600554ce6/$FILE/chapter8.pdf
+    https://www.soa.org/globalassets/assets/files/resources/tables-calcs-tools/credibility-methods-life-health-pensions.pdf
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the data.
+    measure : str
+        Column name of the measure.
+    k : float, optional
+        Constant for the credibility.
+    groupby_cols : list, optional
+        Columns to group by before calculating the credibility.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with additional columns for credibility measures.
+
+    """
+    # calculate the credibility
+    logger.info(
+        f"Credibility calculated using 'bühlmann' on '{measure}'.\n"
+        f"Dataframe does not need to be seriatim.\n"
+        f"Created column 'credibility_bu'.\n"
+        f"Constant k: {k}."
+    )
+    if groupby_cols:
+        df = df.groupby(groupby_cols, observed=True)[[measure]].sum().reset_index()
+    df["credibility_bu"] = df[measure] / (df[measure] + k)
+
+    return df

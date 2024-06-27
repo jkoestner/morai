@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.express as px
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+from scipy.stats import chi2
 
 from morai.experience import tables
 from morai.forecast import preprocessors
@@ -151,6 +152,54 @@ class GLM:
             )
 
         return odds_ratio
+
+    def get_feature_contributions(self, X, y, weights=None):
+        """
+        Get the feature contributions.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
+        weights : pd.Series, optional
+            The weights
+
+        Returns
+        -------
+        feature_contributions : pd.DataFrame
+            The feature contributions
+
+        """
+        contributions = []
+        features = [feature for feature in X.columns if feature != "constant"]
+        logger.info(
+            f"generating feature contributions from model for {len(features)} features"
+        )
+
+        # suppress logger for fitting
+        original_log_level = logger.level
+        logger.setLevel(50)
+
+        # set up the deviances
+        full = self.fit(X, y, weights).deviance
+        contributions.append({"feature": "full", "contribution": 1, "deviance": full})
+        base = self.fit(X["constant"], y, weights).deviance
+        contributions.append({"feature": "base", "contribution": 0, "deviance": base})
+        for feature in features:
+            temp_features = [f for f in features if f != feature]
+            reduced = self.fit(X[[*temp_features, "constant"]], y, weights).deviance
+            contribution = (reduced - full) / (base - full)
+            contributions.append(
+                {"feature": feature, "contribution": contribution, "deviance": reduced}
+            )
+        feature_contributions = pd.DataFrame(contributions)
+
+        # reset log level
+        logger.setLevel(original_log_level)
+
+        return feature_contributions
 
     def _setup_model(self, X, y, weights=None, family=None, **kwargs):
         """
@@ -869,15 +918,15 @@ def generate_table(model, mapping, feature_dict, params, grid=None):
     if not hasattr(model, "predict"):
         raise ValueError("model does not have a predict method")
 
-    # remove unneeded keys
-    feature_dict = {
-        k: v for k, v in feature_dict.items() if k not in ["target", "weight"]
-    }
-
     # create the grid from the mapping
     if grid is None:
         grid = tables.create_grid(mapping=mapping)
         grid = grid.drop(columns=["vals"])
+
+    # remove unneeded keys
+    feature_dict = {
+        k: v for k, v in feature_dict.items() if k not in ["target", "weight"]
+    }
 
     # get the original order of the columns
     model_cols = [col for cols in feature_dict.values() for col in cols]
@@ -902,3 +951,50 @@ def generate_table(model, mapping, feature_dict, params, grid=None):
     logger.info(f"table shape: {table.shape}")
 
     return table
+
+
+def calc_likelihood_ratio(full_model, reduced_model):
+    """
+    Calculate the likelihood ratio.
+
+    In statistics, the likelihood-ratio test assesses the goodness of fit
+    of two competing statistical models.
+
+    Parameters
+    ----------
+    full_model : model
+        The full model
+    reduced_model : model
+        The reduced model
+
+
+    Returns
+    -------
+    likelihood_dict: dict
+        The likelihood ratio and p-value
+
+    References
+    ----------
+    https://en.wikipedia.org/wiki/Likelihood-ratio_test
+
+    """
+    # validation checks
+    if not hasattr(full_model, "llf") or not hasattr(reduced_model, "llf"):
+        raise ValueError("models do not have a log-likelihood attribute")
+    if full_model.df_model <= reduced_model.df_model:
+        raise ValueError("full model has less or equal degrees of freedom than reduced")
+
+    # calculate the likelihood ratio
+    logger.info("calculating likelihood ratio")
+    lr = 2 * (full_model.llf - reduced_model.llf)
+    degrees_of_freedom_diff = full_model.df_model - reduced_model.df_model
+    p_value = chi2.sf(lr, degrees_of_freedom_diff)
+
+    # create the dictionary
+    likelihood_dict = {
+        "likelihood_ratio": lr,
+        "degrees_of_freedom_diff": degrees_of_freedom_diff,
+        "p_value": p_value,
+    }
+
+    return likelihood_dict

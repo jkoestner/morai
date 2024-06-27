@@ -31,7 +31,9 @@ dependencies = [
     "pymort>=2.0.1",
     "scikit-learn>=1.4",
     "seaborn>=0.13.2",
+    "shap>=0.45.1",
     "statsmodels>=0.14.1",
+    "tqdm>=4.66.2",
     "uv>=0.1.36",
     "xgboost>=2.0.3",                   # only for xgboost
 ]

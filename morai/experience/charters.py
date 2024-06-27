@@ -561,7 +561,6 @@ def pdp(
         raise ValueError("DataFrame is empty.")
 
     # x_axis processing
-    logger.info(f"x_axis: [{x_axis}] type: [{x_axis_type}]")
     if mapping and x_axis in mapping:
         x_axis_type = mapping[x_axis]["type"]
         if x_axis_type == "ohe":
@@ -576,6 +575,7 @@ def pdp(
         if pd.api.types.is_integer_dtype(df[x_axis].dtype):
             df[x_axis] = df[x_axis].astype(float)
         x_axis_values = np.linspace(df[x_axis].min(), df[x_axis].max(), 100)
+    logger.info(f"x_axis: [{x_axis}] type: [{x_axis_type}]")
     X = df[model_features]
 
     # line_color processing

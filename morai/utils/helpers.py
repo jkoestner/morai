@@ -175,7 +175,10 @@ def _weighted_mean(values, weights=None):
         The weighted mean
 
     """
-    if np.sum(weights) == 0:
+    if weights is None or len(weights) == 0:
+        return values.mean()
+
+    if weights.sum() == 0:
         logger.warning("The sum of the weights is 0, returning NaN")
         return np.nan
     else:

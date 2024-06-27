@@ -188,7 +188,8 @@ def preprocess_data(
             # Compute the weighted average for each category
             weighted_avg = model_data.groupby(col, observed=True).apply(
                 lambda x: helpers._weighted_mean(
-                    x[model_target], x[model_weight] if model_weight else None
+                    values=x[model_target].squeeze(),
+                    weights=x[model_weight].squeeze() if model_weight else None,
                 ),
                 include_groups=False,
             )
@@ -213,7 +214,8 @@ def preprocess_data(
             if col in mapping:
                 mapping[col] = {
                     "values": {
-                        k: (v - means[idx]) / stds[idx] for k, v in mapping[col].items()
+                        k: (v - means[idx]) / stds[idx]
+                        for k, v in mapping[col]["values"].items()
                     },
                     "type": "standardized",
                 }
@@ -221,6 +223,7 @@ def preprocess_data(
     # create replicatable order of columns
     x_sorted_columns = sorted(X.columns)
     X = X[x_sorted_columns]
+    model_features = sorted(model_features)
 
     # drop the first column of the one hot encoded columns to avoid multicollinearity
     if ohe_cols:
