@@ -153,7 +153,7 @@ class GLM:
 
         return odds_ratio
 
-    def get_feature_contributions(self, X, y, weights=None):
+    def get_feature_contributions(self, X, y, weights=None, base_features=None):
         """
         Get the feature contributions.
 
@@ -165,6 +165,8 @@ class GLM:
             The target
         weights : pd.Series, optional
             The weights
+        base_features : list, optional
+            The base features to use for the contributions
 
         Returns
         -------
@@ -173,28 +175,55 @@ class GLM:
 
         """
         contributions = []
-        features = [feature for feature in X.columns if feature != "constant"]
-        logger.info(
-            f"generating feature contributions from model for {len(features)} features"
+        base_features = (
+            ["constant"] if base_features is None else [*base_features, "constant"]
         )
+        features = [feature for feature in X.columns if feature not in base_features]
+        logger.info(
+            f"generating feature contributions from model for {len(features)} features "
+            f"by fitting the model and seeing the reduction in deviance."
+        )
+        logger.info(f"base features: '{base_features}'")
 
         # suppress logger for fitting
         original_log_level = logger.level
         logger.setLevel(50)
 
         # set up the deviances
-        full = self.fit(X, y, weights).deviance
-        contributions.append({"feature": "full", "contribution": 1, "deviance": full})
-        base = self.fit(X["constant"], y, weights).deviance
-        contributions.append({"feature": "base", "contribution": 0, "deviance": base})
+        all_deviance = self.fit(X, y, weights).deviance
+        contributions.append(
+            {
+                "features": "all",
+                "contribution": 1,
+                "deviance": all_deviance,
+            }
+        )
+        base_deviance = self.fit(X[base_features], y, weights).deviance
+        contributions.append(
+            {
+                "features": "base",
+                "contribution": 0,
+                "deviance": base_deviance,
+            }
+        )
         for feature in features:
             temp_features = [f for f in features if f != feature]
-            reduced = self.fit(X[[*temp_features, "constant"]], y, weights).deviance
-            contribution = (reduced - full) / (base - full)
+            reduced_deviance = self.fit(
+                X[[*temp_features, *base_features]], y, weights
+            ).deviance
+            contribution = (reduced_deviance - all_deviance) / (
+                base_deviance - all_deviance
+            )
             contributions.append(
-                {"feature": feature, "contribution": contribution, "deviance": reduced}
+                {
+                    "features": feature,
+                    "contribution": contribution,
+                    "deviance": reduced_deviance,
+                }
             )
         feature_contributions = pd.DataFrame(contributions)
+        # refit the model
+        self.fit(X[[*features, *base_features]], y, weights).deviance
 
         # reset log level
         logger.setLevel(original_log_level)
