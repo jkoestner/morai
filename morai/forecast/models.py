@@ -6,16 +6,22 @@ import plotly.express as px
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from scipy.stats import chi2
+from sklearn.base import BaseEstimator, RegressorMixin
 
 from morai.experience import tables
 from morai.forecast import preprocessors
-from morai.utils import custom_logger
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 
 
-class GLM:
-    """Create a GLM model."""
+class GLM(BaseEstimator, RegressorMixin):
+    """
+    Create a GLM model.
+
+    The BaseEstimator and RegressorMixin classes are used to interface with
+    scikit-learn with certain functions.
+    """
 
     def __init__(
         self,
@@ -24,6 +30,7 @@ class GLM:
         self.r_style = None
         self.mapping = None
         self.model = None
+        self.is_fitted_ = False
 
     def fit(
         self, X, y, weights=None, family=None, r_style=False, mapping=None, **kwargs
@@ -59,8 +66,42 @@ class GLM:
         model = self._setup_model(X, y, weights, family, **kwargs)
         model = model.fit()
         self.model = model
+        self.is_fitted_ = True
 
         return model
+
+    def predict(self, X, manual=False):
+        """
+        Predict the target.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        manual : bool, optional
+            Whether to use the manual prediction
+
+        Returns
+        -------
+        predictions : np.ndarray
+            The predictions
+
+        """
+        if not self.is_fitted_:
+            raise ValueError("model is not fitted use fit method")
+
+        if manual:
+            rate_params = self.model.params.loc[X.columns]
+            linear_combination = rate_params["constant"]
+            for feature, coefficient in rate_params.items():
+                if feature != "constant":
+                    linear_combination += coefficient * X[feature]
+
+            predictions = 1 / (1 + np.exp(-linear_combination))
+        else:
+            predictions = np.array(self.model.predict(X))
+
+        return predictions
 
     def get_formula(self, X, y):
         """
@@ -128,8 +169,8 @@ class GLM:
             The odds ratio
 
         """
-        if self.model is None:
-            raise ValueError("model is not fitted use get_model method")
+        if not self.is_fitted_:
+            raise ValueError("model is not fitted use fit method")
 
         model = self.model
 
@@ -223,12 +264,127 @@ class GLM:
             )
         feature_contributions = pd.DataFrame(contributions)
         # refit the model
-        self.fit(X[[*features, *base_features]], y, weights).deviance
+        self.fit(X[[*features, *base_features]], y, weights)
 
         # reset log level
         logger.setLevel(original_log_level)
 
         return feature_contributions
+
+    def generate_table(
+        self,
+        X,
+        rate_features=None,
+        output_file=None,
+    ):
+        """
+        Generate a 1-d mortality table and multiplier based on model predictions.
+
+        When fitting the logistic regression, the model will output a set of
+        coefficients for each feature.
+
+        The rate is then calculated using the following formula using the coefficients:
+          rate = 1 / (1 + exp(constant +
+                 coefficient_1 * feature_1 + ... + coefficient_n * feature_n))
+
+        The rate can also be calculated as the product of the odds ratio:
+          product_odds = odds_1 * odds_2 * ... * odds_n
+          rate = product_odds / (1 + product_odds)
+
+        This allows the rate to be calculated by a combination of a 1d rate and a
+        multiplier table. There is a simplification in the rate table in that the rate
+        is calculated as the odds of feature * the 1d rate. This will not match the
+        predicted rate exactly. It will be off more at higher rates. Use the multiplier
+        table with caution.
+
+        simplification method:
+          rate_combined = odds_feature * rate_1d
+
+        exact method:
+          odds_rate = (rate_1d / (1 - rate_1d))
+          rate_combined = (odds_feature * odds_1d) / (1 + (odds_feature * odds_1d)
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features dataframe
+        rate_features : dict, optional
+            The features to use for the rate. If not provided, the model
+            parameters will be used.
+        output_file : str, optional
+            The output file to save the table
+
+        Returns
+        -------
+        table_dict : dict
+            The 1-d mortality table and multiplier table
+
+        """
+        if not self.is_fitted_:
+            raise ValueError("model is not fitted use fit method")
+        if rate_features is None:
+            rate_features = list(self.model.params.index)
+        if "constant" not in rate_features:
+            rate_features.append("constant")
+
+        # generate linear combination for the logistic regression
+        logger.info(f"generating rate_table with {len(rate_features)-1} features")
+        rate_table = X[rate_features].drop_duplicates()
+
+        # rate table
+        rate_table["rate"] = self.predict(rate_table, manual=True)
+
+        # multiple table
+        mult_features = list(set(X.columns) - set(rate_features))
+        mult_table = None
+        if mult_features:
+            logger.info(
+                f"generating mult_table for model with {len(mult_features)} "
+                f"features"
+            )
+            logger.warning(
+                "the multipliers will not match the predictions from logistic "
+                "regression especially when base table has high rates."
+            )
+            mult_params = self.model.params.loc[mult_features]
+            mult_list = []
+
+            for feature in mult_params.keys():
+                pred_table = X[[*rate_features, feature]].copy()
+                pred_table["pred"] = self.predict(pred_table, manual=True)
+                group_preds = pred_table.groupby(X[feature])["pred"].mean()
+                base_pred = group_preds.iloc[0]
+
+                for value in X[feature].unique():
+                    multiple = group_preds.loc[value] / base_pred
+                    mult_list.extend(
+                        [
+                            {
+                                "category": feature,
+                                "subcategory": value,
+                                "multiple": multiple,
+                            }
+                        ]
+                    )
+            mult_table = pd.DataFrame(mult_list)
+
+        table_dict = {"rate_table": rate_table, "mult_table": mult_table}
+
+        if output_file:
+            path = helpers.FILES_PATH / "dataset" / "tables" / output_file
+            # check if path exists
+            if not path.parent.exists():
+                logger.error(f"directory does not exist: {path.parent}")
+            else:
+                logger.info(f"saving table to {path}")
+                with pd.ExcelWriter(path) as writer:
+                    rate_table.to_excel(writer, sheet_name="rate_table", index=False)
+                    if mult_table is not None:
+                        mult_table.to_excel(
+                            writer, sheet_name="mult_table", index=False
+                        )
+
+        return table_dict
 
     def _setup_model(self, X, y, weights=None, family=None, **kwargs):
         """

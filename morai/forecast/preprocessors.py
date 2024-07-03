@@ -171,7 +171,7 @@ def preprocess_data(
         for col in ohe_cols:
             unique_values = sorted(model_data[col].unique())
             mapping[col] = {
-                "values": {k: col + "_" + k for k in unique_values[:]},
+                "values": {k: col + "_" + str(k) for k in unique_values[:]},
                 "type": "ohe",
             }
             # sparse=True is used to save memory however many models
