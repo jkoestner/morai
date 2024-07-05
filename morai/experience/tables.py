@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import pymort
+import yaml
 
 from morai.utils import custom_logger, helpers
 
@@ -660,5 +661,160 @@ def get_su_table(df, select_period):
     df = df.merge(ult, on=merge_cols, how="left")
     df["su_ratio"] = df["vals_ult"] / df["vals"]
     df = df[df["duration"] <= (select_period + 1)]
+
+    return df
+
+
+def map_rates(df, rate, key_dict=None, rate_map_location=None):
+    """
+    Map rates to the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame.
+    rate : str
+        The rate to map.
+    key_dict : dict, optional
+        The key dictionary. If no key dictionary is provided, the mapping will
+        be based on the keys in the rate file mapping.
+          - The keys are the rate map keys
+          - The values are the dataframe keys
+    rate_map_location : str, optional
+        The location of the rate map file. If none this is assumed to
+        be in the dataset/tables folder.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        The DataFrame with the mapped rates.
+
+    """
+    # load rate map file
+    if rate_map_location is None:
+        rate_map_location = helpers.FILES_PATH / "dataset" / "tables" / "rate_map.yaml"
+    if not rate_map_location.exists():
+        raise ValueError(f"Rate mapping file: {rate_map_location} does not exist.")
+    with open(rate_map_location, "r") as file:
+        rate_map = yaml.safe_load(file)
+
+    # check if rate is in the rate mapping
+    if rate not in rate_map:
+        rates = list(rate_map.keys())
+        raise ValueError(f"Rate: {rate} not in rate_mapping. Try one of: {rates}.")
+
+    # get the key dictionary
+    if key_dict is None:
+        key_cols = rate_map[rate]["keys"]
+        key_dict = {col: col for col in key_cols}
+
+    # check the type of the rate table
+    type = next(iter(rate_map[rate]["type"].keys()))
+    rate_name = f"qx_{rate_map[rate]['rate']}"
+    apply_mults = False
+    logger.info(f"mapping rate: '{rate_name}' with type: '{type}'")
+
+    # get the table rates based on type
+    if type == "soa":
+        soa_map = rate_map[rate]["type"]["soa"]
+        mt = MortTable()
+        rate_table = mt.build_table(
+            table_list=soa_map["table_list"],
+            juv_list=soa_map["juv_list"],
+            extend=soa_map["extend"],
+            extra_dims=soa_map["extra_dims"],
+        )
+        merge_keys = list(key_dict.values())
+        table_rate_name = "vals"
+    if type == "workbook":
+        workbook_map = rate_map[rate]["type"]["workbook"]
+        file_location = (
+            helpers.FILES_PATH / "dataset" / "tables" / workbook_map["filename"]
+        )
+
+        # read in the rate_table
+        try:
+            rate_table = pd.read_excel(file_location, sheet_name="rate_table")
+        except ValueError as ve:
+            raise ValueError(
+                f"Error reading workbook: {file_location}. "
+                f"The Excel file should have a sheet named 'rate_table'. "
+            ) from ve
+        table_key_dict = {
+            key: value for key, value in key_dict.items() if key in rate_table.columns
+        }
+        rate_table = rate_table.rename(columns=table_key_dict)
+        for key in table_key_dict:
+            rate_table[key] = rate_table[key].astype(df[key].dtype)
+        merge_keys = list(table_key_dict.values())
+        table_rate_name = "rate"
+
+        # read in the mult_table
+        if workbook_map["mult_table"]:
+            apply_mults = True
+            try:
+                mult_table = pd.read_excel(file_location, sheet_name="mult_table")
+            except ValueError as ve:
+                raise ValueError(
+                    f"Error reading workbook: {file_location}. "
+                    f"The Excel file should have a sheet named 'mult_table'. "
+                ) from ve
+
+            # map the mult_table
+            mult_key_dict = {
+                key: value
+                for key, value in key_dict.items()
+                if key in list(mult_table["category"].unique())
+            }
+            for key in mult_key_dict:
+                _pivot = (
+                    mult_table[mult_table["category"] == key]
+                    .pivot(index="subcategory", columns="category", values="multiple")
+                    .reset_index()
+                    .rename(columns={key: f"_mult_{key}", "subcategory": key})
+                )
+                _pivot[key] = _pivot[key].astype(df[key].dtype)
+                df = df.merge(_pivot, on=key, how="left")
+                # check for missing values in table
+                missing_mult_values = set(df[key].unique()) - set(_pivot[key].unique())
+                if missing_mult_values:
+                    logger.warning(
+                        f"Missing values in the mult_table for '{key}': "
+                        f"{missing_mult_values}"
+                    )
+            _mult_cols = [col for col in df.columns if "_mult_" in col]
+    if type == "csv":
+        csv_map = rate_map[rate]["type"]["csv"]
+        file_location = helpers.FILES_PATH / "dataset" / "tables" / csv_map["filename"]
+        # read in the csv
+        try:
+            rate_table = pd.read_csv(file_location)
+        except ValueError as ve:
+            raise ValueError(f"Error reading csv: {file_location}. ") from ve
+        merge_keys = list(key_dict.values())
+        table_rate_name = "vals"
+
+    # map the rates
+    rate_table = rate_table.rename(columns=key_dict)
+    rate_table = rate_table[[*merge_keys, table_rate_name]]
+    rate_table = rate_table.rename(columns={table_rate_name: rate_name})
+    if rate_name in df.columns:
+        logger.warning(
+            f"rate: '{rate_name}' already exists in the DataFrame. "
+            f"Overwriting the rate."
+        )
+        df = df.drop(columns=[rate_name])
+    df = df.merge(rate_table, on=merge_keys, how="left")
+    if apply_mults:
+        for _mult_col in _mult_cols:
+            df[rate_name] = df[rate_name] * df[_mult_col]
+        df = df.drop(columns=_mult_cols)
+        merge_keys = merge_keys + list(mult_key_dict.keys())
+    logger.info(f"the mapped rates are based on the following " f"keys: {merge_keys}")
+
+    # check if there are any missing values
+    missing = df[df[rate_name].isnull()]
+    if not missing.empty:
+        logger.warning(f" there are '{len(missing)}' missing values for '{rate_name}'.")
 
     return df
