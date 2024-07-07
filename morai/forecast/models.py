@@ -344,7 +344,7 @@ class GLM(BaseEstimator, RegressorMixin):
 
 
 class ModelWrapper:
-    """Create a model wrapper to get parameters."""
+    """Create a model wrapper to get make retrieving results agnostic."""
 
     def __init__(self, model):
         """
@@ -377,20 +377,46 @@ class ModelWrapper:
             "params",
         ]
         for attr in feature_attrs:
-            try:
+            if hasattr(self.model, attr):
                 if attr == "params":
                     features = list(getattr(self.model, attr).keys())
-                elif hasattr(self.model, "feature_name"):
+                elif attr == "feature_name":
                     features = self.model.feature_name()
                 else:
                     features = list(getattr(self.model, attr))
                 if features:
                     break
-            except AttributeError:
-                continue
         if not features:
-            raise ValueError("Model does not have feature names.")
+            raise ValueError("Could not find `features` in the model.")
         return features
+
+    def get_importance(self):
+        """
+        Get the importance of the features.
+
+        Returns
+        -------
+        importance_df : pd.DataFrame
+            The importance of the features
+
+        """
+        importance = None
+        importance_attrs = ["feature_importances_", "coef_", "params"]
+        for attr in importance_attrs:
+            if hasattr(self.model, attr):
+                if attr == "params":
+                    importance = getattr(self.model, attr).tolist()
+                else:
+                    importance = getattr(self.model, attr)
+                if importance:
+                    break
+        if importance is None:
+            raise ValueError("Could not find `importance` in the model.")
+        features = self.get_features()
+
+        importance_df = pd.DataFrame({"feature": features, "importance": importance})
+        importance_df = importance_df.sort_values(by="importance", ascending=False)
+        return importance_df
 
     def check_predict(self):
         """Check if the model has a predict method."""

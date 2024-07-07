@@ -9,7 +9,6 @@ import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 import numpy as np
 import pandas as pd
-import polars as pl
 from dash_extensions.enrich import (
     ALL,
     Input,
@@ -72,6 +71,16 @@ def layout():
             html.P(
                 [
                     "This page is used to compare mortality tables from " "the SOA.",
+                    html.Br(),
+                    "The tables must include one of the following columns: ",
+                    html.Code("issue_age"),
+                    ", ",
+                    html.Code("duration"),
+                    ", and ",
+                    html.Code("attained_age"),
+                    html.Br(),
+                    "The table must also have a rate value column: ",
+                    html.Code("vals"),
                     html.Br(),
                     "Mortality tables are sourced from: ",
                     html.A(
@@ -693,7 +702,8 @@ def load_tables(table1_id, table2_id):
     logger.debug(f"loading table 1: {table1_id}")
     if isinstance(table1_id, str):
         try:
-            table_1 = pl.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table1_id)
+            filepath_1 = helpers.FILES_PATH / "dataset" / "tables" / table1_id
+            table_1 = dh.read_table(filepath=filepath_1)
             table_1_select_period = "Unknown"
             table_1 = table_1.to_pandas()
         except FileNotFoundError:
@@ -713,7 +723,8 @@ def load_tables(table1_id, table2_id):
     logger.debug(f"loading table 2: {table2_id}")
     if isinstance(table2_id, str):
         try:
-            table_2 = pl.read_csv(helpers.FILES_PATH / "dataset" / "tables" / table2_id)
+            filepath_2 = helpers.FILES_PATH / "dataset" / "tables" / table2_id
+            table_2 = dh.read_table(filepath=filepath_2)
             table_2_select_period = "Unknown"
             table_2 = table_2.to_pandas()
         except FileNotFoundError:

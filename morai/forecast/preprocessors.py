@@ -231,6 +231,12 @@ def preprocess_data(
             first_col = next(iter(mapping[col]["values"].items()))[1]
             X = X.drop(columns=[first_col])
 
+    # sort the mapping dict
+    sorted_keys = sorted(mapping.keys())
+    mapping = {key: mapping[key] for key in sorted_keys}
+    for key in mapping.keys():
+        mapping[key]["values"] = dict(sorted(mapping[key]["values"].items()))
+
     # model_data that is encoded
     md_encoded = pd.concat([model_data.drop(columns=model_features), X], axis=1)
 
@@ -360,3 +366,34 @@ def remap_values(df, mapping):
             elif column in df.columns:
                 df[column] = df[column].map(reversed_map)
     return df
+
+
+def update_mapping(mapping, key, values):
+    """
+    Update the mapping key values.
+
+    Parameters
+    ----------
+    mapping : dict
+        The mapping of the features to the encoding.
+    key : str
+        The key to update.
+    values : list, tuple, dict
+        The values to update.
+
+    Returns
+    -------
+    mapping : dict
+        The updated mapping.
+
+    """
+    if isinstance(values, list):
+        values = dict(enumerate(values))
+    elif isinstance(values, tuple):
+        values = dict(enumerate(range(values[0], values[1] + 1)))
+    elif isinstance(values, dict):
+        pass
+    else:
+        raise ValueError("values must be a list, tuple, or dict")
+    mapping[key]["values"] = values
+    return mapping

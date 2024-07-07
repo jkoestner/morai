@@ -541,7 +541,7 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
     logger.info(f"Creating grid with dimensions: {column_names}")
 
     # create mort grid (polars is much quicker)
-    mort_grid = pl.DataFrame(grid, schema=column_names)
+    mort_grid = pl.DataFrame(grid, schema=column_names, orient="row")
     mort_grid = mort_grid.sort(by=mort_grid.columns)
 
     # convert objects to categorical

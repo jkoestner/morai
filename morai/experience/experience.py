@@ -1,5 +1,7 @@
 """Experience study model."""
 
+import numpy as np
+
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
@@ -242,3 +244,42 @@ def calc_moments(df, rate_col, exposure_col, amount_col=None, sffx=None):
     df[f"moment{sffx}_3_p3"] = moment_3_p3
 
     return df
+
+
+def calc_qx_exp_ae(model_data, predictions, model_name, exposure_col, actual_col):
+    """
+    Add to the model data the qx, expected amount, and ae.
+
+    Parameters
+    ----------
+    model_data : pd.DataFrame
+        DataFrame with the model data.
+    predictions : pd.DataFrame
+        DataFrame with the predictions.
+    model_name : str
+        Name of the model.
+    exposure_col : str
+        Column name of the exposure.
+    actual_col : str
+        Column name of the actual values.
+
+    Returns
+    -------
+    model_data : pd.DataFrame
+        DataFrame with additional columns for the model data.
+
+    """
+    model_data[f"qx_{model_name}"] = predictions
+    model_data[f"exp_amt_{model_name}"] = (
+        model_data[f"qx_{model_name}"] * model_data[exposure_col]
+    )
+    model_data[f"ae_{model_name}"] = np.where(
+        model_data[exposure_col] == 0,
+        0,
+        np.where(
+            model_data[f"exp_amt_{model_name}"] == 0,
+            1,
+            model_data[actual_col] / model_data[f"exp_amt_{model_name}"],
+        ),
+    )
+    return model_data

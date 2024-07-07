@@ -7,6 +7,7 @@ Provides functions for common used functions in app.
 import os
 
 import dash_bootstrap_components as dbc
+import polars as pl
 import yaml
 from dash import dcc, html
 
@@ -35,6 +36,34 @@ def convert_to_short_number(number):
             return f"{number:.1f}{unit}"
         number /= 1000
     return f"{number:.1f}T"
+
+
+def read_table(filepath, **kwargs):
+    """
+    Read table from file.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the file.
+    **kwargs
+        Additional arguments for reading the file.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        Dataframe from the file.
+
+    """
+    print(type(filepath))
+    print(filepath)
+    if filepath.suffix == ".csv":
+        df = pl.read_csv(filepath)
+    elif filepath.suffix == ".xlsx":
+        df = pl.read_excel(filepath, sheet_name="rate_table")
+    else:
+        raise ValueError(f"File type not supported: {filepath}")
+    return df
 
 
 def filter_data(df, callback_context, num_to_str_count=num_to_str_count):
