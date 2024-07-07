@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 
 from morai.experience import experience
-from morai.forecast import preprocessors
+from morai.forecast import models, preprocessors
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
@@ -515,8 +515,7 @@ def pdp(
     """
     df = df.copy()
     # make sure model has prediction function
-    if not hasattr(model, "predict"):
-        raise ValueError(f"Model: [{model}] does not have a predict function.")
+    models.ModelWrapper(model).check_predict()
     logger.info(f"Model: [{type(model).__name__}] for partial dependence plot.")
 
     # initialize variables
@@ -532,28 +531,7 @@ def pdp(
 
     # get the feature names from the model to create X
     model_features = None
-    feature_attrs = [
-        "feature_name",
-        "feature_names",
-        "feature_names_",
-        "feature_names_in_",
-        "params",
-    ]
-    for attr in feature_attrs:
-        try:
-            if attr == "params":
-                model_features = list(getattr(model, attr).keys())
-                df["const"] = 1
-            elif hasattr(model, "feature_name"):
-                model_features = model.feature_name()
-            else:
-                model_features = list(getattr(model, attr))
-            if model_features:
-                break
-        except AttributeError:
-            continue
-    if not model_features:
-        raise ValueError("Model does not have feature names.")
+    model_features = models.ModelWrapper(model).get_features()
     logger.debug(f"Model features for pdp: {model_features}")
 
     # check df is not empty

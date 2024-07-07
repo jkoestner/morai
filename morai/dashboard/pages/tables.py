@@ -336,7 +336,7 @@ def set_table_1_input(value):
                     for key in dh.list_files_in_folder(
                         helpers.FILES_PATH / "dataset" / "tables"
                     )
-                    if key.endswith(".csv")
+                    if key.endswith((".csv", ".xlsx"))
                 ],
                 placeholder="Select a file",
             ),
@@ -365,7 +365,7 @@ def set_table_2_input(value):
                     for key in dh.list_files_in_folder(
                         helpers.FILES_PATH / "dataset" / "tables"
                     )
-                    if key.endswith(".csv")
+                    if key.endswith((".csv", ".xlsx"))
                 ],
                 placeholder="Select a file",
             ),

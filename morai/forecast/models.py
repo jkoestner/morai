@@ -8,9 +8,7 @@ import statsmodels.formula.api as smf
 from scipy.stats import chi2
 from sklearn.base import BaseEstimator, RegressorMixin
 
-from morai.experience import tables
-from morai.forecast import preprocessors
-from morai.utils import custom_logger, helpers
+from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -73,6 +71,30 @@ class GLM(BaseEstimator, RegressorMixin):
     def predict(self, X, manual=False):
         """
         Predict the target.
+
+        When fitting the logistic regression, the model will output a set of
+        coefficients for each feature.
+
+        The rate is then calculated using the following formula using the coefficients:
+          rate = 1 / (1 + exp(constant +
+                 coefficient_1 * feature_1 + ... + coefficient_n * feature_n))
+
+        The rate can also be calculated as the product of the odds ratio:
+          product_odds = odds_1 * odds_2 * ... * odds_n
+          rate = product_odds / (1 + product_odds)
+
+        This allows the rate to be calculated by a combination of a 1d rate and a
+        multiplier table. There is a simplification in the rate table in that the rate
+        is calculated as the odds of feature * the 1d rate. This will not match the
+        predicted rate exactly. It will be off more at higher rates. Use the multiplier
+        table with caution.
+
+        simplification method:
+          rate_combined = odds_feature * rate_1d
+
+        exact method:
+          odds_rate = (rate_1d / (1 - rate_1d))
+          rate_combined = (odds_feature * odds_1d) / (1 + (odds_feature * odds_1d)
 
         Parameters
         ----------
@@ -271,121 +293,6 @@ class GLM(BaseEstimator, RegressorMixin):
 
         return feature_contributions
 
-    def generate_table(
-        self,
-        X,
-        rate_features=None,
-        output_file=None,
-    ):
-        """
-        Generate a 1-d mortality table and multiplier based on model predictions.
-
-        When fitting the logistic regression, the model will output a set of
-        coefficients for each feature.
-
-        The rate is then calculated using the following formula using the coefficients:
-          rate = 1 / (1 + exp(constant +
-                 coefficient_1 * feature_1 + ... + coefficient_n * feature_n))
-
-        The rate can also be calculated as the product of the odds ratio:
-          product_odds = odds_1 * odds_2 * ... * odds_n
-          rate = product_odds / (1 + product_odds)
-
-        This allows the rate to be calculated by a combination of a 1d rate and a
-        multiplier table. There is a simplification in the rate table in that the rate
-        is calculated as the odds of feature * the 1d rate. This will not match the
-        predicted rate exactly. It will be off more at higher rates. Use the multiplier
-        table with caution.
-
-        simplification method:
-          rate_combined = odds_feature * rate_1d
-
-        exact method:
-          odds_rate = (rate_1d / (1 - rate_1d))
-          rate_combined = (odds_feature * odds_1d) / (1 + (odds_feature * odds_1d)
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            The features dataframe
-        rate_features : dict, optional
-            The features to use for the rate. If not provided, the model
-            parameters will be used.
-        output_file : str, optional
-            The output file to save the table
-
-        Returns
-        -------
-        table_dict : dict
-            The 1-d mortality table and multiplier table
-
-        """
-        if not self.is_fitted_:
-            raise ValueError("model is not fitted use fit method")
-        if rate_features is None:
-            rate_features = list(self.model.params.index)
-        if "constant" not in rate_features:
-            rate_features.append("constant")
-
-        # generate linear combination for the logistic regression
-        logger.info(f"generating rate_table with {len(rate_features)-1} features")
-        rate_table = X[rate_features].drop_duplicates()
-
-        # rate table
-        rate_table["rate"] = self.predict(rate_table, manual=True)
-
-        # multiple table
-        mult_features = list(set(X.columns) - set(rate_features))
-        mult_table = None
-        if mult_features:
-            logger.info(
-                f"generating mult_table for model with {len(mult_features)} "
-                f"features"
-            )
-            logger.warning(
-                "the multipliers will not match the predictions from logistic "
-                "regression especially when base table has high rates."
-            )
-            mult_params = self.model.params.loc[mult_features]
-            mult_list = []
-
-            for feature in mult_params.keys():
-                pred_table = X[[*rate_features, feature]].copy()
-                pred_table["pred"] = self.predict(pred_table, manual=True)
-                group_preds = pred_table.groupby(X[feature])["pred"].mean()
-                base_pred = group_preds.iloc[0]
-
-                for value in X[feature].unique():
-                    multiple = group_preds.loc[value] / base_pred
-                    mult_list.extend(
-                        [
-                            {
-                                "category": feature,
-                                "subcategory": value,
-                                "multiple": multiple,
-                            }
-                        ]
-                    )
-            mult_table = pd.DataFrame(mult_list)
-
-        table_dict = {"rate_table": rate_table, "mult_table": mult_table}
-
-        if output_file:
-            path = helpers.FILES_PATH / "dataset" / "tables" / output_file
-            # check if path exists
-            if not path.parent.exists():
-                logger.error(f"directory does not exist: {path.parent}")
-            else:
-                logger.info(f"saving table to {path}")
-                with pd.ExcelWriter(path) as writer:
-                    rate_table.to_excel(writer, sheet_name="rate_table", index=False)
-                    if mult_table is not None:
-                        mult_table.to_excel(
-                            writer, sheet_name="mult_table", index=False
-                        )
-
-        return table_dict
-
     def _setup_model(self, X, y, weights=None, family=None, **kwargs):
         """
         Set up the GLM model.
@@ -434,6 +341,61 @@ class GLM(BaseEstimator, RegressorMixin):
             )
 
         return model
+
+
+class ModelWrapper:
+    """Create a model wrapper to get parameters."""
+
+    def __init__(self, model):
+        """
+        Initialize the model wrapper.
+
+        Parameters
+        ----------
+        model : object
+            The model to wrap
+
+        """
+        self.model = model
+
+    def get_features(self):
+        """
+        Get the features from the model.
+
+        Returns
+        -------
+        features : list
+            The features
+
+        """
+        features = None
+        feature_attrs = [
+            "feature_name",
+            "feature_names",
+            "feature_names_",
+            "feature_names_in_",
+            "params",
+        ]
+        for attr in feature_attrs:
+            try:
+                if attr == "params":
+                    features = list(getattr(self.model, attr).keys())
+                elif hasattr(self.model, "feature_name"):
+                    features = self.model.feature_name()
+                else:
+                    features = list(getattr(self.model, attr))
+                if features:
+                    break
+            except AttributeError:
+                continue
+        if not features:
+            raise ValueError("Model does not have feature names.")
+        return features
+
+    def check_predict(self):
+        """Check if the model has a predict method."""
+        if not hasattr(self.model, "predict"):
+            raise ValueError("model does not have a predict method")
 
 
 class LeeCarter:
@@ -1074,68 +1036,6 @@ class CBD:
 
         """
         return np.log(a / (1 - a))
-
-
-def generate_table(model, mapping, feature_dict, params, grid=None):
-    """
-    Generate a 1-d mortality table based on model predictions.
-
-    Parameters
-    ----------
-    model : model
-        The model to use for generating the table
-    mapping : dict
-        The mapping of the features to predict on with corresponding values
-    feature_dict : dict
-        The dictionary of features to use for the model
-    params : dict
-        The parameters to use for the model
-    grid : pd.DataFrame, optional
-        The grid to use for the table
-
-    Returns
-    -------
-    table : pd.DataFrame
-        The 1-d mortality table
-
-    """
-    logger.info(f"generating table for model {type(model).__name__}")
-    if not hasattr(model, "predict"):
-        raise ValueError("model does not have a predict method")
-
-    # create the grid from the mapping
-    if grid is None:
-        grid = tables.create_grid(mapping=mapping)
-        grid = grid.drop(columns=["vals"])
-
-    # remove unneeded keys
-    feature_dict = {
-        k: v for k, v in feature_dict.items() if k not in ["target", "weight"]
-    }
-
-    # get the original order of the columns
-    model_cols = [col for cols in feature_dict.values() for col in cols]
-    model_data = grid.loc[:, model_cols]
-    model_data = tables.remove_duplicates(model_data, suppress_log=True)
-    logger.info(f"model data shape: {model_data.shape}")
-
-    # preprocess the data and predict
-    try:
-        preprocess_dict = preprocessors.preprocess_data(
-            model_data=model_data, feature_dict=feature_dict, **params
-        )
-        predictions = preprocess_dict["md_encoded"]
-        predictions["vals"] = model.predict(predictions)
-    except Exception as e:
-        raise ValueError("Error during preprocessing or prediction") from e
-    predictions = preprocessors.remap_values(df=predictions, mapping=mapping)
-
-    # create the table
-    table = grid.merge(predictions, on=model_cols, how="left")
-    table = table.sort_index()
-    logger.info(f"table shape: {table.shape}")
-
-    return table
 
 
 def calc_likelihood_ratio(full_model, reduced_model):

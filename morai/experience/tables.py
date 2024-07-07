@@ -1,5 +1,6 @@
 """Mortality Table Builder."""
 
+import copy
 import itertools
 
 import numpy as np
@@ -8,7 +9,9 @@ import polars as pl
 import pymort
 import yaml
 
+from morai.forecast import models, preprocessors
 from morai.utils import custom_logger, helpers
+from morai.utils.custom_logger import suppress_logs
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -114,7 +117,7 @@ class MortTable:
             "issue_age": range(max_age + 1),
             "duration": range(1, max_age + 2),
         } | extra_dims
-        mort_table = create_grid(dims=dims, max_age=max_age)
+        mort_table = suppress_logs(create_grid)(dims=dims, max_age=max_age)
         if "attained_age" not in mort_table.columns:
             mort_table["attained_age"] = (
                 mort_table["issue_age"] + mort_table["duration"] - 1
@@ -322,6 +325,177 @@ class MortTable:
             min_age = None
 
         return soa_table, select_period, min_age
+
+
+def generate_table(
+    model,
+    preprocess_mapping,
+    preprocess_feature_dict,
+    preprocess_params,
+    grid=None,
+    mult_features=None,
+):
+    """
+    Generate a 1-d mortality table based on model predictions.
+
+    Parameters
+    ----------
+    model : model
+        The model to use for generating the table
+    preprocess_mapping : dict
+        The mapping of the features to predict on with corresponding values
+    preprocess_feature_dict : dict
+        The dictionary of features to use for the model that were preprocessed
+    preprocess_params : dict
+        The parameters that were used for preprocessing
+    grid : pd.DataFrame, optional
+        The grid to use for the table
+    mult_features : list, optional
+        The features to use for the multiplier table
+
+    Returns
+    -------
+    tuple
+        rate_table : pd.DataFrame
+            The 1-d mortality rate_table
+        mult_table : pd.DataFrame
+            The multiplier table
+
+    """
+    # initialize the variables
+    logger.info(f"generating table for model {type(model).__name__}")
+    models.ModelWrapper(model).check_predict()
+    rate_mapping = preprocess_mapping
+    rate_feature_dict = {
+        k: v
+        for k, v in preprocess_feature_dict.items()
+        if k not in ["target", "weight"]
+    }
+    mult_table = None
+    # remove the 'add_constant' parameter, due to already in mapping
+    preprocess_params["add_constant"] = False
+
+    # create separate mult_mapping and rate_mapping
+    if mult_features:
+        logger.warning(
+            "the multipliers may not match the predictions from the model "
+            "and will be the average prediction for the feature"
+        )
+
+        def _remove_mult_from_rate_mapping(mapping, mult_features):
+            mapping = copy.deepcopy(mapping)
+            for key, sub_dict in mapping.items():
+                if key in mult_features and "values" in sub_dict:
+                    first_key = next(iter(sub_dict["values"]))
+                    sub_dict["values"] = {first_key: sub_dict["values"][first_key]}
+            return mapping
+
+        mult_mapping = {k: v for k, v in rate_mapping.items() if k in mult_features}
+        rate_mapping = _remove_mult_from_rate_mapping(
+            mapping=rate_mapping, mult_features=mult_features
+        )
+
+    # create the grid from the mapping
+    if grid is None:
+        grid = suppress_logs(create_grid)(mapping=rate_mapping)
+        grid = grid.drop(columns=["vals"])
+        grid = suppress_logs(remove_duplicates)(df=grid)
+
+    # preprocess the data
+    preprocess_dict = suppress_logs(preprocessors.preprocess_data)(
+        model_data=grid,
+        feature_dict=rate_feature_dict,
+        **preprocess_params,
+    )
+    rate_table = preprocess_dict["md_encoded"]
+    if mult_features:
+        # add the mult_features to the predictions
+        def _add_null_mult_features(df, mapping, mult_features):
+            for feature in mult_features:
+                type_ = mapping[feature]["type"]
+                if type_ == "ohe":
+                    ohe_dict = dict(list(mapping[feature]["values"].items())[1:])
+                    for col in ohe_dict.values():
+                        df[col] = 0
+                else:
+                    df[feature] = next(iter(mapping[feature]["values"].keys()))
+
+            return df
+
+        rate_table = _add_null_mult_features(
+            df=rate_table, mapping=preprocess_mapping, mult_features=mult_features
+        )
+    # prediction needs to be in same order as model
+    model_features = models.ModelWrapper(model).get_features()
+    rate_table = rate_table.loc[:, model_features]
+
+    # create the rate table
+    try:
+        rate_table["vals"] = model.predict(rate_table)
+    except Exception as e:
+        raise ValueError("Error during preprocessing or prediction") from e
+
+    # create the multiplier table
+    if mult_features:
+        mult_list = []
+        base = rate_table["vals"].mean()
+
+        for feature, mapping in mult_mapping.items():
+            mult_table = rate_table.copy()
+            mult_table = mult_table.drop(columns=["vals"])
+            feature_vals = list(mapping["values"].keys())
+            feature_encoded = list(mapping["values"].values())
+            feature_type = mapping["type"]
+
+            if feature_type == "ohe":
+                for i, value in enumerate(feature_encoded):
+                    if i == 0:
+                        vals = model.predict(mult_table)
+                    else:
+                        mult_table[value] = 1
+                        vals = model.predict(mult_table)
+                        mult_table[value] = 0
+
+                    multiple = vals.mean() / base
+                    mult_list.append(
+                        {
+                            "category": feature,
+                            "subcategory": feature_vals[i],
+                            "multiple": multiple,
+                        }
+                    )
+
+            else:
+                # extend table for all values of feature
+                extended_tables = [
+                    mult_table.assign(**{feature: value}) for value in feature_encoded
+                ]
+                extended_table = pd.concat(extended_tables, ignore_index=True)
+                extended_table["vals"] = model.predict(extended_table)
+
+                grouped = extended_table.groupby(feature)["vals"].mean()
+                for i, value in enumerate(feature_encoded):
+                    multiple = grouped.loc[value] / base
+                    mult_list.append(
+                        {
+                            "category": feature,
+                            "subcategory": feature_vals[i],
+                            "multiple": multiple,
+                        }
+                    )
+
+        mult_table = pd.DataFrame(mult_list)
+        mult_table = mult_table.sort_values(by=["category", "subcategory"])
+        logger.info(f"mult_table rows: {mult_table.shape[0]}")
+
+    rate_table = preprocessors.remap_values(df=rate_table, mapping=preprocess_mapping)
+    col_reorder = [col for col in rate_table.columns if col != "vals"] + ["vals"]
+    rate_table = rate_table[col_reorder]
+    if mult_features is not None:
+        rate_table = rate_table.drop(columns=mult_features)
+    logger.info(f"rate_table shape: {rate_table.shape}")
+
+    return rate_table, mult_table
 
 
 def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
@@ -573,7 +747,7 @@ def add_aa_ia_dur_cols(df):
     return df
 
 
-def remove_duplicates(df, suppress_log=False):
+def remove_duplicates(df):
     """
     Remove duplicates from the DataFrame.
 
@@ -581,8 +755,6 @@ def remove_duplicates(df, suppress_log=False):
     ----------
     df : pd.DataFrame
         The DataFrame.
-    suppress_log : bool, optional (default=False)
-        Whether to suppress the log.
 
     Returns
     -------
@@ -593,27 +765,50 @@ def remove_duplicates(df, suppress_log=False):
     initial_rows = len(df)
     df = df.drop_duplicates().reset_index(drop=True)
     removed_rows = initial_rows - len(df)
-    if removed_rows and not suppress_log:
-        logger.info(f"Removed '{removed_rows}' duplicates.")
+    logger.info(f"Removed '{removed_rows}' duplicates.")
 
     return df
 
 
-def output_table(df, name="table.csv"):
+def output_table(rate_table, filename="table.csv", mult_table=None):
     """
     Output the table to a csv file.
 
     Parameters
     ----------
-    df : pd.DataFrame
+    rate_table : pd.DataFrame
         The DataFrame.
-    name : str, optional (default="table.csv")
+    filename : str, optional (default="table.csv")
         The name of the file.
+    mult_table : pd.DataFrame, optional (default=None)
+        The multiplier table.
 
     """
-    path = helpers.FILES_PATH / "dataset" / "tables" / name
-    df.to_csv(path, index=False)
-    logger.info(f"Output table to: {path}")
+    path = helpers.FILES_PATH / "dataset" / "tables" / filename
+
+    # check if path exists
+    if not path.parent.exists():
+        logger.error(f"directory does not exist: {path.parent}")
+    else:
+        if mult_table is None:
+            # check if .csv if not change it to .csv
+            if path.suffix != ".csv":
+                logger.warning(
+                    f"changing file extension to .csv as it was {path.suffix}"
+                )
+                path = path.with_suffix(".csv")
+            rate_table.to_csv(path, index=False)
+        else:
+            if path.suffix != ".xlsx":
+                logger.warning(
+                    f"changing file extension to .xlsx as it was {path.suffix}"
+                )
+                path = path.with_suffix(".xlsx")
+            with pd.ExcelWriter(path) as writer:
+                rate_table.to_excel(writer, sheet_name="rate_table", index=False)
+                if mult_table is not None:
+                    mult_table.to_excel(writer, sheet_name="mult_table", index=False)
+        logger.info(f"saving table to {path}")
 
 
 def get_su_table(df, select_period):

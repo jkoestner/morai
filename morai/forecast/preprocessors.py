@@ -350,15 +350,13 @@ def remap_values(df, mapping):
         elif isinstance(df, pd.DataFrame):
             # remap one hot encoded columns
             if value_map["type"] == "ohe":
+                ohe_dict = dict(list(value_map["values"].items())[1:])
+                dropped_cat = next(iter(value_map["values"].items()))[0]
+                df[column] = dropped_cat
+                for cat, col in ohe_dict.items():
+                    df.loc[df[col] == 1, column] = cat
+                df = df.drop(columns=ohe_dict.values())
 
-                def remap_row(row, value_map=value_map):
-                    for cat, col in value_map["values"].items():
-                        if row[col] == 1:
-                            return cat
-                    return None
-
-                df[column] = df.apply(remap_row, axis=1)
-                df = df.drop(columns=value_map["values"].values())
             elif column in df.columns:
                 df[column] = df[column].map(reversed_map)
     return df

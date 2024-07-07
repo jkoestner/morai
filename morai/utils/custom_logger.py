@@ -118,6 +118,29 @@ def get_log_level(module_prefix="morai"):
     return log_level
 
 
+def suppress_logs(func):
+    """
+    Suppress the log of a function.
+
+    Parameters
+    ----------
+    func : function
+        the function to suppress the log for
+
+    """
+
+    def wrapper(*args, **kwargs):
+        logger = logging.getLogger(func.__module__)
+        current_level = logger.level
+        logger.setLevel(logging.CRITICAL)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            logger.setLevel(current_level)
+
+    return wrapper
+
+
 def test_logger():
     """Test the logger."""
     logger = setup_logging(__name__)
