@@ -913,7 +913,7 @@ def map_rates(df, rate, key_dict=None, rate_map_location=None):
     if type == "soa":
         soa_map = rate_map[rate]["type"]["soa"]
         mt = MortTable()
-        rate_table = mt.build_table(
+        rate_table = suppress_logs(mt.build_table)(
             table_list=soa_map["table_list"],
             juv_list=soa_map["juv_list"],
             extend=soa_map["extend"],

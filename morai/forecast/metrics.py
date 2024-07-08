@@ -123,6 +123,60 @@ def ae_rank(df, features, actuals, expecteds, exposures):
     return rank_df
 
 
+def calculate_metrics(y_true, y_pred, metrics, prefix="", model=None, **kwargs):
+    """
+    Calculate the metrics.
+
+    Parameters
+    ----------
+    y_true : series
+        The actual column name
+    y_pred : series
+        The predicted column name
+    metrics : list
+        The metrics to calculate
+    prefix : str, optional (default="")
+        The prefix for the metrics
+    model : model, optional (default=None)
+        The model to calculate the AIC
+    kwargs : dict
+        The keyword arguments for the metrics calculation from sklearn.metrics
+
+    Returns
+    -------
+    metric_dict : dict
+        The dictionary of metrics
+
+    """
+    metric_dict = {}
+    for metric in metrics:
+        if metric == "smape":
+            metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred)
+        elif metric == "shape":
+            metric_dict[f"{prefix}_{metric}"] = y_true.shape[0]
+        elif metric == "ae":
+            metric_dict[f"{prefix}_{metric}"] = ae(y_true, y_pred)
+        elif metric == "aic":
+            try:
+                metric_dict[f"{prefix}_{metric}"] = (
+                    model.aic if model is not None else None
+                )
+            except AttributeError:
+                logger.error(
+                    f"Model `{model}` does not have AIC attribute, " f"returning None"
+                )
+                metric_dict[f"{prefix}_{metric}"] = None
+        else:
+            try:
+                metric_dict[f"{prefix}_{metric}"] = getattr(skm, metric)(
+                    y_true, y_pred, **kwargs
+                )
+            except AttributeError:
+                logger.error(f"Metric `{metric}` not found in sklearn.metrics")
+                metric_dict[f"{prefix}_{metric}"] = None
+    return metric_dict
+
+
 class ModelResults:
     """
     Class to store model results.
@@ -395,42 +449,30 @@ class ModelResults:
             y_true_test = y_true_test * weights_test
             y_pred_test = y_pred_test * weights_test
 
-        def calculate_metrics(y_true, y_pred, prefix):
-            metric_dict = {}
-            for metric in metrics:
-                if metric == "smape":
-                    metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred)
-                elif metric == "shape":
-                    metric_dict[f"{prefix}_{metric}"] = y_true.shape[0]
-                elif metric == "ae":
-                    metric_dict[f"{prefix}_{metric}"] = ae(y_true, y_pred)
-                elif metric == "aic":
-                    try:
-                        metric_dict[f"{prefix}_{metric}"] = (
-                            model.aic if model is not None else None
-                        )
-                    except AttributeError:
-                        logger.error(
-                            f"Model `{model}` does not have AIC attribute, "
-                            f"returning None"
-                        )
-                        metric_dict[f"{prefix}_{metric}"] = None
-                else:
-                    try:
-                        metric_dict[f"{prefix}_{metric}"] = getattr(skm, metric)(
-                            y_true, y_pred, **kwargs
-                        )
-                    except AttributeError:
-                        logger.error(f"Metric `{metric}` not found in sklearn.metrics")
-                        metric_dict[f"{prefix}_{metric}"] = None
-            return metric_dict
-
         # calculate train
-        results.update(calculate_metrics(y_true_train, y_pred_train, "train"))
+        results.update(
+            calculate_metrics(
+                y_true=y_true_train,
+                y_pred=y_pred_train,
+                prefix="train",
+                metrics=metrics,
+                model=model,
+                **kwargs,
+            )
+        )
 
         # calculate test if provided
         if y_true_test is not None and y_pred_test is not None:
-            results.update(calculate_metrics(y_true_test, y_pred_test, "test"))
+            results.update(
+                calculate_metrics(
+                    y_true=y_true_test,
+                    y_pred=y_pred_test,
+                    prefix="test",
+                    metrics=metrics,
+                    model=model,
+                    **kwargs,
+                )
+            )
 
         # create dataframe
         scorecard = pd.DataFrame([results])
