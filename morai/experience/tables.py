@@ -867,12 +867,12 @@ def map_rates(df, rate, key_dict=None, rate_map_location=None):
     Parameters
     ----------
     df : pd.DataFrame
-        The DataFrame.
+        The DataFrame to map the rates to.
     rate : str
-        The rate to map.
+        The rate to map to be looked up in the rate mapping file.
     key_dict : dict, optional
         The key dictionary. If no key dictionary is provided, the mapping will
-        be based on the keys in the rate file mapping.
+        be based on the key list in the rate file mapping.
           - The keys are the rate map keys
           - The values are the dataframe keys
     rate_map_location : str, optional

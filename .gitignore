@@ -19,6 +19,7 @@ morai/dashboard/file_system_backend/
 notebooks/working/
 
 
-# include tests/files/
+# include below even though they are excluded above
 !.gitkeep
 !tests/files/
+!files/dataset/tables/rate_map_example.yaml
