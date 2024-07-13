@@ -17,6 +17,8 @@ Todo:
 - Chapter 9 Experience Rating Using Credibility
    - https://openacttexts.github.io/Loss-Data-Analytics/ChapCredibility.html
 - https://www.soa.org/globalassets/assets/files/resources/tables-calcs-tools/credibility-methods-life-health-pensions.pdf
+- Think Bayes
+    - https://allendowney.github.io/ThinkBayes2/
 
 """
 

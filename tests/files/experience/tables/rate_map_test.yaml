@@ -1,0 +1,17 @@
+#   _____         _   
+#  |_   _|__  ___| |_ 
+#    | |/ _ \/ __| __|
+#    | |  __/\__ \ |_ 
+#    |_|\___||___/\__|
+                    
+
+simple_glm:
+  rate: simple_glm
+  description: simple_glm output
+  keys:
+    - smoker_status
+    - sex
+  type:
+    workbook: 
+      filename: simple_glm.xlsx
+      mult_table: True

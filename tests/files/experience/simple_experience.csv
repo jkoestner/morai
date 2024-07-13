@@ -1,5 +1,5 @@
-sex,smoker_status,smoker_status_encode,rate,sex_rate,smoker_rate,exposed,expected
-F,NS,0,0.72,0.8,0.9,50,0.36
-F,S,1,0.88,0.8,1.1,50,0.44
-M,NS,0,1.08,1.2,0.9,100,1.08
-M,S,1,1.32,1.2,1.1,100,1.32
+sex,smoker_status,smoker_status_encode,rate,sex_rate,smoker_rate,base_rate,exposed,expected
+F,NS,0,0.072,0.8,0.9,0.1,50,3.6
+F,S,1,0.088,0.8,1.1,0.1,50,4.4
+M,NS,0,0.108,1.2,0.9,0.1,100,10.8
+M,S,1,0.132,1.2,1.1,0.1,100,13.2
