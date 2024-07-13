@@ -23,9 +23,7 @@ WORKDIR /code
 ARG BRANCH_NAME=main
 
 # Install the package from a specific branch
-RUN uv venv && \
-    source .venv/bin/activate && \
-    uv pip install --no-cache-dir "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
+RUN uv pip install --no-cache-dir --system "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
 
 # Create new user
 RUN adduser --disabled-password --gecos '' morai && \

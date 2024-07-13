@@ -18,10 +18,8 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install uv
-          uv venv
-          source .venv/bin/activate
-          uv pip install .
-          uv pip install .[dev]
+          uv pip install --system .
+          uv pip install --system .[dev]
       - name: test imports
         run: |
           python -c "
