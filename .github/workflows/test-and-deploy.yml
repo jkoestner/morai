@@ -18,6 +18,8 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install uv
+          uv venv
+          source .venv/bin/activate
           uv pip install .
           uv pip install .[dev]
       - name: test imports
