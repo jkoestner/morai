@@ -17,8 +17,9 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install .
-          pip install .[dev]
+          pip install uv
+          uv pip install .
+          uv pip install .[dev]
       - name: test imports
         run: |
           python -c "

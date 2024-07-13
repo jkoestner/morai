@@ -9,11 +9,12 @@
 # slim was used instead of alpine because of the need of numpy
 FROM python:3.9-slim
 
-# Install git
+# Install dependencies, git, and uv
 RUN apt-get update && \
     apt-get install -y --no-install-recommends git && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Set work directory
 WORKDIR /code
@@ -22,7 +23,7 @@ WORKDIR /code
 ARG BRANCH_NAME=main
 
 # Install the package from a specific branch
-RUN pip install --no-cache-dir "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
+RUN uv pip install --no-cache-dir "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
 
 # Create new user
 RUN adduser --disabled-password --gecos '' morai && \

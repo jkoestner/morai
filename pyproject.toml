@@ -36,7 +36,6 @@ dependencies = [
     "shap>=0.45.1",
     "statsmodels>=0.14.1",
     "tqdm>=4.66.2",
-    "uv>=0.1.36",
     "xgboost>=2.0.3",                   # only for xgboost
 ]
 

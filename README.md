@@ -66,7 +66,7 @@ the environment of choice.
 The following command can be run to install the packages in the pyproject.toml file.
 
 ```
-pip install -e .
+uv pip install -e .
 ```
 
 ### Docker Install
