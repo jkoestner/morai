@@ -17,12 +17,16 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 import requests
 
-from morai.utils import custom_logger, helpers
+from morai.utils import custom_logger, helpers, sql
+from morai.utils.custom_logger import suppress_logs
+from morai.utils.helpers import check_merge
 
 logger = custom_logger.setup_logging(__name__)
 
 
-def get_cdc_data(xml_filename, parse_date_col=None, convert_dtypes=True):
+def get_cdc_data_xml(
+    xml_filename, parse_date_col=None, convert_dtypes=True, clean_df=True
+):
     """
     Get CDC data from an XML file.
 
@@ -34,6 +38,8 @@ def get_cdc_data(xml_filename, parse_date_col=None, convert_dtypes=True):
         Column name to parse dates.
     convert_dtypes : bool, optional
         Convert data types to the correct type.
+    clean_df : bool, optional
+        Clean the DataFrame.
 
     Returns
     -------
@@ -76,7 +82,110 @@ def get_cdc_data(xml_filename, parse_date_col=None, convert_dtypes=True):
     if convert_dtypes:
         cdc_df = _infer_dtypes(cdc_df)
 
+    # clean the dataframe
+    if clean_df:
+        cdc_df = suppress_logs(helpers.clean_df)(cdc_df, update_cat=False)
+
     return cdc_df
+
+
+def get_cdc_data_sql(db_filepath, table_name):
+    """
+    Get CDC data from a SQLite database.
+
+    Parameters
+    ----------
+    db_filepath : str
+        Database file path.
+    table_name : str
+        Table name.
+
+    Returns
+    -------
+    cdc_df : pd.DataFrame
+        DataFrame object.
+
+    """
+    # read the data from the database
+    query = f"""
+            SELECT *
+            FROM {table_name}
+            ORDER BY added_at
+            DESC LIMIT 1
+            """
+    last_date_row = sql.read_sql(db_filepath, query)
+    last_date = last_date_row["added_at"].iloc[0]
+
+    query = f"""
+            SELECT *
+            FROM {table_name}
+            WHERE added_at = '{last_date}'
+            """
+    cdc_df = sql.read_sql(db_filepath, query)
+    logger.info(f"table `{table_name}` last updated at: {last_date}")
+
+    return cdc_df
+
+
+def get_cdc_reference(sheet_name):
+    """
+    Get CDC reference data.
+
+    Parameters
+    ----------
+    sheet_name : str
+        Sheet name.
+
+    Returns
+    -------
+    reference_df : pd.DataFrame
+        DataFrame object.
+
+    """
+    # read the data from the database
+    filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc_reference.xlsx"
+    if not filepath.exists():
+        logger.error(f"The reference file was not found here: {filepath}")
+        return None
+    reference_df = pd.read_excel(filepath, sheet_name=sheet_name)
+
+    return reference_df
+
+
+def map_cod(df, col, index_dict=None):
+    """
+    Map CDC cause of death (cod) codes to their corresponding descriptions.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The dataframe to map the column onto.
+    col : str
+        The column to map.
+    index_dict : dict, optional
+        Dictionary of the indices to match.
+        If not provided, the default is {"icd-10_113_cause_list": "wonder_cause"}.
+
+    """
+    logger.info(f"mapping column: {col}")
+    if index_dict is None:
+        index_dict = {"icd-10_113_cause_list": "wonder_cause"}
+    mapping = get_cdc_reference(sheet_name="cause_mapping")
+    df_idx = next(iter(index_dict.keys()))
+    reference_idx = next(iter(index_dict.values()))
+
+    df = check_merge(pd.merge)(
+        left=df,
+        right=mapping[[reference_idx, col]],
+        how="left",
+        left_on=df_idx,
+        right_on=reference_idx,
+    )
+
+    if reference_idx != df_idx and reference_idx in df.columns:
+        df = df.drop(columns=[reference_idx])
+
+    return df
 
 
 def _xml_parse_dataid(xml_string):
@@ -126,6 +235,12 @@ def _xml_create_df(xml_response):
         logger.warning(
             "show totals is true, this should be false with option `O_show_totals`"
         )
+
+    # get the cdc mapping for columns
+    cdc_mapping = get_cdc_reference(sheet_name="mapping")
+    cdc_mapping = cdc_mapping[cdc_mapping["category"] == "mortality"]
+    cdc_mapping.set_index("key", inplace=True)
+    cdc_mapping = cdc_mapping["value"].to_dict()
 
     # get the column names
     byvariables = [
@@ -230,42 +345,3 @@ def _infer_dtypes(df):
         df[col] = pd.to_numeric(df[col], errors="coerce", downcast="integer")
 
     return df
-
-
-cdc_mapping = {
-    "V1-level1": "Year",
-    "V1-level2": "Month",
-    "V2-level1": "ICD - Chapter",
-    "V2-level2": "ICD - Sub-Chapter",
-    "V2-level3": "Cause of death",
-    "V4": "ICD-10 113 Cause List",
-    "V5": "Age Groups",
-    "V7": "Gender",
-    "V8": "Race",
-    "V9-level1": "State",
-    "V9-level2": "County",
-    "V10-level1": "Census Region",
-    "V10-level2": "Census Division",
-    "V11": "2006 Urbanization",
-    "V12": "ICD-10 130 Cause List (Infants)",
-    "V17": "Hispanic Origin",
-    "V19": "2013 Urbanization",
-    "V20": "Autopsy",
-    "V21": "Place of Death",
-    "V22": "Injury Intent",
-    "V23": "Injury Mechanism & All Other Leading Causes",
-    "V24": "Weekday",
-    "V25": "Drug/Alcohol Induced Causes",
-    "V27-level1": "HHS Region",
-    "V28": "15 Leading Causes of Death",
-    "V29": "15 Leading Causes of Death (Infants)",
-    "M1": "Deaths",
-    "M2": "Population",
-    "M3": "Crude Rate",
-    "M31": "Crude Rate Standard Error",
-    "M32": "Crude 95% Confidence Interval",
-    "M4": "Age-adjusted Rate",
-    "M41": "Age-adjusted Rate Standard Error",
-    "M42": "Age-adjusted Rate Confidence Interval",
-    "M9": "Percent of Total Deaths",
-}

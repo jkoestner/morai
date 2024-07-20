@@ -63,7 +63,7 @@ def chart(
     color : str, optional (default=None)
         The column name to use for the color.
     type : str, optional (default="line")
-        The type of chart to create. Options are "line", "heatmap", or "bar".
+        The type of chart to create. Options are "line", "heatmap", "bar", or "area".
     numerator : str, optional (default=None)
         The column name to use for the numerator values.
     denominator : str, optional (default=None)
@@ -176,6 +176,17 @@ def chart(
         if not title:
             title = f"'{y_axis}' by '{x_axis}' and '{color}'"
         fig = px.bar(
+            grouped_data,
+            x=x_axis,
+            y=y_axis,
+            color=color,
+            title=title,
+            **kwargs,
+        )
+    elif type == "area":
+        if not title:
+            title = f"'{y_axis}' by '{x_axis}' and '{color}'"
+        fig = px.area(
             grouped_data,
             x=x_axis,
             y=y_axis,
@@ -1162,3 +1173,28 @@ def _pdp_make_prediction(
         line_color: line_value,
         "pred": pred,
     }
+
+
+def get_category_orders(df, category, measure):
+    """
+    Get the category order.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to use.
+    category : str
+        The category to use.
+    measure : str
+        The measure variable.
+
+    Returns
+    -------
+    category_order : dict
+        The category order
+
+    """
+    col_order = df.groupby(category)[measure].sum().sort_values(ascending=False)
+    category_orders = {category: col_order.index.to_list()}
+
+    return category_orders
