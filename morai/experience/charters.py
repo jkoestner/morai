@@ -1175,7 +1175,7 @@ def _pdp_make_prediction(
     }
 
 
-def get_category_orders(df, category, measure):
+def get_category_orders(df, category, measure, ascending=False, agg="sum"):
     """
     Get the category order.
 
@@ -1187,6 +1187,10 @@ def get_category_orders(df, category, measure):
         The category to use.
     measure : str
         The measure variable.
+    ascending : bool, optional (default=False)
+        Whether to sort in ascending order.
+    agg : str, optional (default='sum')
+        The aggregation function to use.
 
     Returns
     -------
@@ -1194,7 +1198,7 @@ def get_category_orders(df, category, measure):
         The category order
 
     """
-    col_order = df.groupby(category)[measure].sum().sort_values(ascending=False)
+    col_order = df.groupby(category)[measure].agg(agg).sort_values(ascending=ascending)
     category_orders = {category: col_order.index.to_list()}
 
     return category_orders

@@ -1,9 +1,10 @@
 """
 Building plotly dashboard.
 
-Builds plotly pages with call backs. There are 2 options the user has for running code.
+Builds plotly pages with call backs. There are 3 options the user has for running code.
 1. Local running
-2. Docker running (coming soon)
+2. Docker running
+3. CLI running
 
 To run locally:
 1. cd into directory with app.py

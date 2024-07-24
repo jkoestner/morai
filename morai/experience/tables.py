@@ -47,10 +47,12 @@ class MortTable:
         self.rate_name = None
         self.select_period = None
         self.max_age = 121
+        if rate_filename is None:
+            rate_filename = "rate_map.yaml"
 
         # building rate based on the rate file
         if rate:
-            self.rate_dict = process_rate_file(rate, rate_filename)
+            self.rate_dict = get_rate_dict(rate, rate_filename)
             rate_type = next(iter(self.rate_dict["type"].keys()))
             logger.info(f"building table for rate: '{rate}' with format: '{rate_type}'")
             self.rate_name = f"qx_{self.rate_dict['rate']}"
@@ -450,7 +452,7 @@ def generate_table(
     if mult_features:
         logger.warning(
             "the multipliers may not match the predictions from the model "
-            "and will be the average prediction for the feature"
+            "and will be the mean prediction for the feature"
         )
         mult_mapping = {k: v for k, v in rate_mapping.items() if k in mult_features}
         rate_mapping = _remove_mult_from_rate_mapping(
@@ -488,6 +490,7 @@ def generate_table(
 
     # create the multiplier table
     if mult_features:
+        logger.info("creating multiplier table based on the mean model prediction")
         mult_list = []
         base = rate_table["vals"].mean()
 
@@ -1033,7 +1036,35 @@ def get_su_table(df, select_period):
     return df
 
 
-def process_rate_file(rate, rate_filename=None):
+def get_rates(rate_filename=None):
+    """
+    Get the possible rates in rate mapping file.
+
+    Parameters
+    ----------
+    rate_filename : str, optional
+        The filename of the rate map file. If none this is assumed to
+        be in the dataset/tables folder.
+
+    Returns
+    -------
+    rates : list
+        The rates in the rate mapping file.
+
+    """
+    # load rate map file
+    if rate_filename is None:
+        rate_filename = "rate_map.yaml"
+    rate_map_location = get_filepath(rate_filename)
+    with open(rate_map_location, "r") as file:
+        rate_map = yaml.safe_load(file)
+
+    rates = list(rate_map.keys())
+
+    return rates
+
+
+def get_rate_dict(rate, rate_filename=None):
     """
     Process the rate file.
 
@@ -1047,8 +1078,8 @@ def process_rate_file(rate, rate_filename=None):
 
     Returns
     -------
-    rate_table : pd.DataFrame
-        The rate table.
+    rate_dict : dict
+        The rate dictionary
 
     """
     # load rate map file

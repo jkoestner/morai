@@ -264,9 +264,22 @@ def check_merge(func):
             )
             return left_df
 
+        # check if the left_on values are in the right_on values
+        missing_values = set(left_idx.unique()) - set(right_idx.unique())
+        if missing_values:
+            logger.warning(
+                f"Not all left_on values are not in the "
+                f"right_on values: {missing_values}"
+            )
+            return left_df
+
         # pass the function
         try:
-            return func(*args, **kwargs)
+            df = func(*args, **kwargs)
+            # check if right columns are nan
+            if df[right_columns].isna().any().any():
+                logger.warning("There are NaN values in the right columns")
+            return df
         except Exception as e:
             raise e
 

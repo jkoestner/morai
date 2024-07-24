@@ -193,7 +193,8 @@ def generate_filters(
             num_cols.append(col)
         filters.append(html.Label(col))
         filters.append(filter)
-        filter_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
+
+    filter_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
 
     return filter_dict
 

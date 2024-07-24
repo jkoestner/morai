@@ -79,12 +79,14 @@ def get_cdc_data_xml(
             return cdc_df
         cdc_df[parse_date_col] = _parse_date_col(df=cdc_df, col=parse_date_col)
 
-    if convert_dtypes:
-        cdc_df = _infer_dtypes(cdc_df)
-
     # clean the dataframe
     if clean_df:
         cdc_df = suppress_logs(helpers.clean_df)(cdc_df, update_cat=False)
+        if "year" in cdc_df.columns:
+            cdc_df["year"] = cdc_df["year"].str[:4]
+
+    if convert_dtypes:
+        cdc_df = _infer_dtypes(cdc_df)
 
     return cdc_df
 
@@ -152,9 +154,9 @@ def get_cdc_reference(sheet_name):
     return reference_df
 
 
-def map_cod(df, col, index_dict=None):
+def map_reference(df, col, index_dict=None, sheet_name="cod"):
     """
-    Map CDC cause of death (cod) codes to their corresponding descriptions.
+    Map a column from the CDC reference to the DataFrame.
 
     Parameters
     ----------
@@ -165,14 +167,18 @@ def map_cod(df, col, index_dict=None):
     index_dict : dict, optional
         Dictionary of the indices to match.
         If not provided, the default is {"icd-10_113_cause_list": "wonder_cause"}.
+    sheet_name : str, optional
+        The sheet name to use.
 
     """
     logger.info(f"mapping column: {col}")
     if index_dict is None:
-        index_dict = {"icd-10_113_cause_list": "wonder_cause"}
-    mapping = get_cdc_reference(sheet_name="cause_mapping")
+        index_dict = {"icd-10_113_cause_list": "cause_wonder"}
+    mapping = get_cdc_reference(sheet_name=sheet_name)
     df_idx = next(iter(index_dict.keys()))
     reference_idx = next(iter(index_dict.values()))
+    mapping = mapping[[reference_idx, col]]
+    mapping = mapping.drop_duplicates()
 
     df = check_merge(pd.merge)(
         left=df,
@@ -332,7 +338,7 @@ def _infer_dtypes(df):
         DataFrame object with inferred data types.
 
     """
-    comma_cols = [col for col in ["Deaths"] if col in df.columns]
+    comma_cols = [col for col in ["deaths", "population"] if col in df.columns]
     for col in comma_cols:
         df[col] = pd.to_numeric(df[col].str.replace(",", ""), errors="coerce")
 
@@ -340,7 +346,7 @@ def _infer_dtypes(df):
     for col in float_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    int_cols = [col for col in [] if col in df.columns]
+    int_cols = [col for col in ["year"] if col in df.columns]
     for col in int_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce", downcast="integer")
 

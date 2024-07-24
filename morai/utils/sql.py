@@ -10,7 +10,7 @@ from morai.utils import custom_logger
 logger = custom_logger.setup_logging(__name__)
 
 
-def export_to_sql(df, db_filepath, table_name):
+def export_to_sql(df, db_filepath, table_name, if_exists="append", index=False):
     """
     Export a DataFrame to a SQLite database.
 
@@ -22,6 +22,11 @@ def export_to_sql(df, db_filepath, table_name):
         Database file path.
     table_name : str
         Table name.
+    if_exists : str, optional (default='append')
+        What to do if the table already exists.
+        Options are 'fail', 'replace', 'append'.
+    index : bool, optional (default=False)
+        Whether to include the DataFrame index.
 
     """
     # initialize
@@ -36,7 +41,7 @@ def export_to_sql(df, db_filepath, table_name):
     df = df.copy()
     df["added_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        df.to_sql(table_name, conn, if_exists="append", index=False)
+        df.to_sql(table_name, conn, if_exists=if_exists, index=index)
     finally:
         conn.close()
 

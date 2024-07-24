@@ -92,7 +92,7 @@ services:
 
 ### CLI
 
-CLI can be used for easier commands of python scripts for both portfolio or manager. An example of a CLI command is shown below.
+CLI can be used for easier commands of python scripts for both portfolio or manager. An example of a CLI command is shown below. When running the dashboard the `MORAI_FILES_PATH` environment variable needs to be set to the directory where the files are stored.
 
 ```commandline
 morai dashboard

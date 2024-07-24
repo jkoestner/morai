@@ -42,9 +42,9 @@ def layout():
     """Table layout."""
     return html.Div(
         [
-            dcc.Store(id="store-table-compare", storage_type="session"),
-            dcc.Store(id="store-table-1-select", storage_type="session"),
-            dcc.Store(id="store-table-2-select", storage_type="session"),
+            dcc.Store(id="store-table-compare", storage_type="memory"),
+            dcc.Store(id="store-table-1-select", storage_type="memory"),
+            dcc.Store(id="store-table-2-select", storage_type="memory"),
             # -----------------------------------------------------------
             html.H4(
                 "Table Viewer",
@@ -103,7 +103,7 @@ def layout():
                     dbc.Col(
                         dcc.RadioItems(
                             id="table-1-radio",
-                            options=["soa table", "file"],
+                            options=["soa table", "file", "rate_table"],
                             value="soa table",
                         ),
                         width=1,
@@ -155,7 +155,7 @@ def layout():
                     dbc.Col(
                         dcc.RadioItems(
                             id="table-2-radio",
-                            options=["soa table", "file"],
+                            options=["soa table", "file", "rate_table"],
                             value="soa table",
                         ),
                         width=1,
@@ -332,7 +332,7 @@ def set_table_1_input(value):
             id="table-1-id",
             placeholder="example 3249",
         )
-    else:
+    elif value == "file":
         input_box = (
             dcc.Dropdown(
                 id="table-1-id",
@@ -345,6 +345,12 @@ def set_table_1_input(value):
                 ],
                 placeholder="Select a file",
             ),
+        )
+    else:
+        input_box = dcc.Dropdown(
+            id="table-1-id",
+            options=tables.get_rates(),
+            placeholder="Select a file",
         )
     return input_box
 
@@ -361,7 +367,7 @@ def set_table_2_input(value):
             id="table-2-id",
             placeholder="example 3252",
         )
-    else:
+    elif value == "file":
         input_box = (
             dcc.Dropdown(
                 id="table-2-id",
@@ -374,6 +380,12 @@ def set_table_2_input(value):
                 ],
                 placeholder="Select a file",
             ),
+        )
+    else:
+        input_box = dcc.Dropdown(
+            id="table-2-id",
+            options=tables.get_rates(),
+            placeholder="Select a file",
         )
     return input_box
 
@@ -518,6 +530,7 @@ def create_contour(
 ):
     """Graph the mortality tables with a contour and comparison."""
     compare_df = pd.DataFrame(compare_df)
+    print("checking")
 
     # get the slider values
     issue_age_min = compare_df["issue_age"].min()
@@ -697,19 +710,31 @@ def load_tables(table1_id, table2_id):
     # table_1
     logger.debug(f"loading table 1: {table1_id}")
     if isinstance(table1_id, str):
-        try:
-            filepath_1 = helpers.FILES_PATH / "dataset" / "tables" / table1_id
-            table_1 = dh.read_table(filepath=filepath_1)
-            table_1_select_period = "Unknown"
-            table_1 = table_1.to_pandas()
-        except FileNotFoundError:
-            logger.warning(f"Table not found: {table1_id}")
-            warning_tuple = (False, True)
+        # file
+        if table1_id.endswith((".csv", ".xlsx")):
+            try:
+                filepath_1 = helpers.FILES_PATH / "dataset" / "tables" / table1_id
+                table_1 = dh.read_table(filepath=filepath_1)
+                table_1_select_period = "Unknown"
+                table_1 = table_1.to_pandas()
+            except FileNotFoundError:
+                logger.warning(f"Table not found: {table1_id}")
+                warning_tuple = (False, True)
+        # rate table
+        else:
+            try:
+                rate_table = tables.MortTable(rate=table1_id)
+                table_1 = rate_table.rate_table
+                table_1_select_period = "Unknown"
+            except FileNotFoundError:
+                logger.warning(f"Table not found: {table1_id}")
+                warning_tuple = (False, True)
         # add age and duration columns if not present
         table_1 = tables.add_aa_ia_dur_cols(table_1)
+    # soa table
     else:
         try:
-            table_1 = mt.build_table(table_list=[table1_id], extend=False)
+            table_1 = mt.build_table_soa(table_list=[table1_id], extend=False)
             table_1_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
@@ -718,19 +743,31 @@ def load_tables(table1_id, table2_id):
     # table_2
     logger.debug(f"loading table 2: {table2_id}")
     if isinstance(table2_id, str):
-        try:
-            filepath_2 = helpers.FILES_PATH / "dataset" / "tables" / table2_id
-            table_2 = dh.read_table(filepath=filepath_2)
-            table_2_select_period = "Unknown"
-            table_2 = table_2.to_pandas()
-        except FileNotFoundError:
-            logger.warning(f"Table not found: {table2_id}")
-            warning_tuple = (False, True)
+        # file
+        if table2_id.endswith((".csv", ".xlsx")):
+            try:
+                filepath_2 = helpers.FILES_PATH / "dataset" / "tables" / table2_id
+                table_2 = dh.read_table(filepath=filepath_2)
+                table_2_select_period = "Unknown"
+                table_2 = table_2.to_pandas()
+            except FileNotFoundError:
+                logger.warning(f"Table not found: {table2_id}")
+                warning_tuple = (False, True)
+        # rate table
+        else:
+            try:
+                rate_table = tables.MortTable(rate=table2_id)
+                table_2 = rate_table.rate_table
+                table_2_select_period = "Unknown"
+            except FileNotFoundError:
+                logger.warning(f"Table not found: {table1_id}")
+                warning_tuple = (False, True)
         # add age and duration columns if not present
         table_2 = tables.add_aa_ia_dur_cols(table_2)
+    # soa table
     else:
         try:
-            table_2 = mt.build_table(table_list=[table2_id], extend=False)
+            table_2 = mt.build_table_soa(table_list=[table2_id], extend=False)
             table_2_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")

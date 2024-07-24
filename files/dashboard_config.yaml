@@ -64,6 +64,8 @@ datasets:
       - smoker_status
       - soa_post_lvl_ind
       - capped_duration
+      - binned_face
+      - class_enh
       measures:
       - amount_exposed
       - death_claim_amount
