@@ -31,7 +31,7 @@ def export_to_sql(df, db_filepath, table_name, if_exists="append", index=False):
     """
     # initialize
     logger.info(
-        f"exporting data to SQLite database: {db_filepath} and table: {table_name}"
+        f"{if_exists} data to SQLite database: `{db_filepath}` and table: `{table_name}`"
     )
 
     # connect to the database
