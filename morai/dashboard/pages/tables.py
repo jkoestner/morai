@@ -338,9 +338,7 @@ def set_table_1_input(value):
                 id="table-1-id",
                 options=[
                     {"label": key, "value": key}
-                    for key in dh.list_files_in_folder(
-                        helpers.FILES_PATH / "dataset" / "tables"
-                    )
+                    for key in dh.list_files_in_folder(helpers.FILES_PATH / "rates")
                     if key.endswith((".csv", ".xlsx"))
                 ],
                 placeholder="Select a file",
@@ -373,9 +371,7 @@ def set_table_2_input(value):
                 id="table-2-id",
                 options=[
                     {"label": key, "value": key}
-                    for key in dh.list_files_in_folder(
-                        helpers.FILES_PATH / "dataset" / "tables"
-                    )
+                    for key in dh.list_files_in_folder(helpers.FILES_PATH / "rates")
                     if key.endswith((".csv", ".xlsx"))
                 ],
                 placeholder="Select a file",
@@ -713,7 +709,7 @@ def load_tables(table1_id, table2_id):
         # file
         if table1_id.endswith((".csv", ".xlsx")):
             try:
-                filepath_1 = helpers.FILES_PATH / "dataset" / "tables" / table1_id
+                filepath_1 = helpers.FILES_PATH / "rates" / table1_id
                 table_1 = dh.read_table(filepath=filepath_1)
                 table_1_select_period = "Unknown"
                 table_1 = table_1.to_pandas()
@@ -746,7 +742,7 @@ def load_tables(table1_id, table2_id):
         # file
         if table2_id.endswith((".csv", ".xlsx")):
             try:
-                filepath_2 = helpers.FILES_PATH / "dataset" / "tables" / table2_id
+                filepath_2 = helpers.FILES_PATH / "rates" / table2_id
                 table_2 = dh.read_table(filepath=filepath_2)
                 table_2_select_period = "Unknown"
                 table_2 = table_2.to_pandas()

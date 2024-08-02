@@ -6,6 +6,7 @@
 files/dataset/*
 files/models/*
 files/partition/*
+files/rates/*
 files/result/*
 
 # folders
@@ -22,4 +23,4 @@ notebooks/working/
 # include below even though they are excluded above
 !.gitkeep
 !tests/files/
-!files/dataset/tables/rate_map_example.yaml
+!files/rates/rate_map_example.yaml

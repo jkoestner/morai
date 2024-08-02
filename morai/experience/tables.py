@@ -960,7 +960,7 @@ def output_table(rate_table, filename="table.csv", mult_table=None):
         The multiplier table.
 
     """
-    path = helpers.FILES_PATH / "dataset" / "tables" / filename
+    path = helpers.FILES_PATH / "rates" / filename
 
     # check if path exists
     if not path.parent.exists():
@@ -1117,7 +1117,7 @@ def get_filepath(filename):
 
     """
     filepaths = [
-        helpers.FILES_PATH / "dataset" / "tables" / filename,
+        helpers.FILES_PATH / "rates" / filename,
         helpers.ROOT_PATH / "tests" / "files" / "experience" / "tables" / filename,
         filename,
     ]
