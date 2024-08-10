@@ -4,6 +4,8 @@
 .DS_Store
 .env
 files/dataset/*
+files/integrations/cdc/cdc.sql
+files/integrations/cdc/txt/*
 files/models/*
 files/partition/*
 files/rates/*
