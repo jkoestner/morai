@@ -151,7 +151,7 @@ def generate_filters(
     prefix_str_filter = f"{prefix}-str-filter"
     prefix_num_filter = f"{prefix}-num-filter"
 
-    columns = df.columns
+    columns = list(df.columns)
     if config:
         config_dataset = config["datasets"][config["general"]["dataset"]]
         config_columns = config_dataset["columns"]["features"]

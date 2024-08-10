@@ -1,4 +1,4 @@
-"""Experience dashboard."""
+"""Models dashboard."""
 
 import json
 
