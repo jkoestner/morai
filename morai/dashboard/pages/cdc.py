@@ -292,12 +292,15 @@ def display_cdc_cod(n_clicks):
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+    if not db_filepath.exists():
+        logger.error("Database does not exist.")
+        return dash.no_update, dash.no_update, dash.no_update
     tables = sql.get_tables(db_filepath=db_filepath)
 
     # check if table does not exist in database
     if "mcd99_cod" not in tables or "mcd18_cod" not in tables:
         logger.error("Table `mcd99_cod` or `mcd18_cod` does not exist in database.")
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
 
     # get the data
     mcd99_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_cod")

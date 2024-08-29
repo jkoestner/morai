@@ -9,12 +9,14 @@
 # slim was used instead of alpine because of the need of numpy
 FROM python:3.9-slim
 
-# Install dependencies, git, and uv
+# Install dependencies, git
 RUN apt-get update && \
     apt-get install -y --no-install-recommends git && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    rm -rf /var/lib/apt/lists/*
+
+# Copy uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # Set work directory
 WORKDIR /code
