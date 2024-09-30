@@ -130,7 +130,7 @@ def preprocess_data(
     if add_constant:
         logger.info("adding a constant column to the data")
         constant_col = ["constant"]
-        model_data[constant_col] = 1
+        model_data.loc[:, constant_col] = 1
         model_features = model_features + constant_col
         passthrough_cols = passthrough_cols + constant_col
     X = model_data[model_features].copy()

@@ -50,12 +50,9 @@ https://tinyurl.com/
 
 **📊 Dashboard:**
 
-- Morai Dashboard - Coming Soon
-- Data Input: ![dash_data_input](docs/screenshots/dash_data_input.png)
-- Data Explore: ![dash_explore](docs/screenshots/dash_explore.png)
-- Data Experience: ![dash_experience](docs/screenshots/dash_experience.png)
-- Data Models: ![dash_models](docs/screenshots/dash_models.png)
-- Table Explorer: ![dash_tables](docs/screenshots/dash_tables.png)
+- Data Overview: ![dash_data_input](docs/screenshots/morai_data.gif)
+- Data Tables: ![dash_data_tables](docs/screenshots/morai_tables.gif)
+- Data CDC: ![dash_cdc](docs/screenshots/morai_cdc.gif)
 
 ## Installation
 

@@ -335,7 +335,7 @@ class GLM(BaseEstimator, RegressorMixin):
             model = sm.GLM(
                 endog=y,
                 exog=X,
-                family=sm.families.Binomial(),
+                family=family,
                 freq_weights=weights,
                 **kwargs,
             )

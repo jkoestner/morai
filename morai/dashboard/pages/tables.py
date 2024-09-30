@@ -543,7 +543,7 @@ def create_contour(
         index="duration", columns="issue_age", values="ratio"
     )
     issue_age, duration = np.meshgrid(grouped_data.columns, grouped_data.index)
-    attained_age = issue_age + duration
+    attained_age = issue_age + duration - 1
 
     # graph the tables
     graph_contour = charters.chart(
