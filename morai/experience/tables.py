@@ -401,6 +401,7 @@ def generate_table(
     preprocess_params,
     grid=None,
     mult_features=None,
+    mult_method="mean",
 ):
     """
     Generate a 1-d mortality table based on model predictions.
@@ -421,9 +422,15 @@ def generate_table(
         The parameters that were used for preprocessing that will also be used to
         encode the features
     grid : pd.DataFrame, optional
-        The grid to use for the table
+        The grid to use for the table.
     mult_features : list, optional
-        The features to use for the multiplier table
+        The features to use for the multiplier table. This is based on the method
+        of `mult_method`.
+    mult_method : str, optional
+        The method to use for the multiplier table. The options are:
+          - "mean": the mean prediction for the feature
+          - "glm": uses the initial log ratio of the glm model
+
 
     Returns
     -------
@@ -451,8 +458,9 @@ def generate_table(
     # create separate mult_mapping and rate_mapping
     if mult_features:
         logger.warning(
-            "the multipliers may not match the predictions from the model "
-            "and will be the mean prediction for the feature"
+            "THIS IS EXPERIMENTAL: "
+            "the multipliers most likely not match the predictions exactly from "
+            "the model and is used to simplify the output."
         )
         mult_mapping = {k: v for k, v in rate_mapping.items() if k in mult_features}
         rate_mapping = _remove_mult_from_rate_mapping(
@@ -490,53 +498,87 @@ def generate_table(
 
     # create the multiplier table
     if mult_features:
-        logger.info("creating multiplier table based on the mean model prediction")
         mult_list = []
-        base = rate_table["vals"].mean()
+        if mult_method == "mean":
+            logger.info("creating multiplier table based on the 'mean'")
+            base = rate_table["vals"].mean()
 
-        for feature, feature_map in mult_mapping.items():
-            mult_table = rate_table.copy()
-            mult_table = mult_table.drop(columns=["vals"])
-            feature_vals = list(feature_map["values"].keys())
-            feature_encoded = list(feature_map["values"].values())
-            feature_type = feature_map["type"]
+            for feature, feature_map in mult_mapping.items():
+                mult_table = rate_table.copy()
+                mult_table = mult_table.drop(columns=["vals"])
+                feature_vals = list(feature_map["values"].keys())
+                feature_encoded = list(feature_map["values"].values())
+                feature_type = feature_map["type"]
 
-            if feature_type == "ohe":
-                for i, value in enumerate(feature_encoded):
-                    if i == 0:
-                        vals = model.predict(mult_table)
-                    else:
-                        mult_table[value] = 1
-                        vals = model.predict(mult_table)
-                        mult_table[value] = 0
+                if feature_type == "ohe":
+                    for i, value in enumerate(feature_encoded):
+                        if i == 0:
+                            vals = model.predict(mult_table)
+                        else:
+                            mult_table[value] = 1
+                            vals = model.predict(mult_table)
+                            mult_table[value] = 0
 
-                    multiple = vals.mean() / base
-                    mult_list.append(
-                        {
-                            "category": feature,
-                            "subcategory": feature_vals[i],
-                            "multiple": multiple,
-                        }
+                        multiple = vals.mean() / base
+                        mult_list.append(
+                            {
+                                "category": feature,
+                                "subcategory": feature_vals[i],
+                                "multiple": multiple,
+                            }
+                        )
+
+                # add all feature values to the table
+                else:
+                    extended_tables = [
+                        mult_table.assign(**{feature: value})
+                        for value in feature_encoded
+                    ]
+                    extended_table = pd.concat(extended_tables, ignore_index=True)
+                    extended_table["vals"] = model.predict(extended_table)
+
+                    grouped = extended_table.groupby(feature)["vals"].mean()
+                    for i, value in enumerate(feature_encoded):
+                        multiple = grouped.loc[value] / base
+                        mult_list.append(
+                            {
+                                "category": feature,
+                                "subcategory": feature_vals[i],
+                                "multiple": multiple,
+                            }
+                        )
+        elif mult_method == "glm":
+            logger.info("creating multiplier table based on the 'glm'")
+            for feature, feature_map in mult_mapping.items():
+                if not hasattr(model, "params"):
+                    raise ValueError(
+                        f"model: {model}, does not have 'params' attribute"
                     )
-
-            # add all feature values to the table
-            else:
-                extended_tables = [
-                    mult_table.assign(**{feature: value}) for value in feature_encoded
-                ]
-                extended_table = pd.concat(extended_tables, ignore_index=True)
-                extended_table["vals"] = model.predict(extended_table)
-
-                grouped = extended_table.groupby(feature)["vals"].mean()
-                for i, value in enumerate(feature_encoded):
-                    multiple = grouped.loc[value] / base
-                    mult_list.append(
-                        {
-                            "category": feature,
-                            "subcategory": feature_vals[i],
-                            "multiple": multiple,
-                        }
-                    )
+                odds = np.exp(model.params)
+                feature_vals = list(feature_map["values"].keys())
+                if feature_map["type"] == "ohe":
+                    for feature_val in feature_vals:
+                        feature_lookup = f"{feature}_{feature_val}"
+                        multiple = odds.get(feature_lookup, 1)
+                        mult_list.append(
+                            {
+                                "category": feature,
+                                "subcategory": feature_val,
+                                "multiple": multiple,
+                            }
+                        )
+                else:
+                    for i, feature_val in enumerate(feature_vals):
+                        multiple = np.exp(model.params.get(feature, 0) * i)
+                        mult_list.append(
+                            {
+                                "category": feature,
+                                "subcategory": feature_val,
+                                "multiple": multiple,
+                            }
+                        )
+        else:
+            raise ValueError(f"mult_method: {mult_method} not recognized")
 
         mult_table = pd.DataFrame(mult_list)
         mult_table = mult_table.sort_values(by=["category", "subcategory"])
