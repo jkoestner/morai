@@ -43,6 +43,27 @@ app.config.suppress_callback_exceptions = True
 
 app.title = "Morai Dashboard"
 app._favicon = "morai_logo.ico"
+# adding shortcut icons
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        <link rel="manifest" href="/assets/manifest.json">
+        {%favicon%}
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
 
 # creating the navbar
 page_links = [

@@ -1,6 +1,6 @@
 
 <div align="center">
-  <img src="morai/dashboard/assets/morai_logo.jpg"><br>
+  <img src="morai/dashboard/assets/morai_logo.png"><br>
 </div>
 
 # Morai

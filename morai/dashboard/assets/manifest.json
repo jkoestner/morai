@@ -1,0 +1,12 @@
+{
+    "short_name": "Morai",
+    "name": "Morai",
+    "icons": [
+      {
+        "src": "/assets/morai_192x192.png",
+        "sizes": "192x192",
+        "type": "image/png"
+      }
+    ]
+  }
+  
