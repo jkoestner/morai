@@ -2,6 +2,7 @@
 
 import copy
 import itertools
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -15,6 +16,10 @@ from morai.utils.custom_logger import suppress_logs
 
 logger = custom_logger.setup_logging(__name__)
 
+if TYPE_CHECKING:
+    from pathlib import Path
+    from xml.etree.ElementTree import Element
+
 
 class MortTable:
     """
@@ -27,9 +32,9 @@ class MortTable:
 
     def __init__(
         self,
-        rate=None,
-        rate_filename=None,
-    ):
+        rate: Optional[pd.DataFrame] = None,
+        rate_filename: Optional[Union[str, "Path"]] = None,
+    ) -> None:
         """
         Initialize the Table class.
 
@@ -79,7 +84,9 @@ class MortTable:
                     has_mults=self.rate_dict["type"]["workbook"]["mult_table"],
                 )
 
-    def build_table_workbook(self, file_location, has_mults=False):
+    def build_table_workbook(
+        self, file_location: Union[str, "Path"], has_mults: bool = False
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Build a 1-d mortality table from a workbook.
 
@@ -124,7 +131,13 @@ class MortTable:
 
         return rate_table, mult_table
 
-    def build_table_soa(self, table_list, extra_dims=None, juv_list=None, extend=False):
+    def build_table_soa(
+        self,
+        table_list: List[int],
+        extra_dims: Optional[Dict[str, List[str]]] = None,
+        juv_list: Optional[List[int]] = None,
+        extend: bool = False,
+    ) -> pd.DataFrame:
         """
         Build a 1-d mortality dataframe from a list of tables.
 
@@ -293,7 +306,7 @@ class MortTable:
 
         return mort_table
 
-    def get_soa_xml(self, table_id):
+    def get_soa_xml(self, table_id: int) -> Any:
         """
         Get the soa xml object.
 
@@ -314,8 +327,13 @@ class MortTable:
         return soa_xml
 
     def _merge_tables(
-        self, merge_table, source_table, merge_keys, column_rename, extra_dims_list=None
-    ):
+        self,
+        merge_table: pd.DataFrame,
+        source_table: pd.DataFrame,
+        merge_keys: List[str],
+        column_rename: str,
+        extra_dims_list: Optional[List[Tuple[str, Any]]] = None,
+    ) -> pd.DataFrame:
         """
         Merge the source table into the merge table.
 
@@ -350,7 +368,9 @@ class MortTable:
         merge_table = merge_table.drop(columns=column_rename)
         return merge_table
 
-    def _process_soa_table(self, soa_xml, table_index, is_select):
+    def _process_soa_table(
+        self, soa_xml: "Element", table_index: int, is_select: bool
+    ) -> Tuple[Any, int, int]:
         """
         Gather the metadata from the soa table.
 
@@ -395,14 +415,14 @@ class MortTable:
 
 
 def generate_table(
-    model,
-    mapping,
-    preprocess_feature_dict,
-    preprocess_params,
-    grid=None,
-    mult_features=None,
-    mult_method="mean",
-):
+    model: Any,
+    mapping: Dict[str, Any],
+    preprocess_feature_dict: Dict[str, Any],
+    preprocess_params: Dict[str, Any],
+    grid: Optional[pd.DataFrame] = None,
+    mult_features: Optional[List[str]] = None,
+    mult_method: str = "mean",
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate a 1-d mortality table based on model predictions.
 
@@ -594,7 +614,12 @@ def generate_table(
     return rate_table, mult_table
 
 
-def map_rates(df, rate, rate_to_df_map=None, rate_filename=None):
+def map_rates(
+    df: pd.DataFrame,
+    rate: str,
+    rate_to_df_map: Optional[Dict[str, str]] = None,
+    rate_filename: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Map rates to the DataFrame.
 
@@ -712,8 +737,12 @@ def map_rates(df, rate, rate_to_df_map=None, rate_filename=None):
 
 
 def create_grid(
-    dims=None, mapping=None, max_age=121, max_grid_size=5000000, mult_features=None
-):
+    dims: Optional[Dict[str, Union[List[Any], np.ndarray]]] = None,
+    mapping: Optional[Dict[str, Dict[str, Union[List[Any], np.ndarray]]]] = None,
+    max_age: int = 121,
+    max_grid_size: int = 5_000_000,
+    mult_features: Optional[List[str]] = None,
+) -> pd.DataFrame:
     """
     Create a grid from the dimensions.
 
@@ -777,7 +806,9 @@ def create_grid(
     return mort_grid
 
 
-def compare_tables(table_1, table_2, value_col="vals"):
+def compare_tables(
+    table_1: pd.DataFrame, table_2: pd.DataFrame, value_col: str = "vals"
+) -> pd.DataFrame:
     """
     Compare two tables.
 
@@ -844,7 +875,7 @@ def compare_tables(table_1, table_2, value_col="vals"):
     return compare_df
 
 
-def check_aa_ia_dur_cols(df, max_age=121):
+def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     """
     Check attained age, issue age, and duration columns.
 
@@ -894,7 +925,7 @@ def check_aa_ia_dur_cols(df, max_age=121):
     return df
 
 
-def add_aa_ia_dur_cols(df):
+def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add attained age, issue age, and duration columns.
 
@@ -965,7 +996,7 @@ def add_aa_ia_dur_cols(df):
     return df
 
 
-def remove_duplicates(df):
+def remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     """
     Remove duplicates from the DataFrame.
 
@@ -988,7 +1019,11 @@ def remove_duplicates(df):
     return df
 
 
-def output_table(rate_table, filename="table.csv", mult_table=None):
+def output_table(
+    rate_table: pd.DataFrame,
+    filename: str = "table.csv",
+    mult_table: Optional[pd.DataFrame] = None,
+) -> None:
     """
     Output the table to a csv file.
 
@@ -1029,7 +1064,7 @@ def output_table(rate_table, filename="table.csv", mult_table=None):
         logger.info(f"saving table to {path}")
 
 
-def get_su_table(df, select_period):
+def get_su_table(df: pd.DataFrame, select_period: int) -> pd.DataFrame:
     """
     Calculate the select and ultimate ratio.
 
@@ -1078,7 +1113,7 @@ def get_su_table(df, select_period):
     return df
 
 
-def get_rates(rate_filename=None):
+def get_rates(rate_filename: Optional[str] = None) -> List[str]:
     """
     Get the possible rates in rate mapping file.
 
@@ -1106,7 +1141,7 @@ def get_rates(rate_filename=None):
     return rates
 
 
-def get_rate_dict(rate, rate_filename=None):
+def get_rate_dict(rate: str, rate_filename: Optional[str] = None) -> Dict[str, str]:
     """
     Process the rate file.
 
@@ -1143,7 +1178,7 @@ def get_rate_dict(rate, rate_filename=None):
     return rate_dict
 
 
-def get_filepath(filename):
+def get_filepath(filename: str) -> "Path":
     """
     Get the file path based on a number of paths.
 
@@ -1171,7 +1206,9 @@ def get_filepath(filename):
     return filepath
 
 
-def _add_null_mult_features(df, mapping, mult_features):
+def _add_null_mult_features(
+    df: pd.DataFrame, mapping: Dict[str, Dict[str, Any]], mult_features: List[str]
+) -> pd.DataFrame:
     logger.debug("adding initial value for multiplier features")
     for feature in mult_features:
         type_ = mapping[feature]["type"]
@@ -1185,7 +1222,9 @@ def _add_null_mult_features(df, mapping, mult_features):
     return df
 
 
-def _remove_mult_from_rate_mapping(mapping, mult_features):
+def _remove_mult_from_rate_mapping(
+    mapping: Dict[str, Dict[str, Any]], mult_features: List[str]
+) -> Dict[str, Dict[str, Any]]:
     logger.debug("removing multiplier features from rate mapping")
     mapping = copy.deepcopy(mapping)
     for key, sub_dict in mapping.items():

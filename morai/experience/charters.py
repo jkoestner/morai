@@ -2,6 +2,7 @@
 
 import itertools
 import math
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -23,22 +24,22 @@ chart_width = 1000
 
 
 def chart(
-    df,
-    x_axis,
-    y_axis=None,
-    color=None,
-    type="line",
-    numerator=None,
-    denominator=None,
-    title=None,
-    y_sort=False,
-    x_bins=None,
-    y_log=False,
-    add_line=False,
-    agg="sum",
-    display=True,
-    **kwargs,
-):
+    df: pd.DataFrame,
+    x_axis: str,
+    y_axis: Optional[str] = None,
+    color: Optional[str] = None,
+    type: str = "line",
+    numerator: Optional[str] = None,
+    denominator: Optional[str] = None,
+    title: Optional[str] = None,
+    y_sort: bool = False,
+    x_bins: Optional[int] = None,
+    y_log: bool = False,
+    add_line: bool = False,
+    agg: str = "sum",
+    display: bool = True,
+    **kwargs: Any,
+) -> Union[go.Figure, pd.DataFrame]:
     """
     Create a chart with Plotly Express.
 
@@ -245,17 +246,17 @@ def chart(
 
 
 def compare_rates(
-    df,
-    x_axis,
-    rates,
-    line_feature=None,
-    weights=None,
-    secondary=None,
-    y_log=False,
-    x_bins=None,
-    display=True,
-    **kwargs,
-):
+    df: pd.DataFrame,
+    x_axis: str,
+    rates: List[str],
+    line_feature: Optional[str] = None,
+    weights: Optional[List[str]] = None,
+    secondary: Optional[str] = None,
+    y_log: bool = False,
+    x_bins: Optional[int] = None,
+    display: bool = True,
+    **kwargs: Any,
+) -> Union[go.Figure, pd.DataFrame]:
     """
     Compare rates by a feature.
 
@@ -405,7 +406,12 @@ def compare_rates(
     return fig
 
 
-def frequency(df, cols=1, features=None, sum_var=None):
+def frequency(
+    df: pd.DataFrame,
+    cols: int = 1,
+    features: Optional[List[str]] = None,
+    sum_var: Optional[str] = None,
+) -> go.Figure:
     """
     Generate frequency plots.
 
@@ -462,18 +468,18 @@ def frequency(df, cols=1, features=None, sum_var=None):
 
 
 def pdp(
-    model,
-    df,
-    x_axis,
-    line_color=None,
-    weight=None,
-    secondary=None,
-    mapping=None,
-    x_bins=None,
-    quick=False,
-    n_jobs=None,
-    display=True,
-):
+    model: Any,
+    df: pd.DataFrame,
+    x_axis: str,
+    line_color: Optional[str] = None,
+    weight: Optional[str] = None,
+    secondary: Optional[str] = None,
+    mapping: Optional[Dict[str, Dict[str, Union[str, Dict[str, str]]]]] = None,
+    x_bins: Optional[int] = None,
+    quick: bool = False,
+    n_jobs: Optional[int] = None,
+    display: bool = True,
+) -> Union[go.Figure, pd.DataFrame]:
     """
     Create a partial dependence plot (PDP) for the DataFrame.
 
@@ -752,7 +758,13 @@ def pdp(
     return fig
 
 
-def scatter(df, target, features, sample_nbr=100, cols=3):
+def scatter(
+    df: pd.DataFrame,
+    target: str,
+    features: List[str],
+    sample_nbr: float = 100,
+    cols: int = 3,
+) -> go.Figure:
     """
     Create scatter plots for the DataFrame.
 
@@ -805,7 +817,9 @@ def scatter(df, target, features, sample_nbr=100, cols=3):
     return fig
 
 
-def matrix(df, threshold=0.5, title="Matrix Heatmap"):
+def matrix(
+    df: pd.DataFrame, threshold: float = 0.5, title: str = "Matrix Heatmap"
+) -> go.Figure:
     """
     Create a heatmap of a matrix dataframe.
 
@@ -871,17 +885,17 @@ def matrix(df, threshold=0.5, title="Matrix Heatmap"):
 
 
 def target(
-    df,
-    target,
-    features=None,
-    cols=3,
-    numerator=None,
-    denominator=None,
-    weights=None,
-    normalize=None,
-    add_line=False,
-    pairwise=False,
-):
+    df: pd.DataFrame,
+    target: Union[List[str], str],
+    features: Optional[List[str]] = None,
+    cols: int = 3,
+    numerator: Optional[Union[List[str], str]] = None,
+    denominator: Optional[Union[List[str], str]] = None,
+    weights: Optional[Union[List[str], str]] = None,
+    normalize: Optional[List[str]] = None,
+    add_line: bool = False,
+    pairwise: bool = False,
+) -> go.Figure:
     """
     Create multiplot showing variable relationship with target.
 
@@ -1132,17 +1146,17 @@ def target(
 
 
 def _pdp_make_prediction(
-    model,
-    X,
-    x_axis,
-    x_axis_type,
-    x_axis_cols,
-    value,
-    line_color,
-    line_value,
-    quick,
-    weights,
-):
+    model: Any,
+    X: pd.DataFrame,
+    x_axis: str,
+    x_axis_type: str,
+    x_axis_cols: Optional[List[str]],
+    value: Any,
+    line_color: str,
+    line_value: Any,
+    quick: bool,
+    weights: Optional[pd.Series],
+) -> Dict[str, Any]:
     """Make predictions for PDP."""
     X_temp = X.copy()
 
@@ -1175,7 +1189,13 @@ def _pdp_make_prediction(
     }
 
 
-def get_category_orders(df, category, measure, ascending=False, agg="sum"):
+def get_category_orders(
+    df: pd.DataFrame,
+    category: str,
+    measure: str,
+    ascending: bool = False,
+    agg: str = "sum",
+) -> Dict[str, List[Any]]:
     """
     Get the category order.
 

@@ -1,13 +1,22 @@
 """Experience study model."""
 
+from typing import List, Optional, Union
+
 import numpy as np
+import pandas as pd
 
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
 
-def normalize(df, features, numerator, denominator=None, suffix=None):
+def normalize(
+    df: pd.DataFrame,
+    features: List[str],
+    numerator: str,
+    denominator: Optional[str] = None,
+    suffix: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Normalize a column (numerator) based on a number of features.
 
@@ -71,7 +80,12 @@ def normalize(df, features, numerator, denominator=None, suffix=None):
     return df
 
 
-def calc_relative_risk(df, features, numerator, denominator=None):
+def calc_relative_risk(
+    df: pd.DataFrame,
+    features: List[str],
+    numerator: str,
+    denominator: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Calculate relative risk of a column (numerator) based on a number of features.
 
@@ -118,7 +132,12 @@ def calc_relative_risk(df, features, numerator, denominator=None):
     return df
 
 
-def calc_variance(df, rate_col, exposure_col, amount_col=None):
+def calc_variance(
+    df: pd.DataFrame,
+    rate_col: str,
+    exposure_col: str,
+    amount_col: Optional[str] = None,
+) -> pd.Series:
     """
     Calculate the variance of a binomial distribution.
 
@@ -164,7 +183,13 @@ def calc_variance(df, rate_col, exposure_col, amount_col=None):
     return variance
 
 
-def calc_moments(df, rate_col, exposure_col, amount_col=None, sffx=None):
+def calc_moments(
+    df: pd.DataFrame,
+    rate_col: str,
+    exposure_col: str,
+    amount_col: Optional[str] = None,
+    sffx: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Calculate the moment variables of a binomial distribution.
 
@@ -246,7 +271,13 @@ def calc_moments(df, rate_col, exposure_col, amount_col=None, sffx=None):
     return df
 
 
-def calc_qx_exp_ae(model_data, predictions, model_name, exposure_col, actual_col):
+def calc_qx_exp_ae(
+    model_data: pd.DataFrame,
+    predictions: pd.Series,
+    model_name: str,
+    exposure_col: str,
+    actual_col: str,
+) -> pd.DataFrame:
     """
     Add to the model data the qx, expected amount, and ae.
 
@@ -283,3 +314,74 @@ def calc_qx_exp_ae(model_data, predictions, model_name, exposure_col, actual_col
         ),
     )
     return model_data
+
+
+def calc_whl(
+    weights: Union[pd.Series, np.ndarray],
+    rates: Union[pd.Series, np.ndarray],
+    order: int,
+    lambda_: float,
+) -> pd.Series:
+    """
+    Calculate the whittaker-henderson-lowrie (whl) smooth rate.
+
+    The whl smoothes the raw rates by minimizing a difference equation.
+
+    formula:
+    q = ∑(w * (y - y_hat)^2) + λ * ∑((Δ^k * y_hat)^2)
+    - y = raw rate
+    - y_hat = graduated rate
+    - w = weight
+    - λ = lambda smoothing parameter
+    - Δ^k = kth difference operator
+
+    References
+    ----------
+    http://www.howardfamily.ca/graduation/index.html
+    https://arxiv.org/pdf/2306.06932
+
+    Parameters
+    ----------
+    weights : pd.Series
+        array of weights
+    rates : pd.Series
+        array of rates
+    order : int
+        order of the difference operator and will relate to the polynomial degree
+    lambda_ : float
+        smoothing parameter. a higher value will smooth the rates more.
+
+    Returns
+    -------
+    whl : pd.Series
+        Array of smoothed rates
+
+    """
+    from scipy.special import comb
+
+    weights = np.array(weights)
+    rates = np.array(rates)
+
+    weight_matrix = np.diag(weights)
+    rates_length = len(rates)
+
+    def get_diff_matrix(rates_length: int, order: int) -> np.ndarray:
+        diff_matrix = np.zeros((rates_length - order, rates_length))
+        for i in range(rates_length - order):
+            diff_matrix[i, i : i + order + 1] = [
+                (-1) ** (j) * comb(order, j) for j in range(order + 1)
+            ]
+        return diff_matrix
+
+    diff_matrix = get_diff_matrix(rates_length, order)
+
+    lambda_matrix = lambda_ * np.eye(rates_length - order)
+
+    A = weight_matrix + diff_matrix.T @ lambda_matrix @ diff_matrix
+    b = weights * rates
+
+    # solver for whl, A * whl = b
+    whl = np.linalg.solve(A, b)
+    whl = pd.Series(whl, name="whl")
+
+    return whl

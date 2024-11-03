@@ -112,6 +112,9 @@ class GLM(BaseEstimator, RegressorMixin):
         if not self.is_fitted_:
             raise ValueError("model is not fitted use fit method")
 
+        if self.model is None:
+            raise ValueError("please create a model first")
+
         if manual:
             rate_params = self.model.params.loc[X.columns]
             linear_combination = rate_params["constant"]
@@ -193,6 +196,9 @@ class GLM(BaseEstimator, RegressorMixin):
         """
         if not self.is_fitted_:
             raise ValueError("model is not fitted use fit method")
+
+        if self.model is None:
+            raise ValueError("please create a model first")
 
         model = self.model
 

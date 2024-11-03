@@ -22,14 +22,27 @@ Todo:
 
 """
 
+from typing import TYPE_CHECKING, List, Optional
+
 from scipy import stats
 
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
+if TYPE_CHECKING:
+    import pandas as pd
 
-def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1, groupby_cols=None):
+
+def limited_fluctuation(
+    df: "pd.DataFrame",
+    measure: str,
+    p: float = 0.90,
+    r: float = 0.05,
+    sd: float = 1,
+    u: float = 1,
+    groupby_cols: Optional[List[str]] = None,
+) -> "pd.DataFrame":
     """
     Determine the credibility of a measure based on limited fluctuation.
 
@@ -110,7 +123,12 @@ def limited_fluctuation(df, measure, p=0.90, r=0.05, sd=1, u=1, groupby_cols=Non
     return df
 
 
-def asymptotic(df, measure, k=270, groupby_cols=None):
+def asymptotic(
+    df: "pd.DataFrame",
+    measure: str,
+    k: float = 270,
+    groupby_cols: Optional[List[str]] = None,
+) -> "pd.DataFrame":
     """
     Determine the credibility of a measure using asymptotic credibility.
 
@@ -170,7 +188,13 @@ def asymptotic(df, measure, k=270, groupby_cols=None):
     return df
 
 
-def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None, groupby_cols=None):
+def vm20_buhlmann(
+    df: "pd.DataFrame",
+    amount_col: str,
+    rate_col: str,
+    exposure_col: Optional[str] = None,
+    groupby_cols: Optional[List[str]] = None,
+) -> "pd.DataFrame":
     """
     Determine the credibility of a measure using the SOA VM-20 method.
 
@@ -278,7 +302,13 @@ def vm20_buhlmann(df, amount_col, rate_col, exposure_col=None, groupby_cols=None
     return vm20_df
 
 
-def vm20_buhlmann_approx(df, a_col, b_col, c_col, groupby_cols=None):
+def vm20_buhlmann_approx(
+    df: "pd.DataFrame",
+    a_col: str,
+    b_col: str,
+    c_col: str,
+    groupby_cols: Optional[List[str]] = None,
+) -> "pd.DataFrame":
     """
     Determine the credibility of a measure using an SOA VM-20 approximation.
 
@@ -368,7 +398,9 @@ def vm20_buhlmann_approx(df, a_col, b_col, c_col, groupby_cols=None):
     return vm20_df
 
 
-def buhlmann(df, measure, k, groupby_cols=None):
+def buhlmann(
+    df: "pd.DataFrame", measure: str, k: float, groupby_cols: Optional[List[str]] = None
+) -> "pd.DataFrame":
     """
     Determine the credibility of a measure using Bühlmann credibility.
 

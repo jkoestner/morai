@@ -199,7 +199,7 @@ def preprocess_data(
     if standardize:
         logger.info("standardizing the data")
         scaler = StandardScaler()
-        scale_features = X.select_dtypes(include=[np.number]).columns.to_list()
+        scale_features = X.select_dtypes(include="number").columns.to_list()
         # fit data
         scaler.fit(X[scale_features])
         # standardize data

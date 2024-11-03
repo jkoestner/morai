@@ -2,6 +2,7 @@
 
 import itertools
 import re
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -18,12 +19,12 @@ logger = custom_logger.setup_logging(__name__)
 
 
 def correlation(
-    df,
-    features=None,
-    numeric=True,
-    method="pearson",
-    **kwargs,
-):
+    df: pd.DataFrame,
+    features: Optional[List[str]] = None,
+    numeric: bool = True,
+    method: str = "pearson",
+    **kwargs: Dict[str, Any],
+) -> pd.DataFrame:
     """
     Create a correlation matrix for the DataFrame.
 
@@ -52,8 +53,8 @@ def correlation(
 
     Returns
     -------
-    fig : Figure
-        The chart
+    corr : pd.DataFrame
+        The correlation matrix plot.
 
     """
     df = df.copy()
@@ -89,7 +90,13 @@ def correlation(
     return corr
 
 
-def mutual_info(df, features=None, n_jobs=None, display=True, threshold=0.5):
+def mutual_info(
+    df: pd.DataFrame,
+    features: Optional[List[str]] = None,
+    n_jobs: Optional[int] = None,
+    display: bool = True,
+    threshold: float = 0.5,
+) -> pd.DataFrame:
     """
     Calculate mutual information.
 
@@ -141,7 +148,9 @@ def mutual_info(df, features=None, n_jobs=None, display=True, threshold=0.5):
         f"'{combinations}' combinations."
     )
 
-    def compute_mi(col_i, col_j, df):
+    def compute_mi(
+        col_i: str, col_j: str, df: pd.DataFrame
+    ) -> Tuple[str, str, np.ndarray]:
         logger.debug(f"Calculating the mutual information for '{col_i}' and '{col_j}'.")
         mi_value = mutual_info_regression(
             np.copy(df[col_i].values).reshape(-1, 1), np.copy(df[col_j])
@@ -179,7 +188,7 @@ def mutual_info(df, features=None, n_jobs=None, display=True, threshold=0.5):
     return mi_matrix
 
 
-def cramers_v(confusion_matrix):
+def cramers_v(confusion_matrix: Union[pd.DataFrame, np.ndarray]) -> float:
     """
     Calculate Cramer's V for categorical-categorical association.
 
@@ -208,7 +217,12 @@ def cramers_v(confusion_matrix):
     return cramers_v
 
 
-def gvif(df, features=None, constant_col="constant", numeric_only=True):
+def gvif(
+    df: pd.DataFrame,
+    features: Optional[List[str]] = None,
+    constant_col: str = "constant",
+    numeric_only: bool = True,
+) -> pd.DataFrame:
     """
     Calculate the generalized variance inflation factor (GVIF) for the features.
 
@@ -305,7 +319,9 @@ def gvif(df, features=None, constant_col="constant", numeric_only=True):
                 col for col in df.columns if col not in [*dummy_features, constant_col]
             ]
 
-            def make_positive_semi_definite(matrix, epsilon=1e-10):
+            def make_positive_semi_definite(
+                matrix: np.ndarray, epsilon: float = 1e-10
+            ) -> np.ndarray:
                 return matrix + np.eye(matrix.shape[0]) * epsilon
 
             A = make_positive_semi_definite(df[dummy_features].corr().to_numpy())
