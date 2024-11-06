@@ -317,17 +317,22 @@ def calc_qx_exp_ae(
 
 
 def calc_whl(
-    weights: Union[pd.Series, np.ndarray],
     rates: Union[pd.Series, np.ndarray],
-    order: int,
-    lambda_: float,
-) -> pd.Series:
+    weights: Union[pd.Series, np.ndarray],
+    horizontal_order: int,
+    horizontal_lambda: float,
+    horizontal_expo: float = 0,
+    vertical_order: int = 0,
+    vertical_lambda: float = 0,
+    vertical_expo: float = 0,
+    normalize_weights: bool = True,
+) -> np.ndarray:
     """
     Calculate the whittaker-henderson-lowrie (whl) smooth rate.
 
     The whl smoothes the raw rates by minimizing a difference equation.
 
-    formula:
+    equation:
     q = ∑(w * (y - y_hat)^2) + λ * ∑((Δ^k * y_hat)^2)
     - y = raw rate
     - y_hat = graduated rate
@@ -335,53 +340,193 @@ def calc_whl(
     - λ = lambda smoothing parameter
     - Δ^k = kth difference operator
 
+    This equation is solved using a matrix equation.
+
+    Caveats
+    -------
+    - Does not include the standard table Lowrie modification.
+
+    Notes
+    -----
+    - The function can handle both one-dimensional and two-dimensional data arrays.
+    - It includes the exponential rate parameter for the differences which is useful
+    for mortality rates and is the Lowrie modification.
+    - It is recommended to normalize the weights to sum to the number of data points,
+    so that there isn't a bias in the smoothing.
+
     References
     ----------
-    http://www.howardfamily.ca/graduation/index.html
-    https://arxiv.org/pdf/2306.06932
+    - http://www.howardfamily.ca/graduation/index.html
+    - https://arxiv.org/pdf/2306.06932
+    - 34 TSA 329: https://www.soa.org/globalassets/assets/library/research/transactions-of-society-of-actuaries/1982/january/tsa82v3414.pdf
 
     Parameters
     ----------
-    weights : pd.Series
-        array of weights
     rates : pd.Series
-        array of rates
-    order : int
-        order of the difference operator and will relate to the polynomial degree
-    lambda_ : float
-        smoothing parameter. a higher value will smooth the rates more.
+        Observed raw data points (1D or 2D array).
+    weights : pd.Series
+        Weights associated with the raw data (same shape as raw_data)
+    horizontal_order : int
+        Order of differencing in the horizontal direction (or primary dimension).
+    horizontal_lambda : float
+        Smoothing parameter for horizontal differences.
+    horizontal_expo : float
+        Exponential rate parameter for horizontal differences.
+    vertical_order : int
+        Order of differencing in the vertical direction (0 for 1D data).
+    vertical_lambda : float
+        Smoothing parameter for vertical differences (0 for 1D data).
+    vertical_expo : float
+        Exponential rate parameter for vertical differences.
+    normalize_weights : bool
+        Whether to normalize weights to sum to the number of data points.
 
     Returns
     -------
-    whl : pd.Series
+    graduated_values : np.ndarray
         Array of smoothed rates
 
     """
-    from scipy.special import comb
+    from scipy.sparse import csr_matrix, diags
+    from scipy.sparse.linalg import spsolve
 
-    weights = np.array(weights)
-    rates = np.array(rates)
+    rates = np.array(rates, dtype=float)
+    weights = np.array(weights, dtype=float)
 
-    weight_matrix = np.diag(weights)
-    rates_length = len(rates)
+    # dimensions of the data
+    if rates.ndim == 1:
+        N = rates.size
+        rows = N
+        cols = 1
+        y = rates.copy()
+        weights = weights.copy()
+    elif rates.ndim == 2:
+        rows, cols = rates.shape
+        N = rows * cols
+        if rates.shape != weights.shape:
+            raise ValueError("rates and weights must have the same shape.")
+        y = rates.flatten()
+        weights = weights.flatten()
+    else:
+        raise ValueError("raw_data must be a 1D or 2D array.")
 
-    def get_diff_matrix(rates_length: int, order: int) -> np.ndarray:
-        diff_matrix = np.zeros((rates_length - order, rates_length))
-        for i in range(rates_length - order):
-            diff_matrix[i, i : i + order + 1] = [
-                (-1) ** (j) * comb(order, j) for j in range(order + 1)
-            ]
+    # normalize weights to number of data points
+    if normalize_weights:
+        total_weight = np.sum(weights)
+        weights = weights / total_weight * N
+
+    # weight matrix
+    weight_matrix = diags(weights, 0, shape=(N, N))
+
+    # difference matrix
+    def build_difference_matrix(
+        size: int, order: int, expo_rate: float = 0, axis: int = 0
+    ) -> np.ndarray:
+        """
+        Build the difference matrix for a given order and exponential rate.
+
+        Parameters
+        ----------
+        size : int
+            The size of the matrix.
+        order : int
+            The order of differencing.
+        expo_rate : float, optional
+            The exponential rate parameter (default is 0).
+        axis : int, optional
+            The axis along which to build the difference matrix (default is 0).
+
+        Returns
+        -------
+        np.ndarray
+            The difference matrix.
+
+        """
+        from scipy.special import comb
+
+        if order == 0:
+            return None
+
+        # initialize
+        data = []
+        row_indices = []
+        col_indices = []
+
+        # 1 dimension
+        if rates.ndim == 1:
+            num_diffs = size - order
+            indices_list = [np.arange(i, i + order + 1) for i in range(num_diffs)]
+        # 2 dimension (horizontal)
+        elif axis == 0:
+            num_diffs = (cols - order) * rows
+            indices_list = []
+            for i in range(rows):
+                for j in range(cols - order):
+                    base_idx = i * cols + j
+                    indices = base_idx + np.arange(order + 1)
+                    indices_list.append(indices)
+        # 2 dimension (vertical)
+        else:
+            num_diffs = (rows - order) * cols
+            indices_list = []
+            for i in range(rows - order):
+                for j in range(cols):
+                    base_idx = i * cols + j
+                    indices = base_idx + np.arange(0, (order + 1) * cols, cols)
+                    indices_list.append(indices)
+
+        # compute expo factors
+        if expo_rate != 0:
+            exp_factors = np.exp(expo_rate * np.arange(size))
+        else:
+            exp_factors = np.ones(size)
+
+        # build the difference matrix
+        for idx, indices in enumerate(indices_list):
+            coeffs = np.array([(-1) ** k * comb(order, k) for k in range(order + 1)])
+            if expo_rate != 0:
+                coeffs *= exp_factors[indices]
+            row_indices.extend([idx] * (order + 1))
+            col_indices.extend(indices)
+            data.extend(coeffs)
+
+        diff_matrix = csr_matrix(
+            (data, (row_indices, col_indices)), shape=(len(indices_list), size)
+        )
         return diff_matrix
 
-    diff_matrix = get_diff_matrix(rates_length, order)
+    # difference matrices
+    diff_matrix_horizontal = build_difference_matrix(
+        N, horizontal_order, horizontal_expo, axis=0
+    )
+    diff_matrix_vertical = None
+    if rates.ndim == 2 and vertical_order > 0:
+        diff_matrix_vertical = build_difference_matrix(
+            N, vertical_order, vertical_expo, axis=1
+        )
 
-    lambda_matrix = lambda_ * np.eye(rates_length - order)
+    # lambda matrices
+    lambda_matrix_horizontal = (
+        horizontal_lambda * (diff_matrix_horizontal.T @ diff_matrix_horizontal)
+        if diff_matrix_horizontal is not None
+        else 0
+    )
+    lambda_matrix_vertical = (
+        vertical_lambda * (diff_matrix_vertical.T @ diff_matrix_vertical)
+        if diff_matrix_vertical is not None
+        else 0
+    )
 
-    A = weight_matrix + diff_matrix.T @ lambda_matrix @ diff_matrix
-    b = weights * rates
+    # solve for y_hat: A * y_hat = b
+    A = weight_matrix + lambda_matrix_horizontal + lambda_matrix_vertical
+    b = weights * y
+    y_hat = spsolve(A.tocsr(), b)
 
-    # solver for whl, A * whl = b
-    whl = np.linalg.solve(A, b)
-    whl = pd.Series(whl, name="whl")
+    # reshape
+    if rates.ndim == 1:
+        graduated_values = y_hat
+        # graduated_values = pd.Series(y_hat, name="y_hat")
+    else:
+        graduated_values = y_hat.reshape(rates.shape)
 
-    return whl
+    return graduated_values
