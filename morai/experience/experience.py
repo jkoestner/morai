@@ -326,6 +326,9 @@ def calc_whl(
     vertical_lambda: float = 0,
     vertical_expo: float = 0,
     normalize_weights: bool = True,
+    standard_rates: Union[pd.Series, np.ndarray] = None,
+    standard_weights: Union[pd.Series, np.ndarray] = None,
+    blending_factor: float = 0,
 ) -> np.ndarray:
     """
     Calculate the whittaker-henderson-lowrie (whl) smooth rate.
@@ -344,7 +347,7 @@ def calc_whl(
 
     Caveats
     -------
-    - Does not include the standard table Lowrie modification.
+    - The standard table Lowrie modification has not been fully tested.
 
     Notes
     -----
@@ -353,6 +356,9 @@ def calc_whl(
     for mortality rates and is the Lowrie modification.
     - It is recommended to normalize the weights to sum to the number of data points,
     so that there isn't a bias in the smoothing.
+    - If using standard weights, one method for calculating the weight is to use
+    the max(average_expo - expo, 0). This will give higher weight to standard table
+    with lower exposure.
 
     References
     ----------
@@ -380,6 +386,13 @@ def calc_whl(
         Exponential rate parameter for vertical differences.
     normalize_weights : bool
         Whether to normalize weights to sum to the number of data points.
+    standard_rates : pd.Series, optional
+        Standard rates to blend with the raw rates.
+    standard_weights : pd.Series, optional
+        Weights for the standard rates.
+    blending_factor : float
+        Blending factor for the standard rates. The higher the factor, the more
+        the standard rates are used.
 
     Returns
     -------
@@ -415,8 +428,42 @@ def calc_whl(
         total_weight = np.sum(weights)
         weights = weights / total_weight * N
 
+    # blending to a standard table
+    if blending_factor > 0:
+        if standard_rates is None or standard_weights is None:
+            raise ValueError(
+                "standard_rates and standard_weights must be provided "
+                "when blending_factor > 0."
+            )
+
+        standard_rates = np.array(standard_rates, dtype=float)
+        standard_weights = np.array(standard_weights, dtype=float)
+
+        if rates.shape != standard_rates.shape or rates.shape != standard_weights.shape:
+            raise ValueError(
+                "standard_rates and standard_weights must have "
+                "the same shape as rates."
+            )
+
+        if rates.ndim == 1:
+            y_std = standard_rates.copy()
+            w_std = standard_weights.copy()
+        elif rates.ndim == 2:
+            y_std = standard_rates.flatten()
+            w_std = standard_weights.flatten()
+
+        # normalize standard weights
+        if normalize_weights:
+            total_std_weight = np.sum(w_std)
+            w_std = w_std / total_std_weight * N
+    else:
+        y_std = np.zeros_like(y)
+        w_std = np.zeros_like(weights)
+
     # weight matrix
-    weight_matrix = diags(weights, 0, shape=(N, N))
+    weights_obs_matrix = diags((1 - blending_factor) * weights, 0, shape=(N, N))
+    weights_std_matrix = diags(blending_factor * w_std, 0, shape=(N, N))
+    weight_matrix = weights_obs_matrix + weights_std_matrix
 
     # difference matrix
     def build_difference_matrix(
@@ -519,13 +566,12 @@ def calc_whl(
 
     # solve for y_hat: A * y_hat = b
     A = weight_matrix + lambda_matrix_horizontal + lambda_matrix_vertical
-    b = weights * y
+    b = (1 - blending_factor) * weights * y + blending_factor * w_std * y_std
     y_hat = spsolve(A.tocsr(), b)
 
     # reshape
     if rates.ndim == 1:
         graduated_values = y_hat
-        # graduated_values = pd.Series(y_hat, name="y_hat")
     else:
         graduated_values = y_hat.reshape(rates.shape)
 

@@ -57,6 +57,29 @@ def test_whl_1d() -> None:
     assert round(checksum_grad_rates, 4) == 0.4337, "The 1d WHL checksum is incorrect"
 
 
+def test_whl_1d_age() -> None:
+    """Tests the 1D WHL calculation with standard table."""
+    whl_1d_age_df = pd.read_csv(test_experience_path / "simple_graduation_1d_age.csv")
+    grad_rates = experience.calc_whl(
+        rates=whl_1d_age_df["rate"],
+        weights=whl_1d_age_df["exposure"],
+        horizontal_order=3,
+        horizontal_lambda=400,
+        horizontal_expo=0,
+        vertical_order=0,
+        vertical_lambda=0,
+        vertical_expo=0,
+        normalize_weights=True,
+        standard_rates=whl_1d_age_df["std"],
+        standard_weights=whl_1d_age_df["std_weight"],
+        blending_factor=0.5,
+    )
+    checksum_grad_rates = grad_rates.sum()
+    assert (
+        round(checksum_grad_rates, 4) == 11.0632
+    ), "The 1d WHL with standard table checksum is incorrect"
+
+
 def test_whl_2d() -> None:
     """Tests the 2D WHL calculation."""
     rates = pd.read_excel(
