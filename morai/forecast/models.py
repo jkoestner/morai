@@ -414,7 +414,7 @@ class ModelWrapper:
                     importance = getattr(self.model, attr).tolist()
                 else:
                     importance = getattr(self.model, attr)
-                if importance:
+                if importance is not None:
                     break
         if importance is None:
             raise ValueError("Could not find `importance` in the model.")

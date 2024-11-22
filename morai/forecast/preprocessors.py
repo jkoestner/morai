@@ -1,5 +1,7 @@
 """Preprocessors used in the models."""
 
+from typing import Any, Dict, Optional
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
@@ -10,12 +12,12 @@ logger = custom_logger.setup_logging(__name__)
 
 
 def preprocess_data(
-    model_data,
-    feature_dict,
-    add_constant=False,
-    standardize=False,
-    preset=None,
-):
+    model_data: pd.DataFrame,
+    feature_dict: dict,
+    add_constant: bool = False,
+    standardize: bool = False,
+    preset: Optional[str] = None,
+) -> dict:
     """
     Preprocess the features.
 
@@ -261,7 +263,7 @@ def preprocess_data(
     return preprocess_dict
 
 
-def bin_feature(feature, bins):
+def bin_feature(feature: pd.Series, bins: int) -> pd.Series:
     """
     Bin a feature.
 
@@ -304,7 +306,7 @@ def bin_feature(feature, bins):
     return binned_feature
 
 
-def get_dimensions(mapping):
+def get_dimensions(mapping: Dict[str, Any]) -> pd.DataFrame:
     """
     Get the dimensions for each feature in the mapping.
 
@@ -332,7 +334,7 @@ def get_dimensions(mapping):
     return dimensions
 
 
-def remap_values(df, mapping):
+def remap_values(df: pd.DataFrame, mapping: Dict[str, Any]) -> pd.DataFrame:
     """
     Remap the values using the mapping.
 
@@ -368,7 +370,7 @@ def remap_values(df, mapping):
     return df
 
 
-def update_mapping(mapping, key, values):
+def update_mapping(mapping: Dict[str, Any], key: str, values: Any) -> Dict[str, Any]:
     """
     Update the mapping key values.
 
