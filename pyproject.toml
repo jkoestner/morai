@@ -118,8 +118,6 @@ select = [
     "TID",
     # implicit string concatenation
     "ISC",
-    # type-checking imports
-    "TCH",
     # type hint
     "ANN",
     # comprehensions
@@ -143,7 +141,7 @@ select = [
 ignore = [
     ### Intentionally disabled
     # type hinting exceptions
-    "ANN101",
+    "ANN003",
     "ANN401",
     # ignore __init__ docstring
     "D107",
@@ -167,3 +165,6 @@ ignore = [
 [tool.ruff.lint]
 exclude = ["*.ipynb"]
 pylint.max-args = 10
+
+[tool.ruff.lint.per-file-ignores]
+"morai/dashboard/pages/*.py" = ["ANN"]

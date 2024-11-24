@@ -5,6 +5,7 @@ Provides functions for common used functions in app.
 """
 
 import os
+from typing import Any, Dict, List, Optional
 
 import dash_bootstrap_components as dbc
 import polars as pl
@@ -16,7 +17,7 @@ from morai.utils import helpers
 num_to_str_count = 10
 
 
-def convert_to_short_number(number):
+def convert_to_short_number(number: float) -> str:
     """
     Convert number to short number.
 
@@ -38,7 +39,7 @@ def convert_to_short_number(number):
     return f"{number:.1f}T"
 
 
-def read_table(filepath, **kwargs):
+def read_table(filepath: str) -> pl.DataFrame:
     """
     Read table from file.
 
@@ -66,13 +67,17 @@ def read_table(filepath, **kwargs):
     return df
 
 
-def filter_data(df, callback_context, num_to_str_count=num_to_str_count):
+def filter_data(
+    df: pl.DataFrame,
+    callback_context: list[dict],
+    num_to_str_count: int = num_to_str_count,
+) -> pl.DataFrame:
     """
     Filter data based on the number of unique values.
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : pl.DataFrame
         Dataframe to filter.
     callback_context : list
         List of callback context.
@@ -81,7 +86,7 @@ def filter_data(df, callback_context, num_to_str_count=num_to_str_count):
 
     Returns
     -------
-    filtered_df : pd.DataFrame
+    filtered_df : pl.DataFrame
         Filtered dataframe.
 
     """
@@ -114,12 +119,12 @@ def filter_data(df, callback_context, num_to_str_count=num_to_str_count):
 
 
 def generate_filters(
-    df,
-    prefix,
-    num_to_str_count=num_to_str_count,
-    config=None,
-    exclude_cols=None,
-):
+    df: pl.DataFrame,
+    prefix: str,
+    num_to_str_count: int = num_to_str_count,
+    config: Optional[Dict[str, Any]] = None,
+    exclude_cols: Optional[List[str]] = None,
+) -> dict:
     """
     Generate a dictionary of dashboard options from dataframe.
 
@@ -165,41 +170,72 @@ def generate_filters(
 
     # create filters
     for col in columns:
-        if isinstance(df[col][0], str):
-            filter = dcc.Dropdown(
-                id={"type": prefix_str_filter, "index": col},
-                options=[{"label": i, "value": i} for i in sorted(df[col].unique())],
-                multi=True,
-                placeholder=f"Select {col}",
-            )
-            str_cols.append(col)
-        elif df[col].nunique() < num_to_str_count:
-            filter = dcc.Dropdown(
-                id={"type": prefix_str_filter, "index": col},
-                options=[{"label": i, "value": i} for i in sorted(df[col].unique())],
-                multi=True,
-                placeholder=f"Select {col}",
+        if isinstance(df[col][0], str) or df[col].nunique() < num_to_str_count:
+            # Create collapsible checklist for string columns
+            filter = html.Div(
+                [
+                    dbc.Button(
+                        [
+                            html.Span(col, style={"flex-grow": 1}),
+                            html.I(className="fas fa-chevron-down"),
+                        ],
+                        id={"type": f"{prefix}-collapse-button", "index": col},
+                        className="mb-2 w-100 text-start d-flex align-items-center",
+                        color="light",
+                    ),
+                    dbc.Collapse(
+                        dcc.Checklist(
+                            id={"type": prefix_str_filter, "index": col},
+                            options=[
+                                {"label": str(i), "value": i}
+                                for i in sorted(df[col].unique())
+                            ],
+                            value=[],
+                            className="ms-2",
+                            labelStyle={"display": "block"},
+                        ),
+                        id={"type": f"{prefix}-collapse", "index": col},
+                        is_open=False,
+                    ),
+                ],
+                className="mb-3",
             )
             str_cols.append(col)
         else:
-            filter = dcc.RangeSlider(
-                id={"type": prefix_num_filter, "index": col},
-                min=df[col].min(),
-                max=df[col].max(),
-                marks=None,
-                value=[df[col].min(), df[col].max()],
-                tooltip={"always_visible": True, "placement": "bottom"},
+            filter = html.Div(
+                [
+                    dbc.Button(
+                        [
+                            html.Span(col, style={"flex-grow": 1}),
+                            html.I(className="fas fa-chevron-down"),
+                        ],
+                        id={"type": f"{prefix}-collapse-button", "index": col},
+                        className="mb-2 w-100 text-start d-flex align-items-center",
+                        color="light",
+                    ),
+                    dbc.Collapse(
+                        dcc.RangeSlider(
+                            id={"type": prefix_num_filter, "index": col},
+                            min=df[col].min(),
+                            max=df[col].max(),
+                            marks=None,
+                            value=[df[col].min(), df[col].max()],
+                            tooltip={"always_visible": True, "placement": "bottom"},
+                        ),
+                        id={"type": f"{prefix}-collapse", "index": col},
+                        is_open=False,
+                    ),
+                ],
+                className="mb-3",
             )
             num_cols.append(col)
-        filters.append(html.Label(col))
         filters.append(filter)
 
     filter_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
-
     return filter_dict
 
 
-def get_card_list(config):
+def get_card_list(config: Dict[str, Any]) -> List[str]:
     """
     Get list of variables to display in cards.
 
@@ -224,7 +260,14 @@ def get_card_list(config):
     return card_list
 
 
-def generate_card(df, card_list, title="Data", color="Azure", inverse=False, **kwargs):
+def generate_card(
+    df: pl.DataFrame,
+    card_list: List[str],
+    title: str = "Data",
+    color: str = "Azure",
+    inverse: bool = False,
+    **kwargs,
+) -> dbc.Card:
     """
     Generate cards.
 
@@ -267,10 +310,10 @@ def generate_card(df, card_list, title="Data", color="Azure", inverse=False, **k
 
 
 def generate_selectors(
-    config,
-    prefix,
-    selector_dict,
-):
+    config: Dict[str, Any],
+    prefix: str,
+    selector_dict: Dict[str, bool],
+) -> List[html.Div]:
     """
     Generate selectors.
 
@@ -568,7 +611,7 @@ def generate_selectors(
     return selectors
 
 
-def load_config(config_path=helpers.CONFIG_PATH):
+def load_config(config_path: str = helpers.CONFIG_PATH) -> Dict[str, Any]:
     """
     Load the yaml configuration file.
 
@@ -588,7 +631,9 @@ def load_config(config_path=helpers.CONFIG_PATH):
     return config
 
 
-def write_config(config, config_path=helpers.CONFIG_PATH):
+def write_config(
+    config: Dict[str, Any], config_path: str = helpers.CONFIG_PATH
+) -> None:
     """
     Write the yaml configuration file.
 
@@ -605,7 +650,7 @@ def write_config(config, config_path=helpers.CONFIG_PATH):
         yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
 
-def list_files_in_folder(folder_path):
+def list_files_in_folder(folder_path: str) -> List[str]:
     """
     List files in the directory.
 
@@ -631,7 +676,7 @@ def list_files_in_folder(folder_path):
     return files
 
 
-def flatten_columns(df):
+def flatten_columns(df: pl.DataFrame) -> pl.DataFrame:
     """
     Flatten columns in dataframe.
 
@@ -652,7 +697,7 @@ def flatten_columns(df):
     return df
 
 
-def _inputs_flatten_list(input_list):
+def _inputs_flatten_list(input_list: List[Any]) -> List[Any]:
     flat_list = []
     for item in input_list:
         if isinstance(item, dict):
@@ -662,7 +707,7 @@ def _inputs_flatten_list(input_list):
     return flat_list
 
 
-def _inputs_parse_id(input_list, id_value):
+def _inputs_parse_id(input_list: List[Any], id_value: str) -> Any:
     """
     Parse inputs for id value.
 
@@ -693,7 +738,7 @@ def _inputs_parse_id(input_list, id_value):
     return None
 
 
-def _inputs_parse_type(input_list, type_value):
+def _inputs_parse_type(input_list: List[Any], type_value: str) -> List[Any]:
     """
     Parse inputs for type value.
 

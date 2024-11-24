@@ -35,6 +35,7 @@ app = DashProxy(
         # "https://codepen.io/chriddyp/pen/bWLwgP.css",
         dbc_css,
         dbc.themes.FLATLY,
+        "https://use.fontawesome.com/releases/v5.15.4/css/all.css",
     ],
     transforms=[ServersideOutputTransform()],
 )
