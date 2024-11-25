@@ -163,7 +163,7 @@ ignore = [
 ]
 
 [tool.ruff.lint]
-exclude = ["*.ipynb"]
+exclude = ["*.ipynb", "__init__.py"]
 pylint.max-args = 10
 
 [tool.ruff.lint.per-file-ignores]

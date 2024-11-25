@@ -35,114 +35,193 @@ def layout():
     """Input layout."""
     return html.Div(
         [
-            dbc.Row(
-                html.H4(
-                    "Data Input",
-                    className="bg-primary text-white p-2 mb-2 text-center",
-                )
+            # Header section with gradient background
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.H4(
+                                [
+                                    html.I(className="fas fa-database me-2"),
+                                    "Data Input",
+                                ],
+                                className="mb-1",
+                            ),
+                            html.P(
+                                "Load and configure your dataset",
+                                className="text-white-50 mb-0 small",
+                            ),
+                        ],
+                        className="bg-gradient bg-primary text-white p-4 mb-4 rounded-3 shadow-sm",
+                    ),
+                ],
             ),
-            dbc.Row(
-                html.P(
+            # Instructions Card
+            dbc.Container(
+                dbc.Card(
                     [
-                        "This page is used to load the configuration file "
-                        "and display the configuration.",
-                        html.Br(),
-                        "The data must first be loaded and then can be used in "
-                        "the other pages. The data will be available until the tab "
-                        "is closed.",
-                        html.Br(),
-                        "The configuration file should be located in: ",
-                        html.Span(
-                            f"{helpers.FILES_PATH!s}",
-                            style={"fontWeight": "bold"},
+                        dbc.CardBody(
+                            [
+                                html.H5(
+                                    [
+                                        html.I(className="fas fa-info-circle me-2"),
+                                        "Instructions",
+                                    ],
+                                    className="card-title mb-3",
+                                ),
+                                html.P(
+                                    [
+                                        "This page is used to load the configuration file and display the configuration.",
+                                        html.Br(),
+                                        "The data must first be loaded and then can be used in the other pages. The data will be available until the tab is closed.",
+                                        html.Br(),
+                                        html.Span(
+                                            "Configuration Location:",
+                                            className="fw-bold",
+                                        ),
+                                        " The configuration file should be located in: ",
+                                        html.Code(
+                                            f"{helpers.FILES_PATH!s}",
+                                            className="bg-light px-2 py-1 rounded",
+                                        ),
+                                        html.Br(),
+                                        html.Span("File Name:", className="fw-bold"),
+                                        " The name should be: ",
+                                        html.Code(
+                                            "dashboard_config.yaml",
+                                            className="bg-light px-2 py-1 rounded",
+                                        ),
+                                    ],
+                                    className="card-text",
+                                ),
+                            ]
+                        )
+                    ],
+                    className="shadow-sm mb-4",
+                ),
+                className="px-0",
+            ),
+            # Dataset Selection Card
+            dbc.Container(
+                dbc.Card(
+                    [
+                        dbc.CardHeader(
+                            html.H5(
+                                [
+                                    html.I(className="fas fa-file-alt me-2"),
+                                    "Select Dataset",
+                                ],
+                                className="mb-0",
+                            ),
+                            className="bg-light",
                         ),
-                        html.Br(),
-                        "The name should be: ",
-                        html.Span(
-                            "dashboard_config.yaml", style={"fontWeight": "bold"}
+                        dbc.CardBody(
+                            [
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            dcc.Dropdown(
+                                                id="dataset-dropdown",
+                                                options=[
+                                                    {"label": key, "value": key}
+                                                    for key in list(
+                                                        dh.load_config()[
+                                                            "datasets"
+                                                        ].keys()
+                                                    )
+                                                ],
+                                                placeholder="Select a dataset",
+                                                className="shadow-sm",
+                                            ),
+                                            width=8,
+                                        ),
+                                        dbc.Col(
+                                            dbc.Button(
+                                                [
+                                                    html.I(
+                                                        className="fas fa-upload me-2"
+                                                    ),
+                                                    "Load Config",
+                                                ],
+                                                id="button-load-config",
+                                                color="primary",
+                                                className="w-100 shadow-sm",
+                                            ),
+                                            width=4,
+                                        ),
+                                    ],
+                                    className="g-3",
+                                ),
+                            ]
                         ),
                     ],
+                    className="shadow-sm mb-4",
                 ),
+                className="px-0",
             ),
-            # select file
+            # Configuration Display Cards
             dbc.Container(
                 [
                     dbc.Row(
-                        html.Div(
-                            html.H5(
-                                "Select File",
-                                style={
-                                    "border-bottom": "1px solid black",
-                                    "padding-bottom": "5px",
-                                },
-                            ),
-                            style={
-                                "width": "fit-content",
-                                "padding": "0px",
-                            },
-                        ),
-                    ),
-                    dbc.Row(
                         [
                             dbc.Col(
-                                dcc.Dropdown(
-                                    id="dataset-dropdown",
-                                    options=[
-                                        {"label": key, "value": key}
-                                        for key in list(
-                                            dh.load_config()["datasets"].keys()
-                                        )
+                                dbc.Card(
+                                    [
+                                        dbc.CardHeader(
+                                            html.H5(
+                                                [
+                                                    html.I(className="fas fa-cog me-2"),
+                                                    "General Config",
+                                                ],
+                                                className="mb-0",
+                                            ),
+                                            className="bg-light",
+                                        ),
+                                        dbc.CardBody(
+                                            dcc.Markdown(
+                                                id="general-config-str",
+                                                className="mb-0",
+                                            ),
+                                        ),
                                     ],
-                                    placeholder="Select a dataset",
+                                    className="shadow-sm h-100",
                                 ),
-                                width=3,
+                                width=6,
                             ),
                             dbc.Col(
-                                dbc.Button(
-                                    "Load Config",
-                                    id="button-load-config",
-                                    className="btn btn-primary",
+                                dbc.Card(
+                                    [
+                                        dbc.CardHeader(
+                                            html.H5(
+                                                [
+                                                    html.I(
+                                                        className="fas fa-table me-2"
+                                                    ),
+                                                    "Dataset Config",
+                                                ],
+                                                className="mb-0",
+                                            ),
+                                            className="bg-light",
+                                        ),
+                                        dbc.CardBody(
+                                            dcc.Markdown(
+                                                id="dataset-config-str",
+                                                className="mb-0",
+                                            ),
+                                        ),
+                                    ],
+                                    className="shadow-sm h-100",
                                 ),
-                                width=2,
+                                width=6,
                             ),
                         ],
+                        className="g-4",
                     ),
                 ],
-                className="m-1 bg-light border",
-            ),
-            # configuration
-            dbc.Row(
-                [
-                    html.Div(
-                        html.H5(
-                            "Configuration",
-                            style={
-                                "border-bottom": "1px solid black",
-                                "padding-bottom": "5px",
-                            },
-                        ),
-                        style={
-                            "width": "fit-content",
-                            "padding": "0px",
-                        },
-                    ),
-                    html.H6(
-                        "General Config",
-                    ),
-                    dbc.Col(
-                        dcc.Markdown(id="general-config-str"),
-                    ),
-                    html.H6(
-                        "Dataset Config",
-                    ),
-                    dbc.Col(
-                        dcc.Markdown(id="dataset-config-str"),
-                    ),
-                ],
-                className="m-1 bg-light border",
+                className="px-0",
             ),
         ],
-        className="container",
+        className="container px-4 py-3",
     )
 
 
