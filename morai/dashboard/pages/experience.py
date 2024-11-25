@@ -104,6 +104,13 @@ def _build_cards_row():
                 ),
                 width="auto",
             ),
+            dbc.Col(
+                html.Div(
+                    id="active-filters-card",
+                    className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                ),
+                width="auto",
+            ),
         ],
         className="mb-4 g-3",
     )
@@ -709,3 +716,53 @@ def toggle_collapse(n_clicks, is_open, children):
         )
 
     return new_is_open, new_children
+
+
+@callback(
+    Output("active-filters-card", "children"),
+    [
+        Input({"type": "chart-str-filter", "index": ALL}, "value"),
+        Input({"type": "chart-num-filter", "index": ALL}, "value"),
+    ],
+    [
+        State({"type": "chart-str-filter", "index": ALL}, "id"),
+        State({"type": "chart-num-filter", "index": ALL}, "id"),
+        State("store-dataset", "data"),
+    ],
+)
+def update_active_filters_card(
+    str_filters, num_filters, str_filter_ids, num_filter_ids, dataset
+):
+    """Update the card showing active filters."""
+    active_filters = []
+
+    # Check string filters
+    for filter_val, filter_id in zip(str_filters, str_filter_ids):
+        if filter_val and len(filter_val) < len(dataset[filter_id["index"]].unique()):
+            active_filters.append(filter_id["index"])
+
+    # Check numeric filters
+    for filter_val, filter_id in zip(num_filters, num_filter_ids):
+        if filter_val:
+            col = filter_id["index"]
+            if (filter_val[0] > dataset[col].min()) or (
+                filter_val[1] < dataset[col].max()
+            ):
+                active_filters.append(col)
+
+    # Create card content
+    if not active_filters:
+        content = [
+            html.H6("Active Filters", className="mb-2"),
+            html.P("None", className="text-muted mb-0"),
+        ]
+    else:
+        content = [
+            html.H6("Active Filters", className="mb-2"),
+            html.Ul(
+                [html.Li(col) for col in sorted(active_filters)],
+                className="mb-0 ps-3",
+            ),
+        ]
+
+    return content
