@@ -1,5 +1,6 @@
 """Explore dashboard."""
 
+import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 from dash_extensions.enrich import (
     Input,
@@ -35,44 +36,114 @@ def layout():
             ),
             html.Div(  # Main content container
                 [
-                    html.H4(
-                        "Explore Data",
-                        className="bg-primary text-white p-2 mb-2 text-center",
+                    html.Div(
+                        [
+                            html.H4(
+                                [
+                                    html.I(className="fas fa-search me-2"),
+                                    "Data Exploration",
+                                ],
+                                className="mb-1",
+                            ),
+                            html.P(
+                                "Analyze and visualize your data distributions",
+                                className="text-white-50 mb-0 small",
+                            ),
+                        ],
+                        className="bg-gradient bg-primary text-white p-4 mb-4 rounded-3 shadow-sm",
                     ),
                     html.Div(
                         [
-                            html.Div(
-                                id="data-description",
+                            # Dataset description card
+                            dbc.Card(
+                                dbc.CardBody(
+                                    html.Div(
+                                        id="data-description",
+                                        className="mb-0",
+                                    )
+                                ),
+                                className="shadow-sm mb-4",
                             ),
-                            html.H5(
-                                "Frequency Number",
-                                id="section-freq-num",
-                                className="bg-secondary text-white p-2 mb-2",
+                            # Numerical Frequencies Section
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H5(
+                                            [
+                                                html.I(
+                                                    className="fas fa-chart-bar me-2"
+                                                ),
+                                                "Numerical Frequencies",
+                                            ],
+                                            id="section-freq-num",
+                                            className="mb-0",
+                                        ),
+                                        className="bg-light",
+                                    ),
+                                    dbc.CardBody(
+                                        dcc.Loading(
+                                            id="loading-chart-freq-num",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(id="chart-freq-num"),
+                                        ),
+                                    ),
+                                ],
+                                className="shadow-sm mb-4",
                             ),
-                            dcc.Loading(
-                                id="loading-chart-freq-num",
-                                type="dot",
-                                children=html.Div(id="chart-freq-num"),
+                            # Categorical Frequencies Section
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H5(
+                                            [
+                                                html.I(
+                                                    className="fas fa-chart-pie me-2"
+                                                ),
+                                                "Categorical Frequencies",
+                                            ],
+                                            id="section-freq-cat",
+                                            className="mb-0",
+                                        ),
+                                        className="bg-light",
+                                    ),
+                                    dbc.CardBody(
+                                        dcc.Loading(
+                                            id="loading-chart-freq-cat",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(id="chart-freq-cat"),
+                                        ),
+                                    ),
+                                ],
+                                className="shadow-sm mb-4",
                             ),
-                            html.H5(
-                                "Frequency Categorical",
-                                id="section-freq-cat",
-                                className="bg-secondary text-white p-2 mb-2",
-                            ),
-                            dcc.Loading(
-                                id="loading-chart-freq-cat",
-                                type="dot",
-                                children=html.Div(id="chart-freq-cat"),
-                            ),
-                            html.H5(
-                                "Target",
-                                id="section-target",
-                                className="bg-secondary text-white p-2 mb-2",
-                            ),
-                            dcc.Loading(
-                                id="loading-chart-target",
-                                type="dot",
-                                children=html.Div(id="chart-target"),
+                            # Target Analysis Section
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H5(
+                                            [
+                                                html.I(
+                                                    className="fas fa-bullseye me-2"
+                                                ),
+                                                "Target Analysis",
+                                            ],
+                                            id="section-target",
+                                            className="mb-0",
+                                        ),
+                                        className="bg-light",
+                                    ),
+                                    dbc.CardBody(
+                                        dcc.Loading(
+                                            id="loading-chart-target",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(id="chart-target"),
+                                        ),
+                                    ),
+                                ],
+                                className="shadow-sm mb-4",
                             ),
                         ],
                     ),

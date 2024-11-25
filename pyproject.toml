@@ -167,4 +167,4 @@ exclude = ["*.ipynb", "__init__.py"]
 pylint.max-args = 10
 
 [tool.ruff.lint.per-file-ignores]
-"morai/dashboard/pages/*.py" = ["ANN"]
+"morai/dashboard/pages/*.py" = ["ANN", "E501"]
