@@ -45,11 +45,28 @@ def layout():
             dcc.Store(id="store-table-compare", storage_type="memory"),
             dcc.Store(id="store-table-1-select", storage_type="memory"),
             dcc.Store(id="store-table-2-select", storage_type="memory"),
-            # -----------------------------------------------------------
-            html.H4(
-                "Table Viewer",
-                className="bg-primary text-white p-2 mb-2 text-center",
+            # Header section with gradient background
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.H4(
+                                [
+                                    html.I(className="fas fa-table me-2"),
+                                    "Mortality Table Analysis",
+                                ],
+                                className="mb-1",
+                            ),
+                            html.P(
+                                "Compare and analyze mortality tables",
+                                className="text-white-50 mb-0 small",
+                            ),
+                        ],
+                        className="bg-gradient bg-primary text-white p-4 mb-4 rounded-3 shadow-sm",
+                    ),
+                ],
             ),
+            # Toast notifications
             dbc.Toast(
                 "Need to enter two tables to compare.",
                 id="toast-null-tables",
@@ -68,248 +85,354 @@ def layout():
                 icon="danger",
                 style={"position": "fixed", "top": 100, "right": 10, "width": 350},
             ),
-            html.P(
-                [
-                    "This page is used to compare mortality tables from " "the SOA.",
-                    html.Br(),
-                    "The tables must include one of the following columns: ",
-                    html.Code("issue_age, duration, and attained_age"),
-                    html.Br(),
-                    "The table must also have a rate value column: ",
-                    html.Code("vals"),
-                    html.Br(),
-                    "Mortality tables are sourced from: ",
-                    html.A(
-                        "mort.soa.org", href="https://mort.soa.org", target="_blank"
-                    ),
-                ],
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dbc.Button("Compare", id="compare-button", color="primary"),
-                        width=9,
-                        className="mb-1",
-                    ),
-                    dbc.Col(
-                        dbc.Button("Filter", id="filter-button", color="primary"),
-                        width=1,
-                        className="mb-1",
-                    ),
-                ],
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dcc.RadioItems(
-                            id="table-1-radio",
-                            options=["soa table", "file", "rate_table"],
-                            value="soa table",
-                        ),
-                        width=1,
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Morality Table 1"),
-                                dbc.CardBody(
-                                    children=None,
-                                    id="table-1-card",
-                                ),
-                            ],
-                            color="light",
-                        ),
-                        width=2,
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Table Description"),
-                                dbc.CardBody(
-                                    children=None,
-                                    id="table-1-desc",
-                                ),
-                            ],
-                            color="light",
-                        ),
-                        width=6,
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Filters Table-1"),
-                                dbc.CardBody(
-                                    children=None,
-                                    id="table-1-filters",
-                                ),
-                            ],
-                            color="light",
-                        ),
-                        width=2,
-                    ),
-                ],
-                className="mb-2",
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dcc.RadioItems(
-                            id="table-2-radio",
-                            options=["soa table", "file", "rate_table"],
-                            value="soa table",
-                        ),
-                        width=1,
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Morality Table 2"),
-                                dbc.CardBody(
-                                    children=None,
-                                    id="table-2-card",
-                                ),
-                            ],
-                            color="light",
-                        ),
-                        width=2,
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Table Description"),
-                                dbc.CardBody(
-                                    children=None,
-                                    id="table-2-desc",
-                                ),
-                            ],
-                            color="light",
-                        ),
-                        width=6,
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Filters Table-2"),
-                                dbc.CardBody(
-                                    children=None,
-                                    id="table-2-filters",
-                                ),
-                            ],
-                            color="light",
-                        ),
-                        width=2,
-                    ),
-                ],
-                className="mb-2",
-            ),
-            html.H5(
-                "Table Comparison Contour",
-                id="section-table-contour",
-                className="bg-secondary text-white p-2 mb-2",
-            ),
-            dcc.Loading(
-                id="loading-graph-contour",
-                type="dot",
-                children=html.Div(id="graph-contour"),
-            ),
-            html.H5(
-                "Table Plot Age",
-                id="section-table-plot",
-                className="bg-secondary text-white p-2 mb-2",
-            ),
-            dbc.Row(
-                dbc.Col(
+            # Description Card
+            dbc.Card(
+                dbc.CardBody(
                     [
-                        html.Label("Issue Age", className="text-center"),
-                        dcc.Slider(
-                            id="slider-issue-age",
-                            min=0,
-                            max=100,
-                            value=0,
-                            tooltip={"placement": "bottom", "always_visible": True},
+                        html.H5(
+                            [
+                                html.I(className="fas fa-info-circle me-2"),
+                                "About Mortality Tables",
+                            ],
+                            className="card-title mb-3",
                         ),
-                    ],
-                    width=6,
-                    className="mx-auto",
+                        html.P(
+                            [
+                                "This page is used to compare mortality tables from the SOA. ",
+                                html.Br(),
+                                "The tables must include one of the following columns: ",
+                                html.Code("issue_age, duration, and attained_age"),
+                                html.Br(),
+                                "The table must also have a rate value column: ",
+                                html.Code("vals"),
+                                html.Br(),
+                                "Mortality tables are sourced from: ",
+                                html.A(
+                                    "mort.soa.org",
+                                    href="https://mort.soa.org",
+                                    target="_blank",
+                                ),
+                            ],
+                            className="card-text mb-0",
+                        ),
+                    ]
                 ),
-                justify="center",
-                align="center",
-                className="my-4",
+                className="shadow-sm mb-4",
             ),
+            # Action Buttons
             dbc.Row(
                 [
                     dbc.Col(
-                        dcc.Loading(
-                            id="loading-graph-compare-age",
-                            type="dot",
-                            children=html.Div(id="graph-compare-age"),
+                        dbc.Button(
+                            [
+                                html.I(className="fas fa-sync-alt me-2"),
+                                "Compare",
+                            ],
+                            id="compare-button",
+                            color="primary",
+                            className="w-100 shadow-sm",
                         ),
+                        width=9,
                     ),
                     dbc.Col(
-                        dcc.Loading(
-                            id="loading-graph-compare-age-log",
-                            type="dot",
-                            children=html.Div(id="graph-compare-age-log"),
+                        dbc.Button(
+                            [
+                                html.I(className="fas fa-filter me-2"),
+                                "Filter",
+                            ],
+                            id="filter-button",
+                            color="primary",
+                            className="w-100 shadow-sm",
                         ),
+                        width=3,
                     ),
                 ],
-                className="mb-2",
+                className="mb-4",
             ),
-            html.H5(
-                "Table Select/Ultimate Compare",
-                id="section-table-su",
-                className="bg-secondary text-white p-2 mb-2",
-            ),
-            html.P(
-                [
-                    "The select and ultimate ratio is the ratio of the ",
-                    "[ultimate attained age] / [select attained age].",
-                ],
-            ),
+            # Table Selection Cards
             dbc.Row(
                 [
                     dbc.Col(
-                        dcc.Loading(
-                            id="loading-graph-su-table-1",
-                            type="dot",
-                            children=html.Div(id="graph-su-table-1"),
+                        dbc.Card(
+                            [
+                                dbc.CardHeader(
+                                    html.H5(
+                                        [
+                                            html.I(className="fas fa-table me-2"),
+                                            "Table 1 Selection",
+                                        ],
+                                        className="mb-0",
+                                    ),
+                                    className="bg-light",
+                                ),
+                                dbc.CardBody(
+                                    [
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    dcc.RadioItems(
+                                                        id="table-1-radio",
+                                                        options=[
+                                                            "soa table",
+                                                            "file",
+                                                            "rate_table",
+                                                        ],
+                                                        value="soa table",
+                                                        className="mb-3",
+                                                    ),
+                                                    width=3,
+                                                ),
+                                                dbc.Col(
+                                                    html.Div(id="table-1-card"),
+                                                    width=9,
+                                                ),
+                                            ],
+                                            className="mb-3",
+                                        ),
+                                        html.Div(id="table-1-desc"),
+                                        html.Div(id="table-1-filters"),
+                                    ]
+                                ),
+                            ],
+                            className="shadow-sm h-100",
                         ),
+                        width=6,
                     ),
                     dbc.Col(
-                        dcc.Loading(
-                            id="loading-graph-su-table-2",
-                            type="dot",
-                            children=html.Div(id="graph-su-table-2"),
+                        dbc.Card(
+                            [
+                                dbc.CardHeader(
+                                    html.H5(
+                                        [
+                                            html.I(className="fas fa-table me-2"),
+                                            "Table 2 Selection",
+                                        ],
+                                        className="mb-0",
+                                    ),
+                                    className="bg-light",
+                                ),
+                                dbc.CardBody(
+                                    [
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    dcc.RadioItems(
+                                                        id="table-2-radio",
+                                                        options=[
+                                                            "soa table",
+                                                            "file",
+                                                            "rate_table",
+                                                        ],
+                                                        value="soa table",
+                                                        className="mb-3",
+                                                    ),
+                                                    width=3,
+                                                ),
+                                                dbc.Col(
+                                                    html.Div(id="table-2-card"),
+                                                    width=9,
+                                                ),
+                                            ],
+                                            className="mb-3",
+                                        ),
+                                        html.Div(id="table-2-desc"),
+                                        html.Div(id="table-2-filters"),
+                                    ]
+                                ),
+                            ],
+                            className="shadow-sm h-100",
                         ),
+                        width=6,
                     ),
                 ],
-                className="mb-2",
+                className="mb-4",
             ),
-            html.H5(
-                "Table Data",
-                id="section-table-data",
-                className="bg-secondary text-white p-2 mb-2",
-            ),
-            dbc.Row(
+            # Analysis Results Section
+            dbc.Card(
                 [
-                    dbc.Tabs(
+                    dbc.CardHeader(
+                        html.H5(
+                            [
+                                html.I(className="fas fa-chart-area me-2"),
+                                "Analysis Results",
+                            ],
+                            className="mb-0",
+                        ),
+                        className="bg-light",
+                    ),
+                    dbc.CardBody(
                         [
-                            dbc.Tab(label="Table-1", tab_id="tab-table-1"),
-                            dbc.Tab(label="Table-2", tab_id="tab-table-2"),
-                            dbc.Tab(label="Compare", tab_id="tab-table-compare"),
-                        ],
-                        id="tabs-tables",
-                        active_tab="tab-table-compare",
-                    ),
-                    dcc.Loading(
-                        id="loading-tables-tab-content",
-                        type="dot",
-                        children=html.Div(id="tables-tab-content"),
+                            # Contour Analysis
+                            html.H5(
+                                [
+                                    html.I(className="fas fa-project-diagram me-2"),
+                                    "Table Comparison Contour",
+                                ],
+                                id="section-table-contour",
+                                className="mb-3",
+                            ),
+                            dcc.Loading(
+                                id="loading-graph-contour",
+                                type="default",
+                                color="#007bff",
+                                children=html.Div(
+                                    id="graph-contour",
+                                    className="bg-white rounded-3 shadow-sm p-3 mb-4",
+                                ),
+                            ),
+                            # Age Analysis
+                            html.H5(
+                                [
+                                    html.I(className="fas fa-chart-line me-2"),
+                                    "Table Plot Age",
+                                ],
+                                id="section-table-plot",
+                                className="mb-3",
+                            ),
+                            dbc.Row(
+                                dbc.Col(
+                                    [
+                                        html.Label(
+                                            "Issue Age",
+                                            className="text-center mb-2",
+                                        ),
+                                        dcc.Slider(
+                                            id="slider-issue-age",
+                                            min=0,
+                                            max=100,
+                                            value=0,
+                                            tooltip={
+                                                "placement": "bottom",
+                                                "always_visible": True,
+                                            },
+                                            className="mb-4",
+                                        ),
+                                    ],
+                                    width=6,
+                                    className="mx-auto",
+                                ),
+                            ),
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-graph-compare-age",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="graph-compare-age",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
+                                        ),
+                                        width=6,
+                                    ),
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-graph-compare-age-log",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="graph-compare-age-log",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
+                                        ),
+                                        width=6,
+                                    ),
+                                ],
+                                className="mb-4",
+                            ),
+                            # Select/Ultimate Analysis
+                            html.H5(
+                                [
+                                    html.I(className="fas fa-chart-bar me-2"),
+                                    "Select/Ultimate Compare",
+                                ],
+                                id="section-table-su",
+                                className="mb-3",
+                            ),
+                            html.P(
+                                "The select and ultimate ratio is the ratio of the [ultimate attained age] / [select attained age].",
+                                className="mb-3",
+                            ),
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-graph-su-table-1",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="graph-su-table-1",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
+                                        ),
+                                        width=6,
+                                    ),
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-graph-su-table-2",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="graph-su-table-2",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
+                                        ),
+                                        width=6,
+                                    ),
+                                ],
+                                className="mb-4",
+                            ),
+                            # Table Data
+                            html.H5(
+                                [
+                                    html.I(className="fas fa-table me-2"),
+                                    "Table Data",
+                                ],
+                                id="section-table-data",
+                                className="mb-3",
+                            ),
+                            dbc.Tabs(
+                                [
+                                    dbc.Tab(
+                                        label="Table-1",
+                                        tab_id="tab-table-1",
+                                        label_class_name="fw-bold",
+                                        active_label_class_name="text-primary",
+                                    ),
+                                    dbc.Tab(
+                                        label="Table-2",
+                                        tab_id="tab-table-2",
+                                        label_class_name="fw-bold",
+                                        active_label_class_name="text-primary",
+                                    ),
+                                    dbc.Tab(
+                                        label="Compare",
+                                        tab_id="tab-table-compare",
+                                        label_class_name="fw-bold",
+                                        active_label_class_name="text-primary",
+                                    ),
+                                ],
+                                id="tabs-tables",
+                                active_tab="tab-table-compare",
+                                className="mb-3",
+                            ),
+                            dcc.Loading(
+                                id="loading-tables-tab-content",
+                                type="default",
+                                color="#007bff",
+                                children=html.Div(
+                                    id="tables-tab-content",
+                                    className="bg-white rounded-3 shadow-sm p-3",
+                                ),
+                            ),
+                        ]
                     ),
                 ],
+                className="shadow-sm",
             ),
         ],
-        className="container",
+        className="container-fluid px-4 py-3",
     )
 
 
@@ -453,6 +576,15 @@ def initialize_tables(
         filters_1 = dash.no_update
         filters_2 = dash.no_update
 
+    # Get the filters from the callback context for description
+    states_info = dh._inputs_flatten_list(callback_context.states_list)
+    filters_table_1 = dh._inputs_parse_type(
+        states_info, "table-1-num-filter"
+    ) + dh._inputs_parse_type(states_info, "table-1-str-filter")
+    filters_table_2 = dh._inputs_parse_type(
+        states_info, "table-2-num-filter"
+    ) + dh._inputs_parse_type(states_info, "table-2-str-filter")
+
     # filter the datasets
     filtered_table_1, filtered_table_2 = filter_tables(
         table_1, table_2, filter_list=callback_context.states_list
@@ -486,6 +618,8 @@ def initialize_tables(
         filtered_table_2,
         table_1_select_period,
         table_2_select_period,
+        filters_table_1,  # Pass the filter info directly from states
+        filters_table_2,
     )
 
     # select/ultimate graphs
@@ -797,9 +931,35 @@ def get_table_desc(
     filtered_table_2,
     table_1_select_period,
     table_2_select_period,
+    filters_table_1=None,
+    filters_table_2=None,
 ):
     """Get the table descriptions."""
     mt = tables.MortTable()
+
+    # Get active filters for table 1
+    active_filters_1 = "None"
+    if filters_table_1:
+        active_filters = []
+        for filter_info in filters_table_1:
+            if isinstance(filter_info, dict) and "id" in filter_info:
+                col = filter_info["id"]["index"]
+                if filter_info.get("value"):  # Check if filter has a value
+                    active_filters.append(f"{col}: {filter_info['value']}")
+        if active_filters:
+            active_filters_1 = ", ".join(active_filters)
+
+    # Get active filters for table 2
+    active_filters_2 = "None"
+    if filters_table_2:
+        active_filters = []
+        for filter_info in filters_table_2:
+            if isinstance(filter_info, dict) and "id" in filter_info:
+                col = filter_info["id"]["index"]
+                if filter_info.get("value"):  # Check if filter has a value
+                    active_filters.append(f"{col}: {filter_info['value']}")
+        if active_filters:
+            active_filters_2 = ", ".join(active_filters)
 
     # table description 1
     if isinstance(table1_id, str):
@@ -825,6 +985,9 @@ def get_table_desc(
             html.Br(),
             html.B("Select Period:"),
             html.Span(f" {table_1_select_period}"),
+            html.Br(),
+            html.B("Active Filters:"),
+            html.Span(f" {active_filters_1}"),
         ]
     )
 
@@ -852,6 +1015,9 @@ def get_table_desc(
             html.Br(),
             html.B("Select Period:"),
             html.Span(f" {table_2_select_period}"),
+            html.Br(),
+            html.B("Active Filters:"),
+            html.Span(f" {active_filters_2}"),
         ]
     )
 
@@ -892,3 +1058,91 @@ def get_su_graph(df, select_period, title):
     fig.update_traces(contours_coloring="heatmap", colorscale=colorscale)
 
     return dcc.Graph(figure=fig)
+
+
+@callback(
+    Output({"type": "table-1-collapse", "index": ALL}, "is_open"),
+    Output({"type": "table-1-collapse-button", "index": ALL}, "children"),
+    Input({"type": "table-1-collapse-button", "index": ALL}, "n_clicks"),
+    State({"type": "table-1-collapse", "index": ALL}, "is_open"),
+    State({"type": "table-1-collapse-button", "index": ALL}, "children"),
+    prevent_initial_call=True,
+)
+def toggle_table_1_collapse(n_clicks, is_open, children):
+    """Toggle collapse state of filter checklists for table 1."""
+    if not n_clicks or not any(n_clicks):
+        raise dash.exceptions.PreventUpdate
+
+    # Find which button was clicked
+    ctx = callback_context
+    if not ctx.triggered:
+        return [False] * len(is_open), children
+
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    button_idx = eval(button_id)["index"]
+
+    # Update the collapse states and button icons
+    new_is_open = []
+    new_children = []
+
+    for _, (col, is_open_state, child) in enumerate(
+        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
+    ):
+        # Update collapse state
+        new_state = not is_open_state if col == button_idx else is_open_state
+        new_is_open.append(new_state)
+
+        # Update button content
+        label = child[0]["props"]["children"]  # Get the column name
+        new_children.append(
+            [
+                html.Span(label, style={"flex-grow": 1}),
+                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
+            ]
+        )
+
+    return new_is_open, new_children
+
+
+@callback(
+    Output({"type": "table-2-collapse", "index": ALL}, "is_open"),
+    Output({"type": "table-2-collapse-button", "index": ALL}, "children"),
+    Input({"type": "table-2-collapse-button", "index": ALL}, "n_clicks"),
+    State({"type": "table-2-collapse", "index": ALL}, "is_open"),
+    State({"type": "table-2-collapse-button", "index": ALL}, "children"),
+    prevent_initial_call=True,
+)
+def toggle_table_2_collapse(n_clicks, is_open, children):
+    """Toggle collapse state of filter checklists for table 2."""
+    if not n_clicks or not any(n_clicks):
+        raise dash.exceptions.PreventUpdate
+
+    # Find which button was clicked
+    ctx = callback_context
+    if not ctx.triggered:
+        return [False] * len(is_open), children
+
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    button_idx = eval(button_id)["index"]
+
+    # Update the collapse states and button icons
+    new_is_open = []
+    new_children = []
+
+    for _, (col, is_open_state, child) in enumerate(
+        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
+    ):
+        # Update collapse state
+        new_state = not is_open_state if col == button_idx else is_open_state
+        new_is_open.append(new_state)
+
+        # Update button content
+        label = child[0]["props"]["children"]  # Get the column name
+        new_children.append(
+            [
+                html.Span(label, style={"flex-grow": 1}),
+                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
+            ]
+        )
+
+    return new_is_open, new_children

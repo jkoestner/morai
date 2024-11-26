@@ -281,6 +281,7 @@ def layout():
                                     className="mb-3",
                                 ),
                             ),
+                            # Update Analysis Button Row
                             dbc.Row(
                                 [
                                     dbc.Col(
@@ -297,6 +298,12 @@ def layout():
                                         ),
                                         width=2,
                                     ),
+                                ],
+                                className="mb-3",  # Add margin below the button
+                            ),
+                            # Chart and Filters Row
+                            dbc.Row(
+                                [
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-cdc-mi",
@@ -307,7 +314,7 @@ def layout():
                                                 className="bg-white rounded-3 shadow-sm p-3",
                                             ),
                                         ),
-                                        width=8,
+                                        width=10,
                                     ),
                                     dbc.Col(
                                         dbc.Card(
@@ -674,7 +681,6 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
 
     # create the filters
     cdc_mi_filters = dash.no_update
-    print(cdc_mi_num_filters)
     if not cdc_mi_num_filters:
         cdc_mi_filters = dh.generate_filters(
             df=mi,
@@ -684,3 +690,47 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
         )["filters"]
 
     return dcc.Graph(figure=cdc_mi_chart), cdc_mi_description, cdc_mi_filters
+
+
+@callback(
+    Output({"type": "cdc_mi-collapse", "index": ALL}, "is_open"),
+    Output({"type": "cdc_mi-collapse-button", "index": ALL}, "children"),
+    Input({"type": "cdc_mi-collapse-button", "index": ALL}, "n_clicks"),
+    State({"type": "cdc_mi-collapse", "index": ALL}, "is_open"),
+    State({"type": "cdc_mi-collapse-button", "index": ALL}, "children"),
+    prevent_initial_call=True,
+)
+def toggle_cdc_mi_collapse(n_clicks, is_open, children):
+    """Toggle collapse state of filter checklists."""
+    if not n_clicks or not any(n_clicks):
+        raise dash.exceptions.PreventUpdate
+
+    # Find which button was clicked
+    ctx = callback_context
+    if not ctx.triggered:
+        return [False] * len(is_open), children
+
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    button_idx = eval(button_id)["index"]
+
+    # Update the collapse states and button icons
+    new_is_open = []
+    new_children = []
+
+    for _, (col, is_open_state, child) in enumerate(
+        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
+    ):
+        # Update collapse state
+        new_state = not is_open_state if col == button_idx else is_open_state
+        new_is_open.append(new_state)
+
+        # Update button content
+        label = child[0]["props"]["children"]  # Get the column name
+        new_children.append(
+            [
+                html.Span(label, style={"flex-grow": 1}),
+                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
+            ]
+        )
+
+    return new_is_open, new_children
