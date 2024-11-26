@@ -3,6 +3,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -21,7 +22,12 @@ CONFIG_PATH = FILES_PATH / "dashboard_config.yaml"
 logger = custom_logger.setup_logging(__name__)
 
 
-def clean_df(df, lowercase=True, underscore=True, update_cat=True):
+def clean_df(
+    df: pd.DataFrame,
+    lowercase: bool = True,
+    underscore: bool = True,
+    update_cat: bool = True,
+) -> pd.DataFrame:
     """
     Clean the DataFrame.
 
@@ -69,7 +75,7 @@ def clean_df(df, lowercase=True, underscore=True, update_cat=True):
     return df
 
 
-def memory_usage_df(df):
+def memory_usage_df(df: pd.DataFrame) -> None:
     """
     Calculate the memory usage of the DataFrame.
 
@@ -87,7 +93,7 @@ def memory_usage_df(df):
     print(f"Memory usage per column:\n{memory_usage_per_column}")
 
 
-def memory_usage_jupyter(globals):
+def memory_usage_jupyter(globals: dict) -> pd.DataFrame:
     """
     Calculate the memory usage of objects in the Jupyter notebook.
 
@@ -122,7 +128,7 @@ def memory_usage_jupyter(globals):
     return object_sizes
 
 
-def test_path(path):
+def test_path(path: str) -> Path:
     """
     Test the path with a few different options and return if it exists.
 
@@ -158,7 +164,7 @@ def test_path(path):
     return path
 
 
-def check_merge(func):
+def check_merge(func: Callable) -> Callable:
     """
     Check the merge for a few common issues.
 
@@ -172,7 +178,7 @@ def check_merge(func):
 
     """
 
-    def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs) -> Any:
         # check func is 'pd.merge'
         if func.__name__ != "merge":
             raise ValueError("This check only works with the `pd.merge` function")
@@ -239,7 +245,9 @@ def check_merge(func):
     return wrapper
 
 
-def _weighted_mean(values, weights=None):
+def _weighted_mean(
+    values: Union[list, np.ndarray], weights: Optional[Union[list, np.ndarray]] = None
+) -> float:
     """
     Calculate the weighted mean.
 
@@ -266,7 +274,7 @@ def _weighted_mean(values, weights=None):
         return np.average(values, weights=weights)
 
 
-def _convert_object_to_category(df, column):
+def _convert_object_to_category(df: pd.DataFrame, column: str) -> pd.DataFrame:
     """
     Convert the column to a category if it is an object.
 

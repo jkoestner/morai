@@ -1,5 +1,7 @@
 """Creates models for forecasting mortality rates."""
 
+from typing import Any, Optional
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -23,7 +25,7 @@ class GLM(BaseEstimator, RegressorMixin):
 
     def __init__(
         self,
-    ):
+    ) -> None:
         """Initialize the model."""
         self.r_style = None
         self.mapping = None
@@ -31,8 +33,15 @@ class GLM(BaseEstimator, RegressorMixin):
         self.is_fitted_ = False
 
     def fit(
-        self, X, y, weights=None, family=None, r_style=False, mapping=None, **kwargs
-    ):
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        weights: pd.Series = None,
+        family: sm.families = None,
+        r_style: bool = False,
+        mapping: Optional[dict] = None,
+        **kwargs,
+    ) -> Any:
         """
         Fit the GLM model.
 
@@ -68,7 +77,7 @@ class GLM(BaseEstimator, RegressorMixin):
 
         return model
 
-    def predict(self, X, manual=False):
+    def predict(self, X: pd.DataFrame, manual: bool = False) -> np.ndarray:
         """
         Predict the target.
 
@@ -128,7 +137,7 @@ class GLM(BaseEstimator, RegressorMixin):
 
         return predictions
 
-    def get_formula(self, X, y):
+    def get_formula(self, X: pd.DataFrame, y: pd.Series) -> str:
         """
         Get the formula for the GLM model.
 
@@ -179,7 +188,7 @@ class GLM(BaseEstimator, RegressorMixin):
 
         return formula
 
-    def get_odds(self, display=False):
+    def get_odds(self, display: bool = False) -> pd.DataFrame:
         """
         Get the odds ratio.
 
@@ -222,7 +231,13 @@ class GLM(BaseEstimator, RegressorMixin):
 
         return odds_ratio
 
-    def get_feature_contributions(self, X, y, weights=None, base_features=None):
+    def get_feature_contributions(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        weights: pd.Series = None,
+        base_features: Optional[list] = None,
+    ) -> pd.DataFrame:
         """
         Get the feature contributions.
 
@@ -299,7 +314,14 @@ class GLM(BaseEstimator, RegressorMixin):
 
         return feature_contributions
 
-    def _setup_model(self, X, y, weights=None, family=None, **kwargs):
+    def _setup_model(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        weights: pd.Series = None,
+        family: sm.families = None,
+        **kwargs,
+    ) -> Any:
         """
         Set up the GLM model.
 
@@ -352,7 +374,7 @@ class GLM(BaseEstimator, RegressorMixin):
 class ModelWrapper:
     """Create a model wrapper to get make retrieving results agnostic."""
 
-    def __init__(self, model):
+    def __init__(self, model: Any) -> None:
         """
         Initialize the model wrapper.
 
@@ -364,7 +386,7 @@ class ModelWrapper:
         """
         self.model = model
 
-    def get_features(self):
+    def get_features(self) -> list:
         """
         Get the features from the model.
 
@@ -396,7 +418,7 @@ class ModelWrapper:
             raise ValueError("Could not find `features` in the model.")
         return features
 
-    def get_importance(self):
+    def get_importance(self) -> pd.DataFrame:
         """
         Get the importance of the features.
 
@@ -424,7 +446,7 @@ class ModelWrapper:
         importance_df = importance_df.sort_values(by="importance", ascending=False)
         return importance_df
 
-    def check_predict(self):
+    def check_predict(self) -> None:
         """Check if the model has a predict method."""
         if not hasattr(self.model, "predict"):
             raise ValueError("model does not have a predict method")
@@ -448,11 +470,11 @@ class LeeCarter:
 
     def __init__(
         self,
-        age_col="attained_age",
-        year_col="observation_year",
-        actual_col="death_claim_amount",
-        expose_col="amount_exposed",
-    ):
+        age_col: str = "attained_age",
+        year_col: str = "observation_year",
+        actual_col: str = "death_claim_amount",
+        expose_col: str = "amount_exposed",
+    ) -> None:
         """
         Initialize the model.
 
@@ -484,8 +506,8 @@ class LeeCarter:
 
     def structure_df(
         self,
-        df,
-    ):
+        df: pd.DataFrame,
+    ) -> pd.DataFrame:
         """
         Structure the data for the Lee Carter model.
 
@@ -540,7 +562,7 @@ class LeeCarter:
 
         return self.lc_df
 
-    def fit(self, lc_df):
+    def fit(self, lc_df: pd.DataFrame) -> pd.DataFrame:
         """
         Fit the LeeCarter model from a crude_df which will add the qx_lc rates.
 
@@ -626,7 +648,7 @@ class LeeCarter:
 
         return lc_df
 
-    def forecast(self, years, seed=None):
+    def forecast(self, years: int, seed: Optional[int] = None) -> pd.DataFrame:
         """
         Forecast the mortality rates using deterministic random walk.
 
@@ -685,7 +707,12 @@ class LeeCarter:
 
         return lcf_df
 
-    def map(self, df, age_col=None, year_col=None):
+    def map(
+        self,
+        df: pd.DataFrame,
+        age_col: Optional[str] = None,
+        year_col: Optional[str] = None,
+    ) -> pd.DataFrame:
         """
         Map the mortality rates from the Lee Carter model.
 
@@ -749,11 +776,11 @@ class CBD:
 
     def __init__(
         self,
-        age_col="attained_age",
-        year_col="observation_year",
-        actual_col="death_claim_amount",
-        expose_col="amount_exposed",
-    ):
+        age_col: str = "attained_age",
+        year_col: str = "observation_year",
+        actual_col: str = "death_claim_amount",
+        expose_col: str = "amount_exposed",
+    ) -> None:
         """
         Initialize the model.
 
@@ -786,8 +813,8 @@ class CBD:
 
     def structure_df(
         self,
-        df,
-    ):
+        df: pd.DataFrame,
+    ) -> pd.DataFrame:
         """
         Structure the data for the CBD model.
 
@@ -842,7 +869,7 @@ class CBD:
 
         return self.cbd_df
 
-    def fit(self, cbd_df):
+    def fit(self, cbd_df: pd.DataFrame) -> pd.DataFrame:
         """
         Get the forecasted mortality rates.
 
@@ -925,7 +952,7 @@ class CBD:
 
         return cbd_df
 
-    def forecast(self, years, seed=None):
+    def forecast(self, years: int, seed: Optional[int] = None) -> pd.DataFrame:
         """
         Forecast the mortality rates using deterministic random walk.
 
@@ -1004,7 +1031,12 @@ class CBD:
 
         return cbdf_df
 
-    def map(self, df, age_col=None, year_col=None):
+    def map(
+        self,
+        df: pd.DataFrame,
+        age_col: Optional[str] = None,
+        year_col: Optional[str] = None,
+    ) -> pd.DataFrame:
         """
         Map the mortality rates from the CBD model.
 
@@ -1052,7 +1084,7 @@ class CBD:
 
         return cbd_df
 
-    def _logit(self, a):
+    def _logit(self, a: float) -> float:
         """
         Logit function.
 
@@ -1070,7 +1102,7 @@ class CBD:
         return np.log(a / (1 - a))
 
 
-def calc_likelihood_ratio(full_model, reduced_model):
+def calc_likelihood_ratio(full_model: Any, reduced_model: Any) -> dict:
     """
     Calculate the likelihood ratio.
 

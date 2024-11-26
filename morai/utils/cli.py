@@ -6,7 +6,7 @@ from argparse import ArgumentDefaultsHelpFormatter
 from morai.dashboard import app
 
 
-def _create_argparser():
+def _create_argparser() -> argparse.ArgumentParser:
     description = """Morai CLI."""
     _parser = argparse.ArgumentParser(
         description=description,
@@ -25,7 +25,7 @@ def _create_argparser():
 parser = _create_argparser()
 
 
-def cli():
+def cli() -> None:
     """Command line interface."""
     args = parser.parse_args()
 

@@ -10,7 +10,13 @@ from morai.utils import custom_logger
 logger = custom_logger.setup_logging(__name__)
 
 
-def export_to_sql(df, db_filepath, table_name, if_exists="append", index=False):
+def export_to_sql(
+    df: pd.DataFrame,
+    db_filepath: str,
+    table_name: str,
+    if_exists: str = "append",
+    index: bool = False,
+) -> None:
     """
     Export a DataFrame to a SQLite database.
 
@@ -31,7 +37,8 @@ def export_to_sql(df, db_filepath, table_name, if_exists="append", index=False):
     """
     # initialize
     logger.info(
-        f"{if_exists} data to SQLite database: `{db_filepath}` and table: `{table_name}`"
+        f"{if_exists} data to SQLite database: "
+        f"`{db_filepath}` and table: `{table_name}`"
     )
 
     # connect to the database
@@ -46,7 +53,7 @@ def export_to_sql(df, db_filepath, table_name, if_exists="append", index=False):
         conn.close()
 
 
-def read_sql(db_filepath, query):
+def read_sql(db_filepath: str, query: str) -> pd.DataFrame:
     """
     Read a SQLite database.
 
@@ -78,7 +85,7 @@ def read_sql(db_filepath, query):
     return df
 
 
-def get_tables(db_filepath):
+def get_tables(db_filepath: str) -> list:
     """
     Get the tables from a SQLite database.
 
@@ -107,7 +114,7 @@ def get_tables(db_filepath):
     return tables
 
 
-def table_remove(db_filepath, table_name):
+def table_remove(db_filepath: str, table_name: str) -> None:
     """
     Remove a table from a SQLite database.
 
@@ -131,7 +138,7 @@ def table_remove(db_filepath, table_name):
         conn.close()
 
 
-def table_dtypes(db_filepath, table_name):
+def table_dtypes(db_filepath: str, table_name: str) -> dict:
     """
     Get the data types of a table from a SQLite database.
 

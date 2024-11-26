@@ -141,7 +141,9 @@ select = [
 ignore = [
     ### Intentionally disabled
     # type hinting exceptions
+    "ANN002",
     "ANN003",
+    "ANN101",
     "ANN401",
     # ignore __init__ docstring
     "D107",

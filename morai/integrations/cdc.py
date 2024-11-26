@@ -18,6 +18,7 @@ Link: https://github.com/alipphardt/cdc-wonder-api
 """
 
 import xml.etree.ElementTree as ET
+from typing import Optional
 
 import pandas as pd
 import requests
@@ -30,8 +31,11 @@ logger = custom_logger.setup_logging(__name__)
 
 
 def get_cdc_data_xml(
-    xml_filename, parse_date_col=None, convert_dtypes=True, clean_df=True
-):
+    xml_filename: str,
+    parse_date_col: Optional[str] = None,
+    convert_dtypes: bool = True,
+    clean_df: bool = True,
+) -> pd.DataFrame:
     """
     Get CDC data from an XML file.
 
@@ -96,7 +100,9 @@ def get_cdc_data_xml(
     return cdc_df
 
 
-def get_cdc_data_txt(txt_filename, convert_dtypes=True, clean_df=True):
+def get_cdc_data_txt(
+    txt_filename: str, convert_dtypes: bool = True, clean_df: bool = True
+) -> pd.DataFrame:
     """
     Get CDC data from a TXT file.
 
@@ -136,7 +142,7 @@ def get_cdc_data_txt(txt_filename, convert_dtypes=True, clean_df=True):
     return cdc_df
 
 
-def get_cdc_data_sql(db_filepath, table_name):
+def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
     """
     Get CDC data from a SQLite database.
 
@@ -175,7 +181,7 @@ def get_cdc_data_sql(db_filepath, table_name):
     return cdc_df
 
 
-def get_cdc_reference(sheet_name):
+def get_cdc_reference(sheet_name: str) -> pd.DataFrame:
     """
     Get CDC reference data.
 
@@ -200,7 +206,9 @@ def get_cdc_reference(sheet_name):
     return reference_df
 
 
-def map_reference(df, col, on_dict=None, sheet_name="cod"):
+def map_reference(
+    df: pd.DataFrame, col: str, on_dict: Optional[dict] = None, sheet_name: str = "cod"
+) -> pd.DataFrame:
     """
     Map a column from the CDC reference to the DataFrame.
 
@@ -240,7 +248,7 @@ def map_reference(df, col, on_dict=None, sheet_name="cod"):
     return df
 
 
-def calc_mi(df, rolling=10):
+def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
     """
     Calulate the crude mortality improvment using a standardized population.
 
@@ -299,11 +307,11 @@ def calc_mi(df, rolling=10):
 
 
 def compare_dfs(
-    left_df,
-    right_df,
-    compare_col_dict=None,
-    compare_value_dict=None,
-):
+    left_df: pd.DataFrame,
+    right_df: pd.DataFrame,
+    compare_col_dict: Optional[dict] = None,
+    compare_value_dict: Optional[dict] = None,
+) -> pd.DataFrame:
     """
     Compare two DataFrames.
 
@@ -352,7 +360,7 @@ def compare_dfs(
     return compare_df
 
 
-def _xml_parse_dataid(xml_string):
+def _xml_parse_dataid(xml_string: str) -> str:
     """
     Parse the data-id from an XML string object.
 
@@ -374,7 +382,7 @@ def _xml_parse_dataid(xml_string):
     return data_id
 
 
-def _xml_create_df(xml_response):
+def _xml_create_df(xml_response: str) -> pd.DataFrame:
     """
     Create a DataFrame from an XML string object.
 
@@ -453,7 +461,7 @@ def _xml_create_df(xml_response):
     return df
 
 
-def _parse_date_col(df, col="Month"):
+def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
     """
     Parse the date column to a datetime object.
 
@@ -481,7 +489,7 @@ def _parse_date_col(df, col="Month"):
     return parsed_dates
 
 
-def _infer_dtypes(df):
+def _infer_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """
     Infer data types from a DataFrame.
 

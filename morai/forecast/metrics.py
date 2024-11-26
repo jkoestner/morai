@@ -2,6 +2,7 @@
 
 import json
 from io import StringIO
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ from morai.utils import custom_logger, helpers
 logger = custom_logger.setup_logging(__name__)
 
 
-def smape(y_true, y_pred, epsilon=1e-10):
+def smape(y_true: pd.Series, y_pred: pd.Series, epsilon: float = 1e-10) -> float:
     """
     Calculate the Symetric Mean Absolute Percentage Error (sMAPE).
 
@@ -37,7 +38,7 @@ def smape(y_true, y_pred, epsilon=1e-10):
     return np.mean((y_true - y_pred).abs() / denominator)
 
 
-def ae(y_true, y_pred):
+def ae(y_true: pd.Series, y_pred: pd.Series) -> float:
     """
     Calculate the actual/expected.
 
@@ -57,7 +58,9 @@ def ae(y_true, y_pred):
     return y_true.sum() / y_pred.sum()
 
 
-def ae_rank(df, features, actuals, expecteds, exposures):
+def ae_rank(
+    df: pd.DataFrame, features: list, actuals: str, expecteds: str, exposures: str
+) -> pd.DataFrame:
     """
     Calculate the actual/expected ranking.
 
@@ -123,7 +126,14 @@ def ae_rank(df, features, actuals, expecteds, exposures):
     return rank_df
 
 
-def calculate_metrics(y_true, y_pred, metrics, prefix="", model=None, **kwargs):
+def calculate_metrics(
+    y_true: pd.Series,
+    y_pred: pd.Series,
+    metrics: list,
+    prefix: str = "",
+    model: Optional[Any] = None,
+    **kwargs,
+) -> dict:
     """
     Calculate the metrics.
 
@@ -195,7 +205,9 @@ class ModelResults:
 
     """
 
-    def __init__(self, filepath=None, metrics=None):
+    def __init__(
+        self, filepath: Optional[str] = None, metrics: Optional[list] = None
+    ) -> None:
         self.filepath = filepath
 
         # load model results from file
@@ -231,14 +243,14 @@ class ModelResults:
 
     def add_model(
         self,
-        model_name,
-        data_path,
-        data_shape,
-        preprocess_dict,
-        model_params,
-        scorecard,
-        importance=None,
-    ):
+        model_name: str,
+        data_path: str,
+        data_shape: tuple,
+        preprocess_dict: dict,
+        model_params: dict,
+        scorecard: pd.DataFrame,
+        importance: pd.DataFrame = None,
+    ) -> None:
         """
         Add the model.
 
@@ -327,7 +339,7 @@ class ModelResults:
                 [self.importance, importance_row], ignore_index=True
             )
 
-    def remove_model(self, model_name):
+    def remove_model(self, model_name: str) -> None:
         """
         Remove the model.
 
@@ -346,7 +358,7 @@ class ModelResults:
         self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
         self.importance = self.importance[self.importance["model_name"] != model_name]
 
-    def save_model(self, filepath=None):
+    def save_model(self, filepath: Optional[str] = None) -> None:
         """
         Save the model.
 
@@ -387,16 +399,16 @@ class ModelResults:
 
     def get_scorecard(
         self,
-        y_true_train,
-        y_pred_train,
-        weights_train=None,
-        y_true_test=None,
-        y_pred_test=None,
-        weights_test=None,
-        metrics=None,
-        model=None,
+        y_true_train: pd.Series,
+        y_pred_train: pd.Series,
+        weights_train: pd.Series = None,
+        y_true_test: pd.Series = None,
+        y_pred_test: pd.Series = None,
+        weights_test: pd.Series = None,
+        metrics: Optional[list] = None,
+        model: Optional[Any] = None,
         **kwargs,
-    ):
+    ) -> pd.DataFrame:
         """
         Get the metrics.
 
@@ -485,7 +497,7 @@ class ModelResults:
 
         return scorecard
 
-    def check_duplicate_name(self, model_name):
+    def check_duplicate_name(self, model_name: str) -> bool:
         """
         Check if the model name already exists.
 

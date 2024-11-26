@@ -7,6 +7,7 @@ https://gist.github.com/joshbode/58fac7ababc700f51e2a9ecdebe563ad
 
 import logging
 import sys
+from typing import Any, Callable, Optional
 
 from colorama import Back, Fore, Style
 
@@ -14,13 +15,13 @@ from colorama import Back, Fore, Style
 class ColoredFormatter(logging.Formatter):
     """Colored log formatter."""
 
-    def __init__(self, *args, colors=None, **kwargs):
+    def __init__(self, *args, colors: Optional[dict] = None, **kwargs) -> None:
         """Initialize the formatter with specified format strings."""
         super().__init__(*args, **kwargs)
 
         self.colors = colors if colors else {}
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         """Format the specified record as text."""
         record.color = self.colors.get(record.levelname, "")
         record.reset = Style.RESET_ALL
@@ -29,7 +30,7 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-def setup_logging(name="morai"):
+def setup_logging(name: str = "morai") -> logging.Logger:
     """
     Set up the logging.
 
@@ -69,7 +70,7 @@ def setup_logging(name="morai"):
     return morai_logger
 
 
-def set_log_level(new_level, module_prefix="morai"):
+def set_log_level(new_level: str, module_prefix: str = "morai") -> None:
     """
     Set the log level.
 
@@ -93,7 +94,7 @@ def set_log_level(new_level, module_prefix="morai"):
                 logger.setLevel(numeric_level)
 
 
-def get_log_level(module_prefix="morai"):
+def get_log_level(module_prefix: str = "morai") -> str:
     """
     Get the log level.
 
@@ -118,7 +119,7 @@ def get_log_level(module_prefix="morai"):
     return log_level
 
 
-def suppress_logs(func):
+def suppress_logs(func: Callable) -> Callable:
     """
     Suppress the log of a function.
 
@@ -129,7 +130,7 @@ def suppress_logs(func):
 
     """
 
-    def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs) -> Any:
         logger = logging.getLogger(func.__module__)
         current_level = logger.level
         logger.setLevel(logging.CRITICAL)
@@ -141,7 +142,7 @@ def suppress_logs(func):
     return wrapper
 
 
-def test_logger():
+def test_logger() -> None:
     """Test the logger."""
     logger = setup_logging(__name__)
     logger.debug("debug message")
