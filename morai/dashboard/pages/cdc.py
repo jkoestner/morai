@@ -25,16 +25,7 @@ from morai.utils import custom_logger, helpers, sql
 
 logger = custom_logger.setup_logging(__name__)
 
-
 dash.register_page(__name__, path="/cdc", name="CDC", title="morai - CDC", order=5)
-
-
-#   _                            _
-#  | |    __ _ _   _  ___  _   _| |_
-#  | |   / _` | | | |/ _ \| | | | __|
-#  | |__| (_| | |_| | (_) | |_| | |_
-#  |_____\__,_|\__, |\___/ \__,_|\__|
-#              |___/
 
 
 def layout():
@@ -42,12 +33,30 @@ def layout():
     return html.Div(
         [
             dcc.Store(id="store-cdc-results", storage_type="session"),
-            # -----------------------------------
+            # Header section with gradient background
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.H4(
+                                [
+                                    html.I(className="fas fa-heartbeat me-2"),
+                                    "CDC Analysis",
+                                ],
+                                className="mb-1",
+                            ),
+                            html.P(
+                                "Analyze CDC mortality data and trends",
+                                className="text-white-50 mb-0 small",
+                            ),
+                        ],
+                        className="bg-gradient bg-primary text-white p-4 mb-4 rounded-3 shadow-sm",
+                    ),
+                ],
+            ),
+            # Toast notification
             dbc.Toast(
-                (
-                    "Need to put table in `files/integrations/cdc/cdc.sql "
-                    "to display results."
-                ),
+                "Need to put table in `files/integrations/cdc/cdc.sql` to display results.",
                 id="toast-no-database",
                 header="Input Error",
                 is_open=False,
@@ -55,91 +64,119 @@ def layout():
                 icon="danger",
                 style={"position": "fixed", "top": 100, "right": 10, "width": 350},
             ),
-            html.P(
-                [
-                    "This page is used to analyze cause of death stats from the CDC. ",
-                    html.Br(),
-                    "To be able to load results there needs to be a database in ",
-                    html.Code("`files/integrations/cdc/cdc.sql`"),
-                    html.Br(),
-                    "Data sourced from: ",
-                    html.A(
-                        "wonder.cdc.gov",
-                        href="https://wonder.cdc.gov/",
-                        target="_blank",
-                    ),
-                ],
+            # Description Card
+            dbc.Card(
+                dbc.CardBody(
+                    [
+                        html.H5(
+                            [
+                                html.I(className="fas fa-info-circle me-2"),
+                                "About CDC Data",
+                            ],
+                            className="card-title mb-3",
+                        ),
+                        html.P(
+                            [
+                                "This page is used to analyze cause of death stats from the CDC. ",
+                                html.Br(),
+                                "To be able to load results there needs to be a database in ",
+                                html.Code("`files/integrations/cdc/cdc.sql`"),
+                                html.Br(),
+                                "Data sourced from: ",
+                                html.A(
+                                    "wonder.cdc.gov",
+                                    href="https://wonder.cdc.gov/",
+                                    target="_blank",
+                                ),
+                            ],
+                            className="card-text mb-0",
+                        ),
+                    ]
+                ),
+                className="shadow-sm mb-4",
             ),
+            # Main Content Accordion
             dbc.Accordion(
                 [
+                    # Cause of Death Section
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                html.Div(id="cdc-cod-description"),
+                                html.Div(
+                                    id="cdc-cod-description",
+                                    className="mb-3",
+                                ),
                             ),
                             dbc.Row(
                                 [
                                     dbc.Col(
-                                        html.Div(
+                                        dbc.Button(
                                             [
-                                                dbc.Button(
-                                                    "Update",
-                                                    id="button-cod",
-                                                    className="btn btn-primary p-1",
+                                                html.I(
+                                                    className="fas fa-sync-alt me-2"
                                                 ),
+                                                "Update Analysis",
                                             ],
-                                            className="mt-2 bg-light border p-1",
+                                            id="button-cod",
+                                            color="primary",
+                                            className="w-100 shadow-sm",
                                         ),
                                         width=2,
                                     ),
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-cdc-cod",
-                                            type="dot",
-                                            children=html.Div(id="cdc-cod"),
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="cdc-cod",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
                                         ),
-                                        style={"overflow": "auto"},
-                                        width=8,
+                                        width=10,
                                     ),
                                 ],
+                                className="mb-4",
                             ),
                             dbc.Row(
-                                [
-                                    dbc.Col(
-                                        html.Div(),
-                                        width=2,
+                                dcc.Loading(
+                                    id="loading-cdc-cod-heatmap",
+                                    type="default",
+                                    color="#007bff",
+                                    children=html.Div(
+                                        id="cdc-cod-heatmap",
+                                        className="bg-white rounded-3 shadow-sm p-3",
                                     ),
-                                    dbc.Col(
-                                        dcc.Loading(
-                                            id="loading-cdc-cod-heatmap",
-                                            type="dot",
-                                            children=html.Div(id="cdc-cod-heatmap"),
-                                        ),
-                                        style={"overflow": "auto"},
-                                        width=8,
-                                    ),
-                                ],
+                                ),
                             ),
                         ],
-                        title="CDC - COD",
+                        title=[
+                            html.I(className="fas fa-chart-pie me-2"),
+                            "Cause of Death Analysis",
+                        ],
                     ),
+                    # COD Trends Section
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                html.Div(id="cdc-cod-trends-description"),
+                                html.Div(
+                                    id="cdc-cod-trends-description",
+                                    className="mb-3",
+                                ),
                             ),
                             dbc.Row(
                                 [
                                     dbc.Col(
-                                        html.Div(
+                                        dbc.Button(
                                             [
-                                                dbc.Button(
-                                                    "Update",
-                                                    id="button-cod-trends",
-                                                    className="btn btn-primary p-1",
+                                                html.I(
+                                                    className="fas fa-sync-alt me-2"
                                                 ),
+                                                "Update Analysis",
                                             ],
-                                            className="mt-2 bg-light border p-1",
+                                            id="button-cod-trends",
+                                            color="primary",
+                                            className="w-100 shadow-sm",
                                         ),
                                         width=2,
                                     ),
@@ -150,123 +187,168 @@ def layout():
                                                     dbc.Tab(
                                                         label="Trends",
                                                         tab_id="tab-trends-chart",
+                                                        label_class_name="fw-bold",
+                                                        active_label_class_name="text-primary",
                                                     ),
                                                     dbc.Tab(
                                                         label="Table-Amt",
                                                         tab_id="tab-trends-table-amt",
+                                                        label_class_name="fw-bold",
+                                                        active_label_class_name="text-primary",
                                                     ),
                                                     dbc.Tab(
                                                         label="Table-%",
                                                         tab_id="tab-trends-table-pct",
+                                                        label_class_name="fw-bold",
+                                                        active_label_class_name="text-primary",
                                                     ),
                                                 ],
                                                 id="tabs-cod-trends",
                                                 active_tab="tab-trends-chart",
+                                                className="mb-3",
                                             ),
                                             dcc.Loading(
                                                 id="loading-cdc-cod-trends",
-                                                type="dot",
-                                                children=html.Div(id="cdc-cod-trends"),
+                                                type="default",
+                                                color="#007bff",
+                                                children=html.Div(
+                                                    id="cdc-cod-trends",
+                                                    className="bg-white rounded-3 shadow-sm p-3",
+                                                ),
                                             ),
                                         ],
-                                        style={"overflow": "auto"},
-                                        width=8,
+                                        width=10,
                                     ),
                                 ],
                             ),
                         ],
-                        title="CDC - COD Trends",
+                        title=[
+                            html.I(className="fas fa-chart-line me-2"),
+                            "Mortality Trends",
+                        ],
                     ),
+                    # Monthly Analysis Section
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                html.Div(id="cdc-monthly-description"),
+                                html.Div(
+                                    id="cdc-monthly-description",
+                                    className="mb-3",
+                                ),
                             ),
                             dbc.Row(
                                 [
                                     dbc.Col(
-                                        html.Div(
+                                        dbc.Button(
                                             [
-                                                dbc.Button(
-                                                    "Update",
-                                                    id="button-monthly",
-                                                    className="btn btn-primary p-1",
+                                                html.I(
+                                                    className="fas fa-sync-alt me-2"
                                                 ),
+                                                "Update Analysis",
                                             ],
-                                            className="mt-2 bg-light border p-1",
+                                            id="button-monthly",
+                                            color="primary",
+                                            className="w-100 shadow-sm",
                                         ),
                                         width=2,
                                     ),
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-cdc-monthly",
-                                            type="dot",
-                                            children=html.Div(id="cdc-monthly"),
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="cdc-monthly",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
                                         ),
-                                        style={"overflow": "auto"},
-                                        width=8,
+                                        width=10,
                                     ),
                                 ],
                             ),
                         ],
-                        title="CDC - Monthly",
+                        title=[
+                            html.I(className="fas fa-calendar-alt me-2"),
+                            "Monthly Analysis",
+                        ],
                     ),
+                    # Mortality Improvement Section
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                html.Div(id="cdc-mi-description"),
+                                html.Div(
+                                    id="cdc-mi-description",
+                                    className="mb-3",
+                                ),
                             ),
                             dbc.Row(
                                 [
                                     dbc.Col(
-                                        html.Div(
+                                        dbc.Button(
                                             [
-                                                dbc.Button(
-                                                    "Update",
-                                                    id="button-mi",
-                                                    className="btn btn-primary p-1",
+                                                html.I(
+                                                    className="fas fa-sync-alt me-2"
                                                 ),
+                                                "Update Analysis",
                                             ],
-                                            className="mt-2 bg-light border p-1",
+                                            id="button-mi",
+                                            color="primary",
+                                            className="w-100 shadow-sm",
                                         ),
                                         width=2,
                                     ),
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-cdc-mi",
-                                            type="dot",
-                                            children=html.Div(id="cdc-mi"),
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="cdc-mi",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
                                         ),
-                                        style={"overflow": "auto"},
                                         width=8,
                                     ),
                                     dbc.Col(
-                                        [
-                                            html.H5(
-                                                "Filters",
-                                                style={
-                                                    "border-bottom": "1px solid black",
-                                                    "padding-bottom": "5px",
-                                                },
-                                            ),
-                                            html.Div(
-                                                id="cdc-mi-filters",
-                                            ),
-                                        ],
+                                        dbc.Card(
+                                            [
+                                                dbc.CardHeader(
+                                                    html.H5(
+                                                        [
+                                                            html.I(
+                                                                className="fas fa-filter me-2"
+                                                            ),
+                                                            "Filters",
+                                                        ],
+                                                        className="mb-0",
+                                                    ),
+                                                    className="bg-light",
+                                                ),
+                                                dbc.CardBody(
+                                                    html.Div(
+                                                        id="cdc-mi-filters",
+                                                    ),
+                                                ),
+                                            ],
+                                            className="shadow-sm h-100",
+                                        ),
                                         width=2,
-                                        className="mt-2 bg-light border p-1",
                                     ),
                                 ],
                             ),
                         ],
-                        title="CDC - MI",
+                        title=[
+                            html.I(className="fas fa-chart-bar me-2"),
+                            "Mortality Improvement",
+                        ],
                     ),
                 ],
                 start_collapsed=True,
                 always_open=True,
+                className="shadow-sm",
             ),
         ],
-        className="container",
+        className="container-fluid px-4 py-3",
     )
 
 
@@ -477,7 +559,7 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         [
             html.P(
                 [
-                    f"The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
+                    "The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
                     html.Br(),
                     html.Br(),
                     f"The last update was: {last_updated}",
