@@ -1145,6 +1145,75 @@ def target(
     return fig
 
 
+def get_stats(df: pd.DataFrame, features: list) -> pd.DataFrame:
+    """
+    Generate summary statistics for the dataset.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to use.
+    features : list
+        The features to use.
+
+    Returns
+    -------
+    stats : pd.DataFrame
+        DataFrame containing summary statistics
+
+    """
+    df_stats = df[features]
+    stats = df_stats.describe()
+
+    # add additional statistics
+    stats.loc["missing"] = df_stats.isnull().sum()
+    stats.loc["missing_pct"] = (df_stats.isnull().sum() / len(df_stats) * 100).round(2)
+
+    # format
+    stats = stats.transpose()
+    numeric_cols = stats.select_dtypes(include=["float64", "int64"]).columns
+    stats[numeric_cols] = stats[numeric_cols].round(2)
+    stats = stats.reset_index()
+    stats = stats.rename(columns={"index": "Feature"})
+
+    return stats
+
+
+def get_category_orders(
+    df: pd.DataFrame,
+    category: str,
+    measure: str,
+    ascending: bool = False,
+    agg: str = "sum",
+) -> Dict[str, List[Any]]:
+    """
+    Get the category order.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to use.
+    category : str
+        The category to use.
+    measure : str
+        The measure variable.
+    ascending : bool, optional (default=False)
+        Whether to sort in ascending order.
+    agg : str, optional (default='sum')
+        The aggregation function to use.
+
+    Returns
+    -------
+    category_order : dict
+        The category order
+
+    """
+    col_order = df.groupby(category)[measure].agg(agg).sort_values(ascending=ascending)
+    category_orders = {category: col_order.index.to_list()}
+
+    return category_orders
+
+
 def _pdp_make_prediction(
     model: Any,
     X: pd.DataFrame,
@@ -1187,38 +1256,3 @@ def _pdp_make_prediction(
         line_color: line_value,
         "pred": pred,
     }
-
-
-def get_category_orders(
-    df: pd.DataFrame,
-    category: str,
-    measure: str,
-    ascending: bool = False,
-    agg: str = "sum",
-) -> Dict[str, List[Any]]:
-    """
-    Get the category order.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to use.
-    category : str
-        The category to use.
-    measure : str
-        The measure variable.
-    ascending : bool, optional (default=False)
-        Whether to sort in ascending order.
-    agg : str, optional (default='sum')
-        The aggregation function to use.
-
-    Returns
-    -------
-    category_order : dict
-        The category order
-
-    """
-    col_order = df.groupby(category)[measure].agg(agg).sort_values(ascending=ascending)
-    category_orders = {category: col_order.index.to_list()}
-
-    return category_orders

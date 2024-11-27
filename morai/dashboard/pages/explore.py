@@ -64,6 +64,33 @@ def layout():
                                 ),
                                 className="shadow-sm mb-4",
                             ),
+                            # Summary Statistics Table
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H5(
+                                            [
+                                                html.I(
+                                                    className="fas fa-chart-bar me-2"
+                                                ),
+                                                "Summary Statistics",
+                                            ],
+                                            id="section-summary-stat",
+                                            className="mb-0",
+                                        ),
+                                        className="bg-light",
+                                    ),
+                                    dbc.CardBody(
+                                        dcc.Loading(
+                                            id="loading-table-stats",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(id="table-stats"),
+                                        ),
+                                    ),
+                                ],
+                                className="shadow-sm mb-4",
+                            ),
                             # Numerical Frequencies Section
                             dbc.Card(
                                 [
@@ -185,6 +212,7 @@ def set_active_link(hash, href):
 
 @callback(
     [
+        Output("table-stats", "children"),
         Output("chart-freq-num", "children"),
         Output("chart-freq-cat", "children"),
         Output("chart-target", "children"),
@@ -200,6 +228,8 @@ def update_charts(pathname, dataset, config):
     config_dataset = config["datasets"][config["general"]["dataset"]]
     features = config_dataset["columns"]["features"]
     num_cols = dataset[features].select_dtypes(include=["number"]).columns.tolist()
+    # table
+    stats_df = charters.get_stats(dataset, features=num_cols)
     # charts
     chart_freq_num = charters.frequency(
         dataset,
@@ -221,11 +251,19 @@ def update_charts(pathname, dataset, config):
         denominator=[config_dataset["defaults"]["denominator"]],
     )
 
+    stats_table = dbc.Table.from_dataframe(
+        stats_df,
+        striped=True,
+        bordered=True,
+        hover=True,
+        responsive=True,
+        className="mb-0",
+    )
     chart_freq_num = dcc.Graph(figure=chart_freq_num)
     chart_freq_cat = dcc.Graph(figure=chart_freq_cat)
     chart_target = dcc.Graph(figure=chart_target)
 
-    return chart_freq_num, chart_freq_cat, chart_target
+    return stats_table, chart_freq_num, chart_freq_cat, chart_target
 
 
 @callback(

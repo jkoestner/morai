@@ -15,19 +15,25 @@ explore_sidebar = html.Div(
         dbc.Nav(
             [
                 dbc.NavLink(
-                    "Frequency Number",
+                    "Summary Statistics",
+                    id="nav-summary-stat",
+                    href="#section-summary-stat",
+                    external_link=True,
+                ),
+                dbc.NavLink(
+                    "Numerical Frequencies",
                     id="nav-freq-num",
                     href="#section-freq-num",
                     external_link=True,
                 ),
                 dbc.NavLink(
-                    "Frequency Categorical",
+                    "Categorical Frequencies",
                     id="nav-freq-cat",
                     href="#section-freq-cat",
                     external_link=True,
                 ),
                 dbc.NavLink(
-                    "Target",
+                    "Target Analysis",
                     id="nav-target",
                     href="#section-target",
                     external_link=True,

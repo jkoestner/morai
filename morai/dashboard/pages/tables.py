@@ -301,6 +301,7 @@ def layout():
                                             min=0,
                                             max=100,
                                             value=0,
+                                            step=1,
                                             tooltip={
                                                 "placement": "bottom",
                                                 "always_visible": True,
@@ -565,12 +566,12 @@ def initialize_tables(
         filters_1 = dh.generate_filters(
             df=table_1,
             prefix="table-1",
-            exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
+            exclude_cols=["vals", "constant"],
         ).get("filters")
         filters_2 = dh.generate_filters(
             df=table_2,
             prefix="table-2",
-            exclude_cols=["attained_age", "issue_age", "duration", "vals", "constant"],
+            exclude_cols=["vals", "constant"],
         ).get("filters")
     else:
         filters_1 = dash.no_update
@@ -660,7 +661,6 @@ def create_contour(
 ):
     """Graph the mortality tables with a contour and comparison."""
     compare_df = pd.DataFrame(compare_df)
-    print("checking")
 
     # get the slider values
     issue_age_min = compare_df["issue_age"].min()
@@ -834,8 +834,12 @@ def update_table_tabs(
 def load_tables(table1_id, table2_id):
     """Get the table data and create a compare dataframe."""
     # process tables
-    mt = tables.MortTable()
+    table_1 = pd.DataFrame()
+    table_2 = pd.DataFrame()
+    table_1_select_period = "Unknown"
+    table_2_select_period = "Unknown"
     warning_tuple = (False, False)
+    mt = tables.MortTable()
 
     # table_1
     logger.debug(f"loading table 1: {table1_id}")

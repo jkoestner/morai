@@ -59,6 +59,7 @@ class MortTable:
         if rate:
             self.rate_dict = get_rate_dict(rate, rate_filename)
             rate_type = next(iter(self.rate_dict["type"].keys()))
+            col_keys = self.rate_dict["keys"] + ["vals"]
             logger.info(f"building table for rate: '{rate}' with format: '{rate_type}'")
             self.rate_name = f"qx_{self.rate_dict['rate']}"
             if rate_type == "soa":
@@ -72,7 +73,7 @@ class MortTable:
                 csv_location = get_filepath(self.rate_dict["type"]["csv"]["filename"])
                 # read in the csv
                 try:
-                    self.rate_table = pd.read_csv(csv_location)
+                    self.rate_table = pd.read_csv(csv_location, usecols=col_keys)
                 except ValueError as ve:
                     raise ValueError(f"Error reading csv: {csv_location}. ") from ve
             elif rate_type == "workbook":
