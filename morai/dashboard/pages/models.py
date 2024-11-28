@@ -65,18 +65,8 @@ def layout():
             ),
             # Toast notifications
             dbc.Toast(
-                "Need to put results in the model_results.json file to display results.",
-                id="toast-no-model-results",
-                header="Input Error",
-                is_open=False,
-                dismissable=True,
-                icon="danger",
-                style={"position": "fixed", "top": 100, "right": 10, "width": 350},
-            ),
-            dbc.Toast(
-                "Column was not included in model",
-                id="toast-pdp-no-column",
-                header="Input Error",
+                id="models-toast",
+                header="Notification",
                 is_open=False,
                 dismissable=True,
                 icon="danger",
@@ -281,7 +271,8 @@ def layout():
 @callback(
     [
         Output("store-model-results", "data"),
-        Output("toast-no-model-results", "is_open"),
+        Output("models-toast", "is_open", allow_duplicate=True),
+        Output("models-toast", "children", allow_duplicate=True),
     ],
     Input("url", "pathname"),
 )
@@ -291,12 +282,16 @@ def load_model_results(pathname):
         raise dash.exceptions.PreventUpdate
 
     if not (helpers.FILES_PATH / "result" / "model_results.json").exists():
-        return dash.no_update, True
+        return (
+            dash.no_update,
+            True,
+            "Need to put results in the model_results.json file to display results.",
+        )
 
     # load models
     model_results = metrics.ModelResults(filepath="model_results.json")
 
-    return Serverside(model_results, key="model_results"), False
+    return Serverside(model_results, key="model_results"), False, ""
 
 
 @callback(
@@ -551,7 +546,11 @@ def clicked_cell_target_dictionary(cell, model_data, config):
 
 
 @callback(
-    [Output("pdp-chart", "children"), Output("toast-pdp-no-column", "is_open")],
+    [
+        Output("pdp-chart", "children"),
+        Output("models-toast", "is_open", allow_duplicate=True),
+        Output("models-toast", "children", allow_duplicate=True),
+    ],
     Input("button-pdp", "n_clicks"),
     [
         State("store-model-results", "data"),
@@ -575,7 +574,7 @@ def display_pdp(
 
     # checks inputs needed
     if model_file is None or x_axis_col is None:
-        return dash.no_update
+        return dash.no_update, True, "Model file or x-axis column is not selected."
 
     # load model
     model = joblib.load(helpers.FILES_PATH / "models" / model_file)
@@ -619,7 +618,7 @@ def display_pdp(
     if not any(
         col in mapping.keys() for col in [x_axis_col, line_color, weight, secondary]
     ):
-        return dash.no_update, True
+        return dash.no_update, True, "Column was not included in model."
 
     # create pdp
     pdp_chart = charters.pdp(
@@ -634,7 +633,7 @@ def display_pdp(
         quick=True,
     )
 
-    return dcc.Graph(figure=pdp_chart), False
+    return dcc.Graph(figure=pdp_chart), False, ""
 
 
 # Add new callbacks for the filter offcanvas

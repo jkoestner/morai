@@ -168,6 +168,8 @@ def generate_filters(
     if not columns:
         return {}
 
+    columns = sorted(columns)
+
     # create filters
     for col in columns:
         if isinstance(df[col][0], str) or df[col].nunique() < num_to_str_count:

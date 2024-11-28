@@ -68,18 +68,8 @@ def layout():
             ),
             # Toast notifications
             dbc.Toast(
-                "Need to enter two tables to compare.",
-                id="toast-null-tables",
-                header="Input Error",
-                is_open=False,
-                dismissable=True,
-                icon="danger",
-                style={"position": "fixed", "top": 100, "right": 10, "width": 350},
-            ),
-            dbc.Toast(
-                "Table not found.",
-                id="toast-table-not-found",
-                header="Input Error",
+                id="tables-toast",
+                header="Notification",
                 is_open=False,
                 dismissable=True,
                 icon="danger",
@@ -266,7 +256,7 @@ def layout():
                             html.H5(
                                 [
                                     html.I(className="fas fa-project-diagram me-2"),
-                                    "Table Comparison Contour",
+                                    "Table Comparison Contour (Table 1 / Table 2)",
                                 ],
                                 id="section-table-contour",
                                 className="mb-3",
@@ -291,24 +281,31 @@ def layout():
                             ),
                             dbc.Row(
                                 dbc.Col(
-                                    [
-                                        html.Label(
-                                            "Issue Age",
-                                            className="text-center mb-2",
-                                        ),
-                                        dcc.Slider(
-                                            id="slider-issue-age",
-                                            min=0,
-                                            max=100,
-                                            value=0,
-                                            step=1,
-                                            tooltip={
-                                                "placement": "bottom",
-                                                "always_visible": True,
-                                            },
-                                            className="mb-4",
-                                        ),
-                                    ],
+                                    html.Div(
+                                        [
+                                            html.Label(
+                                                "Issue Age",
+                                                className="text-center mb-2",
+                                            ),
+                                            dcc.Slider(
+                                                id="slider-issue-age",
+                                                min=0,
+                                                max=100,
+                                                value=0,
+                                                step=1,
+                                                marks={
+                                                    i: str(i) for i in range(0, 100, 10)
+                                                },
+                                                tooltip={
+                                                    "placement": "bottom",
+                                                    "always_visible": True,
+                                                },
+                                                className="mb-4",
+                                            ),
+                                        ],
+                                        id="slider-container",
+                                        style={"display": "none"},
+                                    ),
                                     width=6,
                                     className="mx-auto",
                                 ),
@@ -521,8 +518,8 @@ def set_table_2_input(value):
         Output("table-2-desc", "children"),
         Output("graph-su-table-1", "children"),
         Output("graph-su-table-2", "children"),
-        Output("toast-null-tables", "is_open"),
-        Output("toast-table-not-found", "is_open"),
+        Output("tables-toast", "is_open", allow_duplicate=True),
+        Output("tables-toast", "children", allow_duplicate=True),
     ],
     [Input("compare-button", "n_clicks"), Input("filter-button", "n_clicks")],
     [
@@ -548,10 +545,10 @@ def initialize_tables(
     """Get the initial table data."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
     no_upate_tuple = (dash.no_update,) * 9
-    warning_tuple = (False, False)
+    warning_tuple = (False, "")
 
     if table1_id is None or table2_id is None:
-        warning_tuple = (True, False)
+        return (*no_upate_tuple, True, "No table selected.")
 
     # load tables
     table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple = (
@@ -649,9 +646,11 @@ def initialize_tables(
 @callback(
     [
         Output("graph-contour", "children"),
+        Output("slider-container", "style"),
         Output("slider-issue-age", "min"),
         Output("slider-issue-age", "max"),
         Output("slider-issue-age", "value"),
+        Output("slider-issue-age", "marks"),
     ],
     [Input("store-table-compare", "data")],
     prevent_initial_call=True,
@@ -666,6 +665,7 @@ def create_contour(
     issue_age_min = compare_df["issue_age"].min()
     issue_age_max = compare_df["issue_age"].max()
     issue_age_value = issue_age_min
+    issue_age_marks = {i: str(i) for i in range(issue_age_min, issue_age_max, 10)}
 
     # adding attained_age to additional hover data
     grouped_data = (
@@ -700,9 +700,11 @@ def create_contour(
 
     return (
         graph_contour,
+        {"display": "block"},
         issue_age_min,
         issue_age_max,
         issue_age_value,
+        issue_age_marks,
     )
 
 
@@ -838,7 +840,7 @@ def load_tables(table1_id, table2_id):
     table_2 = pd.DataFrame()
     table_1_select_period = "Unknown"
     table_2_select_period = "Unknown"
-    warning_tuple = (False, False)
+    warning_tuple = (False, "")
     mt = tables.MortTable()
 
     # table_1
@@ -853,7 +855,7 @@ def load_tables(table1_id, table2_id):
                 table_1 = table_1.to_pandas()
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table1_id}")
-                warning_tuple = (False, True)
+                warning_tuple = (True, f"Table not found: {table1_id}")
         # rate table
         else:
             try:
@@ -862,7 +864,7 @@ def load_tables(table1_id, table2_id):
                 table_1_select_period = "Unknown"
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table1_id}")
-                warning_tuple = (False, True)
+                warning_tuple = (True, f"Table not found: {table1_id}")
         # add age and duration columns if not present
         table_1 = tables.add_aa_ia_dur_cols(table_1)
     # soa table
@@ -872,7 +874,7 @@ def load_tables(table1_id, table2_id):
             table_1_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table1_id}")
-            warning_tuple = (False, True)
+            warning_tuple = (True, f"Table not found: {table1_id}")
 
     # table_2
     logger.debug(f"loading table 2: {table2_id}")
@@ -886,7 +888,7 @@ def load_tables(table1_id, table2_id):
                 table_2 = table_2.to_pandas()
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table2_id}")
-                warning_tuple = (False, True)
+                warning_tuple = (True, f"Table not found: {table2_id}")
         # rate table
         else:
             try:
@@ -895,7 +897,7 @@ def load_tables(table1_id, table2_id):
                 table_2_select_period = "Unknown"
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table1_id}")
-                warning_tuple = (False, True)
+                warning_tuple = (True, f"Table not found: {table2_id}")
         # add age and duration columns if not present
         table_2 = tables.add_aa_ia_dur_cols(table_2)
     # soa table
@@ -905,7 +907,7 @@ def load_tables(table1_id, table2_id):
             table_2_select_period = mt.select_period
         except FileNotFoundError:
             logger.warning(f"Table not found: {table2_id}")
-            warning_tuple = (False, True)
+            warning_tuple = (True, f"Table not found: {table2_id}")
 
     return table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple
 
