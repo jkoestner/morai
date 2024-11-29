@@ -26,6 +26,11 @@ from morai.utils import custom_logger, helpers, sql
 logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/cdc", name="CDC", title="morai - CDC", order=5)
+last_updated = cdc.get_last_updated()
+new_dataset_start_year = 2021
+new_dataset_end_year = int(last_updated[:4])
+train_start_year = 2015
+train_end_year = 2019
 
 
 def layout():
@@ -56,9 +61,8 @@ def layout():
             ),
             # Toast notification
             dbc.Toast(
-                "Need to put table in `files/integrations/cdc/cdc.sql` to display results.",
-                id="toast-no-database",
-                header="Input Error",
+                id="cdc-toast",
+                header="Notification",
                 is_open=False,
                 dismissable=True,
                 icon="danger",
@@ -68,12 +72,46 @@ def layout():
             dbc.Card(
                 dbc.CardBody(
                     [
-                        html.H5(
+                        dbc.Row(
                             [
-                                html.I(className="fas fa-info-circle me-2"),
-                                "About CDC Data",
+                                dbc.Col(
+                                    html.H5(
+                                        [
+                                            html.I(className="fas fa-info-circle me-2"),
+                                            "About CDC Data",
+                                        ],
+                                        className="card-title mb-3",
+                                    ),
+                                    width=10,
+                                ),
+                                dbc.Col(
+                                    [
+                                        dbc.Button(
+                                            [
+                                                html.I(
+                                                    className="fas fa-sync-alt me-2"
+                                                ),
+                                                "Update Data",
+                                            ],
+                                            id="button-update-cdc",
+                                            color="primary",
+                                            className="w-100 mb-2",
+                                        ),
+                                        html.Div(
+                                            [
+                                                "Last Updated: ",
+                                                html.Span(
+                                                    last_updated,
+                                                    id="last-updated-text",
+                                                    className="text-muted small",
+                                                ),
+                                            ],
+                                            className="text-center small",
+                                        ),
+                                    ],
+                                    width=2,
+                                ),
                             ],
-                            className="card-title mb-3",
                         ),
                         html.P(
                             [
@@ -87,6 +125,41 @@ def layout():
                                     "wonder.cdc.gov",
                                     href="https://wonder.cdc.gov/",
                                     target="_blank",
+                                ),
+                                html.Br(),
+                                html.Ul(
+                                    [
+                                        html.Li(
+                                            [
+                                                "1979-1998: ",
+                                                html.A(
+                                                    "https://wonder.cdc.gov/cmf-icd9.html",
+                                                    href="https://wonder.cdc.gov/cmf-icd9.html",
+                                                    target="_blank",
+                                                ),
+                                            ]
+                                        ),
+                                        html.Li(
+                                            [
+                                                "1999-2020: ",
+                                                html.A(
+                                                    "https://wonder.cdc.gov/ucd-icd10.html",
+                                                    href="https://wonder.cdc.gov/ucd-icd10.html",
+                                                    target="_blank",
+                                                ),
+                                            ]
+                                        ),
+                                        html.Li(
+                                            [
+                                                "2018-current: ",
+                                                html.A(
+                                                    "https://wonder.cdc.gov/mcd-icd10-provisional.html",
+                                                    href="https://wonder.cdc.gov/mcd-icd10-provisional.html",
+                                                    target="_blank",
+                                                ),
+                                            ]
+                                        ),
+                                    ]
                                 ),
                             ],
                             className="card-text mb-0",
@@ -103,9 +176,17 @@ def layout():
                         [
                             dbc.Row(
                                 html.Div(
-                                    id="cdc-cod-description",
-                                    className="mb-3",
-                                ),
+                                    [
+                                        html.P(
+                                            [
+                                                "The chart shows the amount of deaths by COD over the past few years.",
+                                                html.Br(),
+                                                "There is also a tree map that is a breakout of deaths from the most recent"
+                                                "year in the data",
+                                            ],
+                                        ),
+                                    ],
+                                )
                             ),
                             dbc.Row(
                                 [
@@ -160,9 +241,14 @@ def layout():
                         [
                             dbc.Row(
                                 html.Div(
-                                    id="cdc-cod-trends-description",
-                                    className="mb-3",
-                                ),
+                                    [
+                                        html.P(
+                                            [
+                                                "The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
+                                            ],
+                                        ),
+                                    ],
+                                )
                             ),
                             dbc.Row(
                                 [
@@ -232,9 +318,14 @@ def layout():
                         [
                             dbc.Row(
                                 html.Div(
-                                    id="cdc-monthly-description",
-                                    className="mb-3",
-                                ),
+                                    [
+                                        html.P(
+                                            [
+                                                "This chart shows the deaths in US per month"
+                                            ],
+                                        ),
+                                    ],
+                                )
                             ),
                             dbc.Row(
                                 [
@@ -277,9 +368,14 @@ def layout():
                         [
                             dbc.Row(
                                 html.Div(
-                                    id="cdc-mi-description",
-                                    className="mb-3",
-                                ),
+                                    [
+                                        html.P(
+                                            [
+                                                "The MI rates are calculated using a 2000 age-adjusted rate.",
+                                            ],
+                                        ),
+                                    ],
+                                )
                             ),
                             # Update Analysis Button Row
                             dbc.Row(
@@ -368,9 +464,56 @@ def layout():
 
 @callback(
     [
+        Output("cdc-toast", "is_open"),
+        Output("cdc-toast", "children"),
+        Output("cdc-toast", "icon"),
+        Output("cdc-toast", "header"),
+        Output("last-updated-text", "children"),
+    ],
+    Input("button-update-cdc", "n_clicks"),
+    prevent_initial_call=True,
+)
+def update_cdc_data(n_clicks):
+    """Update CDC data when button is clicked."""
+    if n_clicks is None:
+        raise dash.exceptions.PreventUpdate
+
+    try:
+        last_updated = pd.to_datetime(cdc.get_last_updated())
+        days_since_update = (pd.Timestamp.now() - last_updated).days
+        if days_since_update < 14:
+            return (
+                True,
+                "Data was recently updated. Please wait 14 days before updating again.",
+                "warning",
+                "Warning",
+                dash.no_update,
+            )
+        refresh_cdc_data()
+        new_last_updated = cdc.get_last_updated()
+        return (
+            True,
+            "CDC data successfully updated!",
+            "success",
+            "Success",
+            new_last_updated,
+        )
+    except Exception as e:
+        return (
+            True,
+            f"Error updating CDC data: {e!s}",
+            "danger",
+            "Error",
+            dash.no_update,
+        )
+
+
+@callback(
+    [
         Output("cdc-cod", "children"),
         Output("cdc-cod-heatmap", "children"),
-        Output("cdc-cod-description", "children"),
+        Output("cdc-toast", "is_open", allow_duplicate=True),
+        Output("cdc-toast", "children", allow_duplicate=True),
     ],
     Input("button-cod", "n_clicks"),
 )
@@ -383,13 +526,13 @@ def display_cdc_cod(n_clicks):
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
     if not db_filepath.exists():
         logger.error("Database does not exist.")
-        return dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, True, "Database does not exist"
     tables = sql.get_tables(db_filepath=db_filepath)
 
     # check if table does not exist in database
     if "mcd99_cod" not in tables or "mcd18_cod" not in tables:
         logger.error("Table `mcd99_cod` or `mcd18_cod` does not exist in database.")
-        return dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, True, "Table does not exist in database"
 
     # get the data
     mcd99_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_cod")
@@ -397,9 +540,9 @@ def display_cdc_cod(n_clicks):
     category_col = "simple_grouping"
 
     # filter and concat
-    mcd18_cod = mcd18_cod[mcd18_cod["year"] >= 2021]
+    mcd18_cod = mcd18_cod[mcd18_cod["year"] >= new_dataset_start_year]
     cod_all = pd.concat([mcd99_cod, mcd18_cod], ignore_index=True)
-    cod_all = cod_all[(cod_all["year"] != 2024)]
+    cod_all = cod_all[(cod_all["year"] <= new_dataset_end_year)]
     cod_all = cdc.map_reference(
         df=cod_all,
         col=category_col,
@@ -415,7 +558,6 @@ def display_cdc_cod(n_clicks):
     )
 
     # create the charts
-    last_updated = mcd18_cod["added_at"].max()
     cdc_cod_chart = charters.chart(
         df=cod_all,
         x_axis="year",
@@ -426,30 +568,27 @@ def display_cdc_cod(n_clicks):
     )
 
     cdc_cod_heatmap = px.treemap(
-        cod_all[(cod_all["simple_grouping"] != "total") & (cod_all["year"] == 2023)],
+        cod_all[
+            (cod_all["simple_grouping"] != "total")
+            & (cod_all["year"] == new_dataset_end_year)
+        ],
         path=[px.Constant("all"), "simple_grouping", "icd_-_sub-chapter"],
         values="deaths",
-    )
-
-    cdc_cod_description = html.Div(
-        [
-            html.P(
-                [f"The last update was: {last_updated}"],
-            ),
-        ],
     )
 
     return (
         dcc.Graph(figure=cdc_cod_chart),
         dcc.Graph(figure=cdc_cod_heatmap),
-        cdc_cod_description,
+        False,
+        "",
     )
 
 
 @callback(
     [
         Output("cdc-cod-trends", "children"),
-        Output("cdc-cod-trends-description", "children"),
+        Output("cdc-toast", "is_open", allow_duplicate=True),
+        Output("cdc-toast", "children", allow_duplicate=True),
     ],
     [
         Input("button-cod-trends", "n_clicks"),
@@ -468,7 +607,7 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     # check if table does not exist in database
     if "mcd99_cod" not in tables or "mcd18_cod" not in tables:
         logger.error("Table `mcd99_cod` or `mcd18_cod` does not exist in database.")
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, True, "Table does not exist in database"
 
     # get the data
     mcd99_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_cod")
@@ -476,9 +615,9 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     category_col = "simple_grouping"
 
     # filter and concat
-    mcd18_cod = mcd18_cod[mcd18_cod["year"] >= 2021]
+    mcd18_cod = mcd18_cod[mcd18_cod["year"] >= new_dataset_start_year]
     cod_all = pd.concat([mcd99_cod, mcd18_cod], ignore_index=True)
-    cod_all = cod_all[(cod_all["year"] != 2024)]
+    cod_all = cod_all[(cod_all["year"] <= new_dataset_end_year)]
     cod_all = cdc.map_reference(
         df=cod_all,
         col=category_col,
@@ -494,14 +633,16 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     )
 
     # train the data based on year and the category using linear regression
-    train_df = cod_all[(cod_all["year"] >= 2015) & (cod_all["year"] <= 2019)]
+    train_df = cod_all[
+        (cod_all["year"] >= train_start_year) & (cod_all["year"] <= train_end_year)
+    ]
     train_df = train_df.groupby(["year", category_col])["deaths"].sum().reset_index()
 
     # create the models
     models = {}
     for cod in train_df[category_col].unique():
         cod_subset = train_df[train_df[category_col] == cod]
-        X = (cod_subset["year"] - 2015).values.reshape(-1, 1)
+        X = (cod_subset["year"] - train_start_year).values.reshape(-1, 1)
         y = cod_subset["deaths"].values
         model = LinearRegression().fit(X, y)
         models[cod] = {
@@ -511,13 +652,13 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         }
 
     # make the predictions
-    test_df = cod_all[(cod_all["year"] >= 2020)]
+    test_df = cod_all[(cod_all["year"] >= (train_end_year + 1))]
     test_df = test_df.groupby(["year", category_col])["deaths"].sum().reset_index()
 
     for cod, model in models.items():
         mask = test_df[category_col] == cod
         if mask.sum() > 0:
-            X = (test_df.loc[mask, "year"] - 2015).values.reshape(-1, 1)
+            X = (test_df.loc[mask, "year"] - train_start_year).values.reshape(-1, 1)
             test_df.loc[mask, "pred"] = model["model"].predict(X)
 
     test_df["diff_abs"] = test_df["deaths"] - test_df["pred"]
@@ -533,7 +674,6 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     elif active_tab == "tab-trends-table-pct":
         display = False
         y_axis = "diff_pct"
-    last_updated = mcd18_cod["added_at"].max()
     test_df["year"] = test_df["year"].astype(str)
 
     cdc_cod_trends_chart = charters.chart(
@@ -562,27 +702,14 @@ def display_cdc_cod_trends(n_clicks, active_tab):
             columnDefs=columnDefs,
         )
 
-    cdc_cod_trends_description = html.Div(
-        [
-            html.P(
-                [
-                    "The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
-                    html.Br(),
-                    html.Br(),
-                    f"The last update was: {last_updated}",
-                ],
-            ),
-        ],
-    )
-
-    return tab_content, cdc_cod_trends_description
+    return tab_content, False, ""
 
 
 @callback(
     [
         Output("cdc-monthly", "children"),
-        Output("cdc-monthly-description", "children"),
-        Output("toast-no-database", "is_open"),
+        Output("cdc-toast", "is_open", allow_duplicate=True),
+        Output("cdc-toast", "children", allow_duplicate=True),
     ],
     Input("button-monthly", "n_clicks"),
 )
@@ -598,7 +725,12 @@ def display_cdc_monthly(n_clicks):
     # check if table does not exist in database
     if "mcd18_monthly" not in tables:
         logger.error("Table `mcd18_monthly` does not exist in database.")
-        return dash.no_update, dash.no_update, True
+        return (
+            dash.no_update,
+            dash.no_update,
+            True,
+            "Table `mcd18_monthly` does not exist in database.",
+        )
 
     # get the data
     mcd18_monthly = cdc.get_cdc_data_sql(
@@ -613,22 +745,15 @@ def display_cdc_monthly(n_clicks):
         type="area",
     )
 
-    cdc_monthly_description = html.Div(
-        [
-            html.P(
-                [f"The last update was: {last_updated}"],
-            ),
-        ],
-    )
-
-    return dcc.Graph(figure=cdc_monthly_chart), cdc_monthly_description, False
+    return dcc.Graph(figure=cdc_monthly_chart), False, ""
 
 
 @callback(
     [
         Output("cdc-mi", "children"),
-        Output("cdc-mi-description", "children"),
         Output("cdc-mi-filters", "children"),
+        Output("cdc-toast", "is_open", allow_duplicate=True),
+        Output("cdc-toast", "children", allow_duplicate=True),
     ],
     Input("button-mi", "n_clicks"),
     [
@@ -647,36 +772,32 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
     states_info = dh._inputs_flatten_list(callback_context.states_list)
 
     # check if table does not exist in database
-    if "mi" not in tables:
-        logger.error("Table `mi` does not exist in database.")
-        return dash.no_update, dash.no_update
+    if "mcd18_mi" not in tables:
+        logger.error("Table `mcd18_mi` does not exist in database.")
+        return (
+            dash.no_update,
+            dash.no_update,
+            True,
+            "Table `mcd18_mi` does not exist in database",
+        )
 
     # get the data
-    mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mi")
+    mcd79_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd79_mi")
+    mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
+    mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
+    mcd18_mi = mcd18_mi[mcd18_mi["year"] >= new_dataset_start_year]
+    mi = pd.concat([mcd79_mi, mcd99_mi, mcd18_mi], axis=0, ignore_index=True)
 
     # filter the data
     filtered_mi = dh.filter_data(df=mi, callback_context=states_info)
 
     # create the charts
-    last_updated = filtered_mi["added_at"].max()
     rolling = 10
     mi_df = cdc.calc_mi(df=filtered_mi, rolling=rolling)
     cdc_mi_chart = charters.compare_rates(
         df=mi_df,
         x_axis="year",
         rates=["1_year_mi", f"{rolling}_year_mi"],
-    )
-
-    cdc_mi_description = html.Div(
-        [
-            html.P(
-                [
-                    "The MI rates are calculated using a 2000 age-adjusted rate.",
-                    html.Br(),
-                    f"The last update was: {last_updated}",
-                ],
-            ),
-        ],
     )
 
     # create the filters
@@ -689,7 +810,7 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
             exclude_cols=["deaths", "population", "crude_rate", "added_at"],
         )["filters"]
 
-    return dcc.Graph(figure=cdc_mi_chart), cdc_mi_description, cdc_mi_filters
+    return dcc.Graph(figure=cdc_mi_chart), cdc_mi_filters, False, ""
 
 
 @callback(
@@ -734,3 +855,41 @@ def toggle_cdc_mi_collapse(n_clicks, is_open, children):
         )
 
     return new_is_open, new_children
+
+
+#   _____                 _   _
+#  |  ___|   _ _ __   ___| |_(_) ___  _ __  ___
+#  | |_ | | | | '_ \ / __| __| |/ _ \| '_ \/ __|
+#  |  _|| |_| | | | | (__| |_| | (_) | | | \__ \
+#  |_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
+
+
+def refresh_cdc_data() -> None:
+    """Refresh the cdc data."""
+    try:
+        db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+        mcd18_cod = cdc.get_cdc_data_xml(xml_filename="mcd18_cod.xml")
+        sql.export_to_sql(
+            df=mcd18_cod,
+            db_filepath=db_filepath,
+            table_name="mcd18_cod",
+            if_exists="replace",
+        )
+        mcd18_monthly = cdc.get_cdc_data_xml(
+            xml_filename="mcd18_monthly.xml", parse_date_col="Month"
+        )
+        sql.export_to_sql(
+            df=mcd18_monthly,
+            db_filepath=db_filepath,
+            table_name="mcd18_monthly",
+            if_exists="replace",
+        )
+        mcd18_mi = cdc.get_cdc_data_xml(xml_filename="mcd18_mi.xml")
+        sql.export_to_sql(
+            df=mcd18_mi,
+            db_filepath=db_filepath,
+            table_name="mcd18_mi",
+            if_exists="replace",
+        )
+    except Exception as e:
+        logger.error(f"Error refreshing cdc data: {e}")

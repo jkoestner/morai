@@ -181,6 +181,18 @@ def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
     return cdc_df
 
 
+def get_last_updated(table_name: Optional[str] = None) -> str:
+    """Get the last updated date of a table."""
+    if table_name is None:
+        table_name = "mcd18_cod"
+    db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+    tables = sql.get_tables(db_filepath=db_filepath)
+    if table_name not in tables:
+        return ""
+    df = get_cdc_data_sql(db_filepath=db_filepath, table_name=table_name)
+    return df["added_at"].max()
+
+
 def get_cdc_reference(sheet_name: str) -> pd.DataFrame:
     """
     Get CDC reference data.
@@ -424,39 +436,44 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
     ]
     columns = byvariables + measure_selections
     columns = [cdc_mapping.get(key, key) for key in columns]
+    num_columns = len(columns)
 
     # create the data table
     rows = []
 
-    # row-spanning cells
-    row_span_value = None
-    row_span_count = 0
+    # initialize row-span counts and values for each column
+    row_span_counts = [0] * num_columns
+    column_values = [None] * num_columns
 
     # iterate over the rows
     for row in data_table.findall("r"):
+        row_cells = row.findall("c")
+        cell_idx = 0
         cells = []
-        if row_span_count > 0:
-            cells.append(row_span_value)
-            row_span_count -= 1
-        for cell in row.findall("c"):
-            if "r" in cell.attrib:
-                row_span_value = cell.get("l")
-                row_span_count = int(cell.get("r")) - 1
-                cells.append(row_span_value)
-            else:
-                cell_value = (
-                    cell.get("v")
-                    or cell.get("dt")
-                    or cell.get("l")
-                    or cell.get("cd")
-                    or cell.get("cf")
-                    or cell.get("c")
-                )
-                cells.append(cell_value)
+
+        for idx in range(num_columns):
+            if row_span_counts[idx] > 0:
+                row_span_counts[idx] -= 1
+            else:  # noqa: PLR5501
+                if cell_idx < len(row_cells):
+                    cell = row_cells[cell_idx]
+                    cell_idx += 1
+                    if "r" in cell.attrib:
+                        # row-spanning cell
+                        value = cell.get("l") or cell.get("v") or cell.text
+                        row_span_counts[idx] = int(cell.get("r")) - 1
+                        column_values[idx] = value
+                    else:
+                        # regular cell
+                        value = cell.get("v") or cell.get("l") or cell.text
+                        column_values[idx] = value
+                else:
+                    # no more cells
+                    column_values[idx] = None
+            cells.append(column_values[idx])
         rows.append(cells)
 
-    df = pd.DataFrame(rows)
-    df.columns = columns
+    df = pd.DataFrame(rows, columns=columns)
 
     return df
 
