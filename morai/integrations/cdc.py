@@ -174,7 +174,7 @@ def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
             FROM {table_name}
             """
     cdc_df = sql.read_sql(db_filepath, query)
-    logger.info(
+    logger.debug(
         f"table `{table_name}` last updated at: {last_date}, rows: {len(cdc_df)}"
     )
 
@@ -237,7 +237,7 @@ def map_reference(
         The sheet name to use.
 
     """
-    logger.info(f"mapping reference column: {col}")
+    logger.debug(f"mapping reference column: {col}")
     if on_dict is None:
         on_dict = {"icd-10_113_cause_list": "cause_wonder"}
     mapping = get_cdc_reference(sheet_name=sheet_name)
@@ -311,7 +311,7 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
     )
 
     # calculate mortality improvement
-    mi_df = mi_df.groupby(["year"])[["crude_adj"]].sum().reset_index()
+    mi_df = mi_df.groupby(["year"])[["crude_adj", "deaths"]].sum().reset_index()
     mi_df["1_year_mi"] = 1 - (mi_df["crude_adj"] / mi_df["crude_adj"].shift(1))
     mi_df[f"{rolling}_year_mi"] = mi_df["1_year_mi"].rolling(window=rolling).mean()
 

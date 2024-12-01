@@ -26,11 +26,14 @@ from morai.utils import custom_logger, helpers, sql
 logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/cdc", name="CDC", title="morai - CDC", order=5)
+
+# initialize variables
 last_updated = cdc.get_last_updated()
 new_dataset_start_year = 2021
 new_dataset_end_year = int(last_updated[:4])
 train_start_year = 2015
 train_end_year = 2019
+category_col = "simple_grouping"
 
 
 def layout():
@@ -175,48 +178,40 @@ def layout():
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                html.Div(
-                                    [
-                                        html.P(
-                                            [
-                                                "The chart shows the amount of deaths by COD over the past few years.",
-                                                html.Br(),
-                                                "There is also a tree map that is a breakout of deaths from the most recent"
-                                                "year in the data",
-                                            ],
-                                        ),
-                                    ],
-                                )
-                            ),
-                            dbc.Row(
                                 [
                                     dbc.Col(
                                         dbc.Button(
-                                            [
-                                                html.I(
-                                                    className="fas fa-sync-alt me-2"
-                                                ),
-                                                "Update Analysis",
-                                            ],
+                                            html.I(className="fas fa-sync-alt"),
                                             id="button-cod",
                                             color="primary",
-                                            className="w-100 shadow-sm",
+                                            className="shadow-sm",
                                         ),
-                                        width=2,
+                                        width=1,
                                     ),
                                     dbc.Col(
-                                        dcc.Loading(
-                                            id="loading-cdc-cod",
-                                            type="default",
-                                            color="#007bff",
-                                            children=html.Div(
-                                                id="cdc-cod",
-                                                className="bg-white rounded-3 shadow-sm p-3",
-                                            ),
+                                        html.P(
+                                            [
+                                                "The chart shows the amount of deaths by COD over the past few years. ",
+                                                html.Br(),
+                                                "There is also a tree map that is a breakout of deaths from the most recent "
+                                                "year in the data",
+                                            ]
                                         ),
-                                        width=10,
+                                        width=11,
                                     ),
                                 ],
+                                className="mb-3",
+                            ),
+                            dbc.Row(
+                                dcc.Loading(
+                                    id="loading-cdc-cod",
+                                    type="default",
+                                    color="#007bff",
+                                    children=html.Div(
+                                        id="cdc-cod",
+                                        className="bg-white rounded-3 shadow-sm p-3",
+                                    ),
+                                ),
                                 className="mb-4",
                             ),
                             dbc.Row(
@@ -229,6 +224,7 @@ def layout():
                                         className="bg-white rounded-3 shadow-sm p-3",
                                     ),
                                 ),
+                                className="mb-4",
                             ),
                         ],
                         title=[
@@ -240,32 +236,27 @@ def layout():
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                html.Div(
-                                    [
-                                        html.P(
-                                            [
-                                                "The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
-                                            ],
-                                        ),
-                                    ],
-                                )
-                            ),
-                            dbc.Row(
                                 [
                                     dbc.Col(
                                         dbc.Button(
-                                            [
-                                                html.I(
-                                                    className="fas fa-sync-alt me-2"
-                                                ),
-                                                "Update Analysis",
-                                            ],
+                                            html.I(className="fas fa-sync-alt"),
                                             id="button-cod-trends",
                                             color="primary",
-                                            className="w-100 shadow-sm",
+                                            className="shadow-sm",
                                         ),
-                                        width=2,
+                                        width=1,
                                     ),
+                                    dbc.Col(
+                                        html.P(
+                                            "The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
+                                        ),
+                                        width=11,
+                                    ),
+                                ],
+                                className="mb-3",
+                            ),
+                            dbc.Row(
+                                [
                                     dbc.Col(
                                         [
                                             dbc.Tabs(
@@ -305,6 +296,31 @@ def layout():
                                         ],
                                         width=10,
                                     ),
+                                    dbc.Col(
+                                        dbc.Card(
+                                            [
+                                                dbc.CardHeader(
+                                                    html.H5(
+                                                        [
+                                                            html.I(
+                                                                className="fas fa-filter me-2"
+                                                            ),
+                                                            "Filters",
+                                                        ],
+                                                        className="mb-0",
+                                                    ),
+                                                    className="bg-light",
+                                                ),
+                                                dbc.CardBody(
+                                                    html.Div(
+                                                        id="cdc-mi-filters",
+                                                    ),
+                                                ),
+                                            ],
+                                            className="shadow-sm h-100",
+                                        ),
+                                        width=2,
+                                    ),
                                 ],
                             ),
                         ],
@@ -317,32 +333,27 @@ def layout():
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                html.Div(
-                                    [
-                                        html.P(
-                                            [
-                                                "This chart shows the deaths in US per month"
-                                            ],
-                                        ),
-                                    ],
-                                )
-                            ),
-                            dbc.Row(
                                 [
                                     dbc.Col(
                                         dbc.Button(
-                                            [
-                                                html.I(
-                                                    className="fas fa-sync-alt me-2"
-                                                ),
-                                                "Update Analysis",
-                                            ],
+                                            html.I(className="fas fa-sync-alt"),
                                             id="button-monthly",
                                             color="primary",
-                                            className="w-100 shadow-sm",
+                                            className="shadow-sm",
                                         ),
-                                        width=2,
+                                        width=1,
                                     ),
+                                    dbc.Col(
+                                        html.P(
+                                            "This chart shows the deaths in US per month",
+                                        ),
+                                        width=11,
+                                    ),
+                                ],
+                                className="mb-3",
+                            ),
+                            dbc.Row(
+                                [
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-cdc-monthly",
@@ -354,6 +365,31 @@ def layout():
                                             ),
                                         ),
                                         width=10,
+                                    ),
+                                    dbc.Col(
+                                        dbc.Card(
+                                            [
+                                                dbc.CardHeader(
+                                                    html.H5(
+                                                        [
+                                                            html.I(
+                                                                className="fas fa-filter me-2"
+                                                            ),
+                                                            "Filters",
+                                                        ],
+                                                        className="mb-0",
+                                                    ),
+                                                    className="bg-light",
+                                                ),
+                                                dbc.CardBody(
+                                                    html.Div(
+                                                        id="cdc-mi-filters",
+                                                    ),
+                                                ),
+                                            ],
+                                            className="shadow-sm h-100",
+                                        ),
+                                        width=2,
                                     ),
                                 ],
                             ),
@@ -367,35 +403,34 @@ def layout():
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                html.Div(
-                                    [
-                                        html.P(
-                                            [
-                                                "The MI rates are calculated using a 2000 age-adjusted rate.",
-                                            ],
-                                        ),
-                                    ],
-                                )
-                            ),
-                            # Update Analysis Button Row
-                            dbc.Row(
                                 [
                                     dbc.Col(
                                         dbc.Button(
-                                            [
-                                                html.I(
-                                                    className="fas fa-sync-alt me-2"
-                                                ),
-                                                "Update Analysis",
-                                            ],
+                                            html.I(className="fas fa-sync-alt"),
                                             id="button-mi",
                                             color="primary",
-                                            className="w-100 shadow-sm",
+                                            className="shadow-sm",
                                         ),
-                                        width=2,
+                                        width=1,
+                                    ),
+                                    dbc.Col(
+                                        html.P(
+                                            [
+                                                "The MI rates are calculated using a 2000 age-adjusted rate.",
+                                                html.Br(),
+                                                "The crude adjusted rate is the total number of deaths divided by the "
+                                                "total population weighted by the 2000 age distribution.",
+                                                html.Br(),
+                                                "The mortality improvement is the percentage change in the crude adjusted rate "
+                                                "from one year to the next.",
+                                                html.Br(),
+                                                "The rolling average is a 10-year average of the mortality improvement.",
+                                            ]
+                                        ),
+                                        width=11,
                                     ),
                                 ],
-                                className="mb-3",  # Add margin below the button
+                                className="mb-3",
                             ),
                             # Chart and Filters Row
                             dbc.Row(
@@ -438,6 +473,19 @@ def layout():
                                         width=2,
                                     ),
                                 ],
+                                className="mb-4",
+                            ),
+                            # mi table
+                            dbc.Row(
+                                dcc.Loading(
+                                    id="loading-cdc-mi-table",
+                                    type="default",
+                                    color="#007bff",
+                                    children=html.Div(
+                                        id="cdc-mi-table",
+                                        className="bg-white rounded-3 shadow-sm p-3",
+                                    ),
+                                ),
                             ),
                         ],
                         title=[
@@ -537,7 +585,6 @@ def display_cdc_cod(n_clicks):
     # get the data
     mcd99_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_cod")
     mcd18_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_cod")
-    category_col = "simple_grouping"
 
     # filter and concat
     mcd18_cod = mcd18_cod[mcd18_cod["year"] >= new_dataset_start_year]
@@ -569,10 +616,10 @@ def display_cdc_cod(n_clicks):
 
     cdc_cod_heatmap = px.treemap(
         cod_all[
-            (cod_all["simple_grouping"] != "total")
+            (cod_all[category_col] != "total")
             & (cod_all["year"] == new_dataset_end_year)
         ],
-        path=[px.Constant("all"), "simple_grouping", "icd_-_sub-chapter"],
+        path=[px.Constant("all"), category_col, "icd_-_sub-chapter"],
         values="deaths",
     )
 
@@ -612,7 +659,6 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     # get the data
     mcd99_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_cod")
     mcd18_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_cod")
-    category_col = "simple_grouping"
 
     # filter and concat
     mcd18_cod = mcd18_cod[mcd18_cod["year"] >= new_dataset_start_year]
@@ -751,6 +797,7 @@ def display_cdc_monthly(n_clicks):
 @callback(
     [
         Output("cdc-mi", "children"),
+        Output("cdc-mi-table", "children"),
         Output("cdc-mi-filters", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
@@ -800,6 +847,14 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
         rates=["1_year_mi", f"{rolling}_year_mi"],
     )
 
+    # mortality improvement table
+    columnDefs = dash_formats.get_column_defs(mi_df)
+    mi_table = dag.AgGrid(
+        rowData=mi_df.sort_values(by="year", ascending=False).to_dict("records"),
+        columnDefs=columnDefs,
+        defaultColDef={"resizable": True, "sortable": True, "filter": True},
+    )
+
     # create the filters
     cdc_mi_filters = dash.no_update
     if not cdc_mi_num_filters:
@@ -810,7 +865,7 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
             exclude_cols=["deaths", "population", "crude_rate", "added_at"],
         )["filters"]
 
-    return dcc.Graph(figure=cdc_mi_chart), cdc_mi_filters, False, ""
+    return dcc.Graph(figure=cdc_mi_chart), mi_table, cdc_mi_filters, False, ""
 
 
 @callback(

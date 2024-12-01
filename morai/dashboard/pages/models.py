@@ -304,6 +304,11 @@ def load_pdp_selectors(pathname, config, dataset):
     if pathname != "/model" or config is None:
         raise dash.exceptions.PreventUpdate
 
+    # Add check for dataset
+    if dataset is None:
+        logger.warning("Dataset is None in load_pdp_selectors")
+        return dash.no_update, dash.no_update
+
     # create the pdp selectors
     pdp_selectors = dh.generate_selectors(
         config=config,
