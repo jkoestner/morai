@@ -68,6 +68,8 @@ def get_cdc_data_xml(
     data_id = _xml_parse_dataid(xml_request)
     url = f"https://wonder.cdc.gov/controller/datarequest/{data_id}"
     logger.debug(f"requesting data from CDC Wonder: {url}")
+
+    # https://wonder.cdc.gov/datause.html
     response = requests.post(
         url, data={"request_xml": xml_request, "accept_datause_restrictions": "true"}
     )
@@ -229,9 +231,10 @@ def map_reference(
     df : pd.DataFrame
         The dataframe to map the column onto.
     col : str
-        The column to map.
+        The column in the reference to map.
     on_dict : dict, optional
-        Dictionary of the columns to match on
+        Dictionary of the columns to match on.
+        e.g. {"df_column": "reference_column"}
         If not provided, the default is {"icd-10_113_cause_list": "wonder_cause"}.
     sheet_name : str, optional
         The sheet name to use.
@@ -296,14 +299,8 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
     )
     mi_df = map_reference(
         df=mi_df,
-        col="value",
-        on_dict={"age_groups": "key"},
-        sheet_name="mapping",
-    )
-    mi_df = map_reference(
-        df=mi_df,
         col="population_%",
-        on_dict={"value": "age_bucket"},
+        on_dict={"age_groups": "age_bucket"},
         sheet_name="age_std_2000",
     )
     mi_df["crude_adj"] = (
@@ -392,6 +389,73 @@ def _xml_parse_dataid(xml_string: str) -> str:
     data_id = value.split(".")[0]
 
     return data_id
+
+
+def get_top_deaths_by_age_group(
+    df: pd.DataFrame, year: int, cod_col: str = "simple_grouping"
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Get the top deaths by age group for a given year.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame object.
+    year : int
+        Year to get the top deaths by age group.
+    cod_col : str, optional
+        Column name to get the top deaths by.
+
+    Returns
+    -------
+    (deaths_pivot, names_pivot) : tuple
+        Tuple of the deaths pivot and the names pivot
+
+    """
+    # filter to year and create order of columns
+    df_year = df[df["year"] == year].copy()
+    age_group_order = [
+        "Not Stated",
+        "< 1 year",
+        "1-4 years",
+        "5-14 years",
+        "15-24 years",
+        "25-34 years",
+        "35-44 years",
+        "45-54 years",
+        "55-64 years",
+        "65-74 years",
+        "75-84 years",
+        "85+ years",
+    ]
+    df_year["age_groups"] = pd.Categorical(
+        df_year["age_groups"], categories=age_group_order, ordered=True
+    )
+
+    # map the cod column
+    df_year = map_reference(
+        df=df_year,
+        col=cod_col,
+        on_dict={"icd_-_sub-chapter": "wonder_sub_chapter"},
+    )
+
+    # group the data for top 10 deaths in each age_group
+    grouped = (
+        df_year.groupby(["age_groups", cod_col], observed=False)["deaths"]
+        .sum()
+        .reset_index()
+    )
+    grouped = grouped.sort_values(by=["age_groups", "deaths"], ascending=[False, False])
+    top_deaths = grouped.groupby("age_groups", observed=False).head(10).copy()
+    top_deaths["rank"] = top_deaths.groupby("age_groups", observed=False)[
+        "deaths"
+    ].rank(method="first", ascending=False)
+
+    # create the pivots
+    deaths_pivot = top_deaths.pivot(index="rank", columns="age_groups", values="deaths")
+    names_pivot = top_deaths.pivot(index="rank", columns="age_groups", values=cod_col)
+
+    return (deaths_pivot, names_pivot)
 
 
 def _xml_create_df(xml_response: str) -> pd.DataFrame:

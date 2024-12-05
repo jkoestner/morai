@@ -192,9 +192,6 @@ def layout():
                                         html.P(
                                             [
                                                 "The chart shows the amount of deaths by COD over the past few years. ",
-                                                html.Br(),
-                                                "There is also a tree map that is a breakout of deaths from the most recent "
-                                                "year in the data",
                                             ]
                                         ),
                                         width=11,
@@ -215,6 +212,14 @@ def layout():
                                 className="mb-4",
                             ),
                             dbc.Row(
+                                html.P(
+                                    [
+                                        "Tree map that is a breakout of deaths from the most recent "
+                                        "year in the data",
+                                    ]
+                                ),
+                            ),
+                            dbc.Row(
                                 dcc.Loading(
                                     id="loading-cdc-cod-heatmap",
                                     type="default",
@@ -224,6 +229,43 @@ def layout():
                                         className="bg-white rounded-3 shadow-sm p-3",
                                     ),
                                 ),
+                                className="mb-4",
+                            ),
+                            dbc.Row(
+                                html.P(
+                                    [
+                                        "These tables show the top causes of death by age "
+                                        "group for the most recent year in the data.",
+                                    ]
+                                ),
+                            ),
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-cdc-top-cause-names",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="cdc-top-cause-names",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
+                                        ),
+                                        width=6,
+                                    ),
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-cdc-top-cause-deaths",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="cdc-top-cause-deaths",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
+                                        ),
+                                        width=6,
+                                    ),
+                                ],
                                 className="mb-4",
                             ),
                         ],
@@ -560,6 +602,8 @@ def update_cdc_data(n_clicks):
     [
         Output("cdc-cod", "children"),
         Output("cdc-cod-heatmap", "children"),
+        Output("cdc-top-cause-names", "children"),
+        Output("cdc-top-cause-deaths", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
     ],
@@ -623,9 +667,21 @@ def display_cdc_cod(n_clicks):
         values="deaths",
     )
 
+    cdc_top_cause_names, cdc_top_cause_deaths = cdc.get_top_deaths_by_age_group(
+        df=cod_all, year=new_dataset_end_year
+    )
+
     return (
         dcc.Graph(figure=cdc_cod_chart),
         dcc.Graph(figure=cdc_cod_heatmap),
+        dag.AgGrid(
+            rowData=cdc_top_cause_names.to_dict("records"),
+            columnDefs=dash_formats.get_column_defs(cdc_top_cause_names),
+        ),
+        dag.AgGrid(
+            rowData=cdc_top_cause_deaths.to_dict("records"),
+            columnDefs=dash_formats.get_column_defs(cdc_top_cause_deaths),
+        ),
         False,
         "",
     )
@@ -834,6 +890,13 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
     mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
     mcd18_mi = mcd18_mi[mcd18_mi["year"] >= new_dataset_start_year]
     mi = pd.concat([mcd79_mi, mcd99_mi, mcd18_mi], axis=0, ignore_index=True)
+
+    # remap the age groups
+    mi = cdc.map_reference(
+        df=mi, col="value", on_dict={"age_groups": "key"}, sheet_name="mapping"
+    )
+    mi = mi.drop("age_groups", axis=1)
+    mi = mi.rename(columns={"value": "age_groups"})
 
     # filter the data
     filtered_mi = dh.filter_data(df=mi, callback_context=states_info)
