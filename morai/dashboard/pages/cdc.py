@@ -29,10 +29,12 @@ dash.register_page(__name__, path="/cdc", name="CDC", title="morai - CDC", order
 
 # initialize variables
 last_updated = cdc.get_last_updated()
+# provides when to use data from 18 dataset as there is overlap in 99 dataset
 new_dataset_start_year = 2021
-new_dataset_end_year = int(last_updated[:4])
+# training for trend chart
 train_start_year = 2015
 train_end_year = 2019
+# grouping for cod analysis
 category_col = "simple_grouping"
 
 
@@ -162,8 +164,11 @@ def layout():
                                                 ),
                                             ]
                                         ),
-                                    ]
+                                    ],
                                 ),
+                                "The data will not match exactly to source data due to splitting the data more granularly"
+                                " and losing a few claims. Per year it is about .03%(1000 claims) off.",
+                                html.Br(),
                             ],
                             className="card-text mb-0",
                         ),
@@ -194,22 +199,61 @@ def layout():
                                 className="mb-3",
                             ),
                             dbc.Row(
-                                html.P(
-                                    [
-                                        "The chart shows the amount of deaths by COD over the past few years. ",
-                                    ]
+                                dbc.Col(
+                                    html.Div(
+                                        id="cod-active-filters-card",
+                                        className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                                    ),
+                                    width="auto",
                                 ),
                             ),
                             dbc.Row(
-                                dcc.Loading(
-                                    id="loading-cdc-cod",
-                                    type="default",
-                                    color="#007bff",
-                                    children=html.Div(
-                                        id="cdc-cod",
-                                        className="bg-white rounded-3 shadow-sm p-3",
-                                    ),
+                                html.P(
+                                    "The chart shows the amount of deaths by COD over the past few years. ",
                                 ),
+                            ),
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        [
+                                            dcc.Loading(
+                                                id="loading-cdc-cod",
+                                                type="default",
+                                                color="#007bff",
+                                                children=html.Div(
+                                                    id="cdc-cod",
+                                                    className="bg-white rounded-3 shadow-sm p-3",
+                                                ),
+                                            ),
+                                        ],
+                                        width=10,
+                                    ),
+                                    dbc.Col(
+                                        dbc.Card(
+                                            [
+                                                dbc.CardHeader(
+                                                    html.H5(
+                                                        [
+                                                            html.I(
+                                                                className="fas fa-filter me-2"
+                                                            ),
+                                                            "Filters",
+                                                        ],
+                                                        className="mb-0",
+                                                    ),
+                                                    className="bg-light",
+                                                ),
+                                                dbc.CardBody(
+                                                    html.Div(
+                                                        id="cdc-cod-filters",
+                                                    ),
+                                                ),
+                                            ],
+                                            className="shadow-sm h-100",
+                                        ),
+                                        width=2,
+                                    ),
+                                ],
                                 className="mb-4",
                             ),
                             dbc.Row(
@@ -311,69 +355,39 @@ def layout():
                             ),
                             dbc.Row(
                                 [
-                                    dbc.Col(
+                                    dbc.Tabs(
                                         [
-                                            dbc.Tabs(
-                                                [
-                                                    dbc.Tab(
-                                                        label="Trends",
-                                                        tab_id="tab-trends-chart",
-                                                        label_class_name="fw-bold",
-                                                        active_label_class_name="text-primary",
-                                                    ),
-                                                    dbc.Tab(
-                                                        label="Table-Amt",
-                                                        tab_id="tab-trends-table-amt",
-                                                        label_class_name="fw-bold",
-                                                        active_label_class_name="text-primary",
-                                                    ),
-                                                    dbc.Tab(
-                                                        label="Table-%",
-                                                        tab_id="tab-trends-table-pct",
-                                                        label_class_name="fw-bold",
-                                                        active_label_class_name="text-primary",
-                                                    ),
-                                                ],
-                                                id="tabs-cod-trends",
-                                                active_tab="tab-trends-chart",
-                                                className="mb-3",
+                                            dbc.Tab(
+                                                label="Trends",
+                                                tab_id="tab-trends-chart",
+                                                label_class_name="fw-bold",
+                                                active_label_class_name="text-primary",
                                             ),
-                                            dcc.Loading(
-                                                id="loading-cdc-cod-trends",
-                                                type="default",
-                                                color="#007bff",
-                                                children=html.Div(
-                                                    id="cdc-cod-trends",
-                                                    className="bg-white rounded-3 shadow-sm p-3",
-                                                ),
+                                            dbc.Tab(
+                                                label="Table-Amt",
+                                                tab_id="tab-trends-table-amt",
+                                                label_class_name="fw-bold",
+                                                active_label_class_name="text-primary",
+                                            ),
+                                            dbc.Tab(
+                                                label="Table-%",
+                                                tab_id="tab-trends-table-pct",
+                                                label_class_name="fw-bold",
+                                                active_label_class_name="text-primary",
                                             ),
                                         ],
-                                        width=10,
+                                        id="tabs-cod-trends",
+                                        active_tab="tab-trends-chart",
+                                        className="mb-3",
                                     ),
-                                    dbc.Col(
-                                        dbc.Card(
-                                            [
-                                                dbc.CardHeader(
-                                                    html.H5(
-                                                        [
-                                                            html.I(
-                                                                className="fas fa-filter me-2"
-                                                            ),
-                                                            "Filters",
-                                                        ],
-                                                        className="mb-0",
-                                                    ),
-                                                    className="bg-light",
-                                                ),
-                                                dbc.CardBody(
-                                                    html.Div(
-                                                        id="cdc-mi-filters",
-                                                    ),
-                                                ),
-                                            ],
-                                            className="shadow-sm h-100",
+                                    dcc.Loading(
+                                        id="loading-cdc-cod-trends",
+                                        type="default",
+                                        color="#007bff",
+                                        children=html.Div(
+                                            id="cdc-cod-trends",
+                                            className="bg-white rounded-3 shadow-sm p-3",
                                         ),
-                                        width=2,
                                     ),
                                 ],
                             ),
@@ -408,42 +422,14 @@ def layout():
                             ),
                             dbc.Row(
                                 [
-                                    dbc.Col(
-                                        dcc.Loading(
-                                            id="loading-cdc-monthly",
-                                            type="default",
-                                            color="#007bff",
-                                            children=html.Div(
-                                                id="cdc-monthly",
-                                                className="bg-white rounded-3 shadow-sm p-3",
-                                            ),
+                                    dcc.Loading(
+                                        id="loading-cdc-monthly",
+                                        type="default",
+                                        color="#007bff",
+                                        children=html.Div(
+                                            id="cdc-monthly",
+                                            className="bg-white rounded-3 shadow-sm p-3",
                                         ),
-                                        width=10,
-                                    ),
-                                    dbc.Col(
-                                        dbc.Card(
-                                            [
-                                                dbc.CardHeader(
-                                                    html.H5(
-                                                        [
-                                                            html.I(
-                                                                className="fas fa-filter me-2"
-                                                            ),
-                                                            "Filters",
-                                                        ],
-                                                        className="mb-0",
-                                                    ),
-                                                    className="bg-light",
-                                                ),
-                                                dbc.CardBody(
-                                                    html.Div(
-                                                        id="cdc-mi-filters",
-                                                    ),
-                                                ),
-                                            ],
-                                            className="shadow-sm h-100",
-                                        ),
-                                        width=2,
                                     ),
                                 ],
                             ),
@@ -612,6 +598,8 @@ def update_cdc_data(n_clicks):
 
 @callback(
     [
+        Output("cod-active-filters-card", "children"),
+        Output("cdc-cod-filters", "children"),
         Output("cdc-cod", "children"),
         Output("cdc-cod-heatmap", "children"),
         Output("cdc-top-cause-names", "children"),
@@ -620,8 +608,12 @@ def update_cdc_data(n_clicks):
         Output("cdc-toast", "children", allow_duplicate=True),
     ],
     Input("button-cod", "n_clicks"),
+    [
+        State({"type": "cdc_cod-str-filter", "index": ALL}, "value"),
+        State({"type": "cdc_cod-num-filter", "index": ALL}, "value"),
+    ],
 )
-def display_cdc_cod(n_clicks):
+def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
     """Create cdc cod."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
@@ -632,6 +624,7 @@ def display_cdc_cod(n_clicks):
         logger.error("Database does not exist.")
         return dash.no_update, dash.no_update, True, "Database does not exist"
     tables = sql.get_tables(db_filepath=db_filepath)
+    states_info = dh._inputs_flatten_list(callback_context.states_list)
 
     # check if table does not exist in database
     if "mcd99_cod" not in tables or "mcd18_cod" not in tables:
@@ -645,12 +638,12 @@ def display_cdc_cod(n_clicks):
     # filter and concat
     mcd18_cod = mcd18_cod[mcd18_cod["year"] >= new_dataset_start_year]
     cod_all = pd.concat([mcd99_cod, mcd18_cod], ignore_index=True)
-    cod_all = cod_all[(cod_all["year"] <= new_dataset_end_year)]
     cod_all = cdc.map_reference(
         df=cod_all,
         col=category_col,
         on_dict={"icd_-_sub-chapter": "wonder_sub_chapter"},
     )
+    cod_all = dh.filter_data(df=cod_all, callback_context=states_info)
 
     # create totals column
     totals = cod_all.groupby("year").sum(numeric_only=True).reset_index()
@@ -659,6 +652,8 @@ def display_cdc_cod(n_clicks):
     category_orders = charters.get_category_orders(
         df=cod_all, category=category_col, measure="deaths"
     )
+
+    most_recent_year = cod_all["year"].max()
 
     # create the charts
     cdc_cod_chart = charters.chart(
@@ -672,18 +667,93 @@ def display_cdc_cod(n_clicks):
 
     cdc_cod_heatmap = px.treemap(
         cod_all[
-            (cod_all[category_col] != "total")
-            & (cod_all["year"] == new_dataset_end_year)
+            (cod_all[category_col] != "total") & (cod_all["year"] == most_recent_year)
         ],
         path=[px.Constant("all"), category_col, "icd_-_sub-chapter"],
         values="deaths",
+        # skip first color to match the first chart
+        color_discrete_sequence=px.colors.qualitative.Plotly[1:],
     )
 
     cdc_top_cause_deaths, cdc_top_cause_names = cdc.get_top_deaths_by_age_group(
-        df=cod_all, year=new_dataset_end_year
+        df=cod_all, year=most_recent_year
+    )
+
+    # create the filters
+    cdc_cod_filters = dash.no_update
+    if not cdc_cod_num_filters:
+        cdc_cod_filters = dh.generate_filters(
+            df=cod_all,
+            prefix="cdc_cod",
+            config=None,
+            exclude_cols=[
+                "deaths",
+                "population",
+                "crude_rate",
+                "added_at",
+                "icd_-_sub-chapter",
+            ],
+        )["filters"]
+
+    # Create active filters display
+    active_filters_list = []
+    if cdc_cod_str_filters:
+        for i, filter_value in enumerate(cdc_cod_str_filters):
+            if filter_value:
+                col_name = [k["id"]["index"] for k in callback_context.states_list[0]][
+                    i
+                ]
+                active_filters_list.append(
+                    html.Div(
+                        [
+                            html.Strong(f"{col_name}: "),
+                            ", ".join(str(v) for v in filter_value),
+                        ],
+                        className="mb-1",
+                    )
+                )
+
+    if cdc_cod_num_filters:
+        for i, filter_value in enumerate(cdc_cod_num_filters):
+            if filter_value:
+                col_name = [k["id"]["index"] for k in callback_context.states_list[1]][
+                    i
+                ]
+                active_filters_list.append(
+                    html.Div(
+                        [
+                            html.Strong(f"{col_name}: "),
+                            f"{filter_value[0]} - {filter_value[1]}",
+                        ],
+                        className="mb-1",
+                    )
+                )
+
+    active_filters_card = dbc.Card(
+        [
+            dbc.CardHeader(
+                html.H5(
+                    [
+                        html.I(className="fas fa-list-ul me-2"),
+                        "Active Filters",
+                    ],
+                    className="mb-0",
+                ),
+                className="bg-light",
+            ),
+            dbc.CardBody(
+                html.Div(
+                    active_filters_list if active_filters_list else "No active filters",
+                    className="small",
+                )
+            ),
+        ],
+        className="shadow-sm mb-3",
     )
 
     return (
+        active_filters_card,
+        cdc_cod_filters,
         dcc.Graph(figure=cdc_cod_chart),
         dcc.Graph(figure=cdc_cod_heatmap),
         dag.AgGrid(
@@ -707,6 +777,51 @@ def display_cdc_cod(n_clicks):
         False,
         "",
     )
+
+
+@callback(
+    [
+        Output({"type": "cdc_cod-collapse", "index": ALL}, "is_open"),
+        Output({"type": "cdc_cod-collapse-button", "index": ALL}, "children"),
+        Input({"type": "cdc_cod-collapse-button", "index": ALL}, "n_clicks"),
+        State({"type": "cdc_cod-collapse", "index": ALL}, "is_open"),
+        State({"type": "cdc_cod-collapse-button", "index": ALL}, "children"),
+    ],
+)
+def toggle_cdc_cod_collapse(n_clicks, is_open, children):
+    """Toggle collapse state of filter checklists."""
+    if not n_clicks or not any(n_clicks):
+        raise dash.exceptions.PreventUpdate
+
+    # Find which button was clicked
+    ctx = callback_context
+    if not ctx.triggered:
+        return [False] * len(is_open), children
+
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    button_idx = eval(button_id)["index"]
+
+    # Update the collapse states and button icons
+    new_is_open = []
+    new_children = []
+
+    for _, (col, is_open_state, child) in enumerate(
+        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
+    ):
+        # Update collapse state
+        new_state = not is_open_state if col == button_idx else is_open_state
+        new_is_open.append(new_state)
+
+        # Update button content
+        label = child[0]["props"]["children"]  # Get the column name
+        new_children.append(
+            [
+                html.Span(label, style={"flex-grow": 1}),
+                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
+            ]
+        )
+
+    return new_is_open, new_children
 
 
 @callback(
@@ -741,7 +856,6 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     # filter and concat
     mcd18_cod = mcd18_cod[mcd18_cod["year"] >= new_dataset_start_year]
     cod_all = pd.concat([mcd99_cod, mcd18_cod], ignore_index=True)
-    cod_all = cod_all[(cod_all["year"] <= new_dataset_end_year)]
     cod_all = cdc.map_reference(
         df=cod_all,
         col=category_col,
@@ -929,7 +1043,7 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
     cdc_mi_chart = charters.compare_rates(
         df=mi_df,
         x_axis="year",
-        rates=["1_year_mi", f"{rolling}_year_mi"],
+        rates=["1_year_mi", f"{rolling}_year_mi", "whl_3"],
     )
 
     # mortality improvement table

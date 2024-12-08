@@ -14,9 +14,9 @@ logger = custom_logger.setup_logging(__name__)
 
 def whl(
     rates: Union[pd.Series, np.ndarray],
-    weights: Union[pd.Series, np.ndarray],
     horizontal_order: int,
     horizontal_lambda: float,
+    weights: Union[pd.Series, np.ndarray] = None,
     horizontal_expo: float = 0,
     vertical_order: int = 0,
     vertical_lambda: float = 0,
@@ -72,12 +72,12 @@ def whl(
     ----------
     rates : pd.Series
         Observed raw data points (1D or 2D array).
-    weights : pd.Series
-        Weights associated with the raw data (same shape as raw_data)
     horizontal_order : int
         Order of differencing in the horizontal direction (or primary dimension).
     horizontal_lambda : float
         Smoothing parameter for horizontal differences.
+    weights : pd.Series
+        Weights associated with the raw data (same shape as raw_data)
     horizontal_expo : float
         Exponential rate parameter for horizontal differences.
     vertical_order : int
@@ -106,6 +106,8 @@ def whl(
     from scipy.sparse.linalg import spsolve
 
     rates = np.array(rates, dtype=float)
+    if weights is None:
+        weights = np.ones_like(rates)
     weights = np.array(weights, dtype=float)
 
     # dimensions of the data

@@ -8,6 +8,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import dash_bootstrap_components as dbc
+import pandas as pd
 import polars as pl
 import yaml
 from dash import dcc, html
@@ -173,6 +174,17 @@ def generate_filters(
     # create filters
     for col in columns:
         if isinstance(df[col][0], str) or df[col].nunique() < num_to_str_count:
+            # create options
+            if isinstance(df[col].dtype, pd.CategoricalDtype):
+                options = [
+                    {"label": str(i), "value": i}
+                    for i in df[col].dropna().cat.categories
+                ]
+            else:
+                options = [
+                    {"label": str(i), "value": i}
+                    for i in sorted(df[col].dropna().astype(str).unique())
+                ]
             # Create collapsible checklist for string columns
             filter = html.Div(
                 [
@@ -188,10 +200,7 @@ def generate_filters(
                     dbc.Collapse(
                         dcc.Checklist(
                             id={"type": prefix_str_filter, "index": col},
-                            options=[
-                                {"label": str(i), "value": i}
-                                for i in sorted(df[col].unique())
-                            ],
+                            options=options,
                             value=[],
                             className="ms-2",
                             labelStyle={"display": "block"},
@@ -203,6 +212,7 @@ def generate_filters(
                 className="mb-3",
             )
             str_cols.append(col)
+        # slider for numeric columns
         else:
             filter = html.Div(
                 [
@@ -220,6 +230,7 @@ def generate_filters(
                             id={"type": prefix_num_filter, "index": col},
                             min=df[col].min(),
                             max=df[col].max(),
+                            step=1,
                             marks=None,
                             value=[df[col].min(), df[col].max()],
                             tooltip={"always_visible": True, "placement": "bottom"},

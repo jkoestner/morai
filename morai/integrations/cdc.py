@@ -23,6 +23,7 @@ from typing import Optional
 import pandas as pd
 import requests
 
+from morai.forecast import graduation
 from morai.utils import custom_logger, helpers, sql
 from morai.utils.custom_logger import suppress_logs
 from morai.utils.helpers import check_merge
@@ -176,6 +177,33 @@ def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
             FROM {table_name}
             """
     cdc_df = sql.read_sql(db_filepath, query)
+
+    # correctly order the age groups
+    if "age_groups" in cdc_df.columns:
+        age_group_order = [
+            "Not Stated",
+            "< 1 year",
+            "1-4 years",
+            "5-9 years",
+            "10-14 years",
+            "5-14 years",
+            "15-19 years",
+            "20-24 years",
+            "15-24 years",
+            "25-34 years",
+            "35-44 years",
+            "45-54 years",
+            "55-64 years",
+            "65-74 years",
+            "75-84 years",
+            "85+ years",
+            "total",
+        ]
+        cdc_df["age_groups"] = pd.Categorical(
+            cdc_df["age_groups"], categories=age_group_order, ordered=True
+        )
+        cdc_df["age_groups"] = cdc_df["age_groups"].cat.remove_unused_categories()
+
     logger.debug(
         f"table `{table_name}` last updated at: {last_date}, rows: {len(cdc_df)}"
     )
@@ -249,6 +277,7 @@ def map_reference(
     mapping = mapping[[reference_on, col]]
     mapping = mapping.drop_duplicates()
 
+    # merge the col into the df
     df = check_merge(pd.merge)(
         left=df,
         right=mapping[[reference_on, col]],
@@ -257,6 +286,7 @@ def map_reference(
         right_on=reference_on,
     )
 
+    # drop the reference column
     if reference_on != df_on and reference_on in df.columns:
         df = df.drop(columns=[reference_on])
 
@@ -311,6 +341,12 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
     mi_df = mi_df.groupby(["year"])[["crude_adj", "deaths"]].sum().reset_index()
     mi_df["1_year_mi"] = 1 - (mi_df["crude_adj"] / mi_df["crude_adj"].shift(1))
     mi_df[f"{rolling}_year_mi"] = mi_df["1_year_mi"].rolling(window=rolling).mean()
+
+    # calculate whl
+    mi_df = mi_df[mi_df["1_year_mi"].notna()]
+    mi_df["whl_3"] = graduation.whl(
+        rates=mi_df["1_year_mi"], horizontal_order=3, horizontal_lambda=400
+    )
 
     return mi_df
 
@@ -412,27 +448,14 @@ def get_top_deaths_by_age_group(
         Tuple of the deaths pivot and the names pivot
 
     """
-    # filter to year and create order of columns
+    # filter to year
     df_year = df[df["year"] == year].copy()
-    age_group_order = [
-        "Not Stated",
-        "< 1 year",
-        "1-4 years",
-        "5-14 years",
-        "15-24 years",
-        "25-34 years",
-        "35-44 years",
-        "45-54 years",
-        "55-64 years",
-        "65-74 years",
-        "75-84 years",
-        "85+ years",
-    ]
-    df_year["age_groups"] = pd.Categorical(
-        df_year["age_groups"], categories=age_group_order, ordered=True
-    )
 
-    # map the cod column
+    # drop column if exists and filter out look up column
+    if cod_col in df_year.columns:
+        df_year = df_year.drop(columns=[cod_col])
+    df_year = df_year[df_year["icd_-_sub-chapter"].notna()]
+
     df_year = map_reference(
         df=df_year,
         col=cod_col,
