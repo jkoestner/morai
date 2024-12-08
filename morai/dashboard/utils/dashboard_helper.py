@@ -508,6 +508,23 @@ def generate_selectors(
             else {"display": "none"},
         ),
         html.Div(
+            id={"type": prefix_group, "index": "normalize"},
+            children=[
+                html.Label("Normalize"),
+                dcc.Dropdown(
+                    id={"type": prefix_selector, "index": "normalize_selector"},
+                    options=config_dataset["columns"]["features"],
+                    value=None,
+                    clearable=False,
+                    multi=True,
+                    placeholder="Normalize By",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("normalize") == True
+            else {"display": "none"},
+        ),
+        html.Div(
             id={"type": prefix_group, "index": "add_line"},
             children=[
                 html.Label("Y=1 Line"),

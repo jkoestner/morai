@@ -18,7 +18,7 @@ from dash_extensions.enrich import (
 
 from morai.dashboard.components import dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
-from morai.experience import charters
+from morai.experience import charters, experience
 from morai.forecast import metrics
 from morai.utils import custom_logger
 
@@ -332,6 +332,7 @@ def load_data(dataset, config):
             "add_line": True,
             "rates": False,
             "weights": False,
+            "normalize": True,
         },
     )
 
@@ -431,6 +432,16 @@ def update_tab_content(
                 x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
             )
         elif tool == "chart":
+            if dh._inputs_parse_id(states_info, "normalize_selector"):
+                filtered_df = experience.normalize(
+                    df=filtered_df,
+                    features=dh._inputs_parse_id(states_info, "normalize_selector"),
+                    numerator=dh._inputs_parse_id(states_info, "numerator_selector"),
+                    denominator=dh._inputs_parse_id(
+                        states_info, "denominator_selector"
+                    ),
+                    add_norm_col=False,
+                )
             chart = charters.chart(
                 df=filtered_df,
                 x_axis=x_axis,
@@ -579,6 +590,7 @@ def toggle_tool(tool, all_selectors):
         "secondary",
         "x_bins",
         "add_line",
+        "normalize",
     ]
     compare_selectors = [
         "x_axis",

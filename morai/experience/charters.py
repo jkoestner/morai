@@ -18,8 +18,8 @@ from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 
-# default chart height and width used for multiplots
-chart_height = 300
+# default chart height and width
+chart_height = 400
 chart_width = 1000
 
 
@@ -66,9 +66,11 @@ def chart(
     type : str, optional (default="line")
         The type of chart to create. Options are "line", "heatmap", "bar", or "area".
     numerator : str, optional (default=None)
+        Only used when y_axis is "ratio" or "risk".
         The column name to use for the numerator values.
     denominator : str, optional (default=None)
-        The column name to use for the expected values.
+        Only used when y_axis is "ratio" or "risk".
+        The column name to use for the denominator values.
     title : str
         The title of the chart.
     y_sort : bool, optional (default=False)
@@ -92,8 +94,10 @@ def chart(
         The chart
 
     """
+    # initialize variables
     df = df.copy()
     use_num_and_den = True if numerator and denominator else False
+
     # heatmap sum values are color rather than y_axis
     if type in ("heatmap", "contour"):
         if not color:
@@ -236,6 +240,7 @@ def chart(
 
     fig.update_layout(
         yaxis_type=yaxis_type,
+        height=chart_height,
     )
 
     # return the dataframe instead of figure
@@ -394,6 +399,7 @@ def compare_rates(
     fig.update_layout(
         title_text=f"Comparison of '{rates}' by '{x_axis}'",
         yaxis_type=yaxis_type,
+        height=chart_height,
     )
     fig.update_xaxes(title_text=x_axis)
     fig.update_yaxes(title_text=y_title, secondary_y=False)
@@ -1113,7 +1119,7 @@ def target(
             # add trace for line
             if add_line:
                 line_name = "y=1"
-                if pd.api.types.is_numeric_dtype(grouped_data[plot_feature[0]]):
+                if pd.api.types.is_numeric_dtype(grouped_data[plot_feature[0]].dtype):
                     add_line_x = [
                         grouped_data[plot_feature[0]].min(),
                         grouped_data[plot_feature[0]].max(),

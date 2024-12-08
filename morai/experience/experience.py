@@ -15,10 +15,13 @@ def normalize(
     features: List[str],
     numerator: str,
     denominator: Optional[str] = None,
-    suffix: Optional[str] = None,
+    add_norm_col: Optional[bool] = False,
 ) -> pd.DataFrame:
     """
     Normalize a column (numerator) based on a number of features.
+
+    The normalization is done by calculating the relative risk of the numerator
+    for each feature group and can be weighted by the denominator if provided.
 
     Normalizing over the features is a crude method to adjust data for differences
     in the feature groups. when the features are independent, this method is
@@ -54,19 +57,17 @@ def normalize(
         Column to normalize.
     denominator : str, optional
         Weighting column.
-    suffix : str, optional
-        Additional suffix for the normalized column if doing multiple normalizations.
+    add_norm_col : bool, optional
+        Add the normalized column instead of overwriting.
 
     Returns
     -------
     df : pd.DataFrame
-        DataFrame with additional column for normalized values with prefix '_norm'.
+        DataFrame with normalized values.
 
 
     """
-    numerator_norm = f"{numerator}_norm"
-    if suffix is not None:
-        numerator_norm = f"{numerator_norm}_{suffix}"
+    numerator_col = numerator if not add_norm_col else f"{numerator}_norm"
 
     # calculate the relative risk
     df = calc_relative_risk(
@@ -74,7 +75,7 @@ def normalize(
     )
 
     # normalize the numerator
-    df[numerator_norm] = df[numerator] / df["risk"]
+    df[numerator_col] = df[numerator] / df["risk"]
     df = df.drop(columns=["risk"])
 
     return df
