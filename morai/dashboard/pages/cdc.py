@@ -180,24 +180,25 @@ def layout():
                             dbc.Row(
                                 [
                                     dbc.Col(
-                                        dbc.Button(
-                                            html.I(className="fas fa-sync-alt"),
-                                            id="button-cod",
-                                            color="primary",
-                                            className="shadow-sm",
-                                        ),
+                                        [
+                                            dbc.Button(
+                                                html.I(className="fas fa-sync-alt"),
+                                                id="button-cod",
+                                                color="primary",
+                                                className="shadow-sm",
+                                            ),
+                                        ],
                                         width=1,
-                                    ),
-                                    dbc.Col(
-                                        html.P(
-                                            [
-                                                "The chart shows the amount of deaths by COD over the past few years. ",
-                                            ]
-                                        ),
-                                        width=11,
                                     ),
                                 ],
                                 className="mb-3",
+                            ),
+                            dbc.Row(
+                                html.P(
+                                    [
+                                        "The chart shows the amount of deaths by COD over the past few years. ",
+                                    ]
+                                ),
                             ),
                             dbc.Row(
                                 dcc.Loading(
@@ -243,30 +244,41 @@ def layout():
                                 [
                                     dbc.Col(
                                         dcc.Loading(
-                                            id="loading-cdc-top-cause-names",
+                                            id="loading-cdc-top-causes",
                                             type="default",
                                             color="#007bff",
                                             children=html.Div(
-                                                id="cdc-top-cause-names",
+                                                [
+                                                    dbc.Tabs(
+                                                        [
+                                                            dbc.Tab(
+                                                                html.Div(
+                                                                    id="cdc-top-cause-names",
+                                                                    className="bg-white rounded-3 shadow-sm p-3",
+                                                                ),
+                                                                label="Names",
+                                                                tab_id="tab-names",
+                                                            ),
+                                                            dbc.Tab(
+                                                                html.Div(
+                                                                    id="cdc-top-cause-deaths",
+                                                                    className="bg-white rounded-3 shadow-sm p-3",
+                                                                ),
+                                                                label="Deaths",
+                                                                tab_id="tab-deaths",
+                                                            ),
+                                                        ],
+                                                        id="cdc-top-causes-tabs",
+                                                        active_tab="tab-names",
+                                                    ),
+                                                ],
                                                 className="bg-white rounded-3 shadow-sm p-3",
                                             ),
                                         ),
-                                        width=6,
-                                    ),
-                                    dbc.Col(
-                                        dcc.Loading(
-                                            id="loading-cdc-top-cause-deaths",
-                                            type="default",
-                                            color="#007bff",
-                                            children=html.Div(
-                                                id="cdc-top-cause-deaths",
-                                                className="bg-white rounded-3 shadow-sm p-3",
-                                            ),
-                                        ),
-                                        width=6,
+                                        width=12,
                                     ),
                                 ],
-                                className="mb-4",
+                                className="g-3 mb-3",
                             ),
                         ],
                         title=[
@@ -667,7 +679,7 @@ def display_cdc_cod(n_clicks):
         values="deaths",
     )
 
-    cdc_top_cause_names, cdc_top_cause_deaths = cdc.get_top_deaths_by_age_group(
+    cdc_top_cause_deaths, cdc_top_cause_names = cdc.get_top_deaths_by_age_group(
         df=cod_all, year=new_dataset_end_year
     )
 
@@ -677,10 +689,20 @@ def display_cdc_cod(n_clicks):
         dag.AgGrid(
             rowData=cdc_top_cause_names.to_dict("records"),
             columnDefs=dash_formats.get_column_defs(cdc_top_cause_names),
+            dashGridOptions={
+                "defaultColDef": {
+                    "width": 110,
+                },
+            },
         ),
         dag.AgGrid(
             rowData=cdc_top_cause_deaths.to_dict("records"),
             columnDefs=dash_formats.get_column_defs(cdc_top_cause_deaths),
+            dashGridOptions={
+                "defaultColDef": {
+                    "width": 110,
+                },
+            },
         ),
         False,
         "",
