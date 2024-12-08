@@ -27,7 +27,10 @@ def test_relative_risk() -> None:
 def test_normalize() -> None:
     """Tests the normalization calculation."""
     test_df = experience.normalize(
-        df=experience_df, features=["year"], numerator="year_lob_rate"
+        df=experience_df,
+        features=["year"],
+        numerator="year_lob_rate",
+        add_norm_col=True,
     )
     test_df = experience.calc_relative_risk(
         df=test_df, features=["year"], numerator="year_lob_rate_norm"
