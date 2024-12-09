@@ -28,14 +28,14 @@ logger = custom_logger.setup_logging(__name__)
 dash.register_page(__name__, path="/cdc", name="CDC", title="morai - CDC", order=5)
 
 # initialize variables
-last_updated = cdc.get_last_updated()
+LAST_UPDATED = cdc.get_last_updated()
 # provides when to use data from 18 dataset as there is overlap in 99 dataset
-new_dataset_start_year = 2021
+NEW_DATASET_START_YEAR = 2021
 # training for trend chart
-train_start_year = 2015
-train_end_year = 2019
+TRAIN_START_YEAR = 2015
+TRAIN_END_YEAR = 2019
 # grouping for cod analysis
-category_col = "simple_grouping"
+CATEGORY_COL = "simple_grouping"
 
 
 def layout():
@@ -106,7 +106,7 @@ def layout():
                                             [
                                                 "Last Updated: ",
                                                 html.Span(
-                                                    last_updated,
+                                                    LAST_UPDATED,
                                                     id="last-updated-text",
                                                     className="text-muted small",
                                                 ),
@@ -166,8 +166,8 @@ def layout():
                                         ),
                                     ],
                                 ),
-                                "The data will not match exactly to source data due to splitting the data more granularly"
-                                " and losing a few claims. Per year it is about .03%(1000 claims) off.",
+                                "Note: The data will not match exactly to source data due to splitting the data more granularly"
+                                " and losing a few claims (per year it is about .03%, 1000 claims off)",
                                 html.Br(),
                             ],
                             className="card-text mb-0",
@@ -636,21 +636,21 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
     mcd18_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_cod")
 
     # filter and concat
-    mcd18_cod = mcd18_cod[mcd18_cod["year"] >= new_dataset_start_year]
+    mcd18_cod = mcd18_cod[mcd18_cod["year"] >= NEW_DATASET_START_YEAR]
     cod_all = pd.concat([mcd99_cod, mcd18_cod], ignore_index=True)
     cod_all = cdc.map_reference(
         df=cod_all,
-        col=category_col,
+        col=CATEGORY_COL,
         on_dict={"icd_-_sub-chapter": "wonder_sub_chapter"},
     )
     cod_all = dh.filter_data(df=cod_all, callback_context=states_info)
 
     # create totals column
     totals = cod_all.groupby("year").sum(numeric_only=True).reset_index()
-    totals[category_col] = "total"
+    totals[CATEGORY_COL] = "total"
     cod_all = pd.concat([cod_all, totals], ignore_index=True)
     category_orders = charters.get_category_orders(
-        df=cod_all, category=category_col, measure="deaths"
+        df=cod_all, category=CATEGORY_COL, measure="deaths"
     )
 
     most_recent_year = cod_all["year"].max()
@@ -660,16 +660,16 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         df=cod_all,
         x_axis="year",
         y_axis="deaths",
-        color=category_col,
+        color=CATEGORY_COL,
         type="area",
         category_orders=category_orders,
     )
 
     cdc_cod_heatmap = px.treemap(
         cod_all[
-            (cod_all[category_col] != "total") & (cod_all["year"] == most_recent_year)
+            (cod_all[CATEGORY_COL] != "total") & (cod_all["year"] == most_recent_year)
         ],
-        path=[px.Constant("all"), category_col, "icd_-_sub-chapter"],
+        path=[px.Constant("all"), CATEGORY_COL, "icd_-_sub-chapter"],
         values="deaths",
         # skip first color to match the first chart
         color_discrete_sequence=px.colors.qualitative.Plotly[1:],
@@ -854,33 +854,33 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     mcd18_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_cod")
 
     # filter and concat
-    mcd18_cod = mcd18_cod[mcd18_cod["year"] >= new_dataset_start_year]
+    mcd18_cod = mcd18_cod[mcd18_cod["year"] >= NEW_DATASET_START_YEAR]
     cod_all = pd.concat([mcd99_cod, mcd18_cod], ignore_index=True)
     cod_all = cdc.map_reference(
         df=cod_all,
-        col=category_col,
+        col=CATEGORY_COL,
         on_dict={"icd_-_sub-chapter": "wonder_sub_chapter"},
     )
 
     # create totals column
     totals = cod_all.groupby("year").sum(numeric_only=True).reset_index()
-    totals[category_col] = "total"
+    totals[CATEGORY_COL] = "total"
     cod_all = pd.concat([cod_all, totals], ignore_index=True)
     category_orders = charters.get_category_orders(
-        df=cod_all, category=category_col, measure="deaths"
+        df=cod_all, category=CATEGORY_COL, measure="deaths"
     )
 
     # train the data based on year and the category using linear regression
     train_df = cod_all[
-        (cod_all["year"] >= train_start_year) & (cod_all["year"] <= train_end_year)
+        (cod_all["year"] >= TRAIN_START_YEAR) & (cod_all["year"] <= TRAIN_END_YEAR)
     ]
-    train_df = train_df.groupby(["year", category_col])["deaths"].sum().reset_index()
+    train_df = train_df.groupby(["year", CATEGORY_COL])["deaths"].sum().reset_index()
 
     # create the models
     models = {}
-    for cod in train_df[category_col].unique():
-        cod_subset = train_df[train_df[category_col] == cod]
-        X = (cod_subset["year"] - train_start_year).values.reshape(-1, 1)
+    for cod in train_df[CATEGORY_COL].unique():
+        cod_subset = train_df[train_df[CATEGORY_COL] == cod]
+        X = (cod_subset["year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
         y = cod_subset["deaths"].values
         model = LinearRegression().fit(X, y)
         models[cod] = {
@@ -890,13 +890,13 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         }
 
     # make the predictions
-    test_df = cod_all[(cod_all["year"] >= (train_end_year + 1))]
-    test_df = test_df.groupby(["year", category_col])["deaths"].sum().reset_index()
+    test_df = cod_all[(cod_all["year"] >= (TRAIN_END_YEAR + 1))]
+    test_df = test_df.groupby(["year", CATEGORY_COL])["deaths"].sum().reset_index()
 
     for cod, model in models.items():
-        mask = test_df[category_col] == cod
+        mask = test_df[CATEGORY_COL] == cod
         if mask.sum() > 0:
-            X = (test_df.loc[mask, "year"] - train_start_year).values.reshape(-1, 1)
+            X = (test_df.loc[mask, "year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
             test_df.loc[mask, "pred"] = model["model"].predict(X)
 
     test_df["diff_abs"] = test_df["deaths"] - test_df["pred"]
@@ -918,7 +918,7 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         df=test_df,
         x_axis="year",
         y_axis=y_axis,
-        color=category_col,
+        color=CATEGORY_COL,
         type="area",
         category_orders=category_orders,
         display=display,
@@ -928,10 +928,10 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         tab_content = dcc.Graph(figure=cdc_cod_trends_chart)
     else:
         pivot = cdc_cod_trends_chart.pivot(
-            index=category_col, columns="year", values=y_axis
+            index=CATEGORY_COL, columns="year", values=y_axis
         )
         pivot.index = pd.Categorical(
-            pivot.index, categories=category_orders[category_col], ordered=True
+            pivot.index, categories=category_orders[CATEGORY_COL], ordered=True
         )
         pivot = pivot.sort_index().reset_index()
         columnDefs = dash_formats.get_column_defs(pivot)
@@ -1024,7 +1024,7 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
     mcd79_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd79_mi")
     mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
     mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
-    mcd18_mi = mcd18_mi[mcd18_mi["year"] >= new_dataset_start_year]
+    mcd18_mi = mcd18_mi[mcd18_mi["year"] >= NEW_DATASET_START_YEAR]
     mi = pd.concat([mcd79_mi, mcd99_mi, mcd18_mi], axis=0, ignore_index=True)
 
     # remap the age groups
