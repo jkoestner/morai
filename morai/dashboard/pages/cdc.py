@@ -696,38 +696,11 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         )["filters"]
 
     # Create active filters display
-    active_filters_list = []
-    if cdc_cod_str_filters:
-        for i, filter_value in enumerate(cdc_cod_str_filters):
-            if filter_value:
-                col_name = [k["id"]["index"] for k in callback_context.states_list[0]][
-                    i
-                ]
-                active_filters_list.append(
-                    html.Div(
-                        [
-                            html.Strong(f"{col_name}: "),
-                            ", ".join(str(v) for v in filter_value),
-                        ],
-                        className="mb-1",
-                    )
-                )
-
-    if cdc_cod_num_filters:
-        for i, filter_value in enumerate(cdc_cod_num_filters):
-            if filter_value:
-                col_name = [k["id"]["index"] for k in callback_context.states_list[1]][
-                    i
-                ]
-                active_filters_list.append(
-                    html.Div(
-                        [
-                            html.Strong(f"{col_name}: "),
-                            f"{filter_value[0]} - {filter_value[1]}",
-                        ],
-                        className="mb-1",
-                    )
-                )
+    active_filters_list = dh.get_active_filters(
+        callback_context=callback_context,
+        str_filters=cdc_cod_str_filters,
+        num_filters=cdc_cod_num_filters,
+    )
 
     active_filters_card = dbc.Card(
         [
@@ -777,51 +750,6 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         False,
         "",
     )
-
-
-@callback(
-    [
-        Output({"type": "cdc_cod-collapse", "index": ALL}, "is_open"),
-        Output({"type": "cdc_cod-collapse-button", "index": ALL}, "children"),
-        Input({"type": "cdc_cod-collapse-button", "index": ALL}, "n_clicks"),
-        State({"type": "cdc_cod-collapse", "index": ALL}, "is_open"),
-        State({"type": "cdc_cod-collapse-button", "index": ALL}, "children"),
-    ],
-)
-def toggle_cdc_cod_collapse(n_clicks, is_open, children):
-    """Toggle collapse state of filter checklists."""
-    if not n_clicks or not any(n_clicks):
-        raise dash.exceptions.PreventUpdate
-
-    # Find which button was clicked
-    ctx = callback_context
-    if not ctx.triggered:
-        return [False] * len(is_open), children
-
-    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    button_idx = eval(button_id)["index"]
-
-    # Update the collapse states and button icons
-    new_is_open = []
-    new_children = []
-
-    for _, (col, is_open_state, child) in enumerate(
-        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
-    ):
-        # Update collapse state
-        new_state = not is_open_state if col == button_idx else is_open_state
-        new_is_open.append(new_state)
-
-        # Update button content
-        label = child[0]["props"]["children"]  # Get the column name
-        new_children.append(
-            [
-                html.Span(label, style={"flex-grow": 1}),
-                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
-            ]
-        )
-
-    return new_is_open, new_children
 
 
 @callback(
@@ -1080,35 +1008,32 @@ def toggle_cdc_mi_collapse(n_clicks, is_open, children):
     if not n_clicks or not any(n_clicks):
         raise dash.exceptions.PreventUpdate
 
-    # Find which button was clicked
-    ctx = callback_context
-    if not ctx.triggered:
-        return [False] * len(is_open), children
+    return dh.toggle_collapse(
+        callback_context=callback_context,
+        is_open=is_open,
+        children=children,
+    )
 
-    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    button_idx = eval(button_id)["index"]
 
-    # Update the collapse states and button icons
-    new_is_open = []
-    new_children = []
+@callback(
+    [
+        Output({"type": "cdc_cod-collapse", "index": ALL}, "is_open"),
+        Output({"type": "cdc_cod-collapse-button", "index": ALL}, "children"),
+        Input({"type": "cdc_cod-collapse-button", "index": ALL}, "n_clicks"),
+        State({"type": "cdc_cod-collapse", "index": ALL}, "is_open"),
+        State({"type": "cdc_cod-collapse-button", "index": ALL}, "children"),
+    ],
+)
+def toggle_cdc_cod_collapse(n_clicks, is_open, children):
+    """Toggle collapse state of filter checklists."""
+    if not n_clicks or not any(n_clicks):
+        raise dash.exceptions.PreventUpdate
 
-    for _, (col, is_open_state, child) in enumerate(
-        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
-    ):
-        # Update collapse state
-        new_state = not is_open_state if col == button_idx else is_open_state
-        new_is_open.append(new_state)
-
-        # Update button content
-        label = child[0]["props"]["children"]  # Get the column name
-        new_children.append(
-            [
-                html.Span(label, style={"flex-grow": 1}),
-                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
-            ]
-        )
-
-    return new_is_open, new_children
+    return dh.toggle_collapse(
+        callback_context=callback_context,
+        is_open=is_open,
+        children=children,
+    )
 
 
 #   _____                 _   _

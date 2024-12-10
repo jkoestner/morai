@@ -456,6 +456,7 @@ def get_top_deaths_by_age_group(
         df_year = df_year.drop(columns=[cod_col])
     df_year = df_year[df_year["icd_-_sub-chapter"].notna()]
 
+    # map the cod column
     df_year = map_reference(
         df=df_year,
         col=cod_col,

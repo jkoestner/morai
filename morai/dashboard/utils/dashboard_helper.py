@@ -248,6 +248,126 @@ def generate_filters(
     return filter_dict
 
 
+def get_active_filters(
+    callback_context: Any,
+    str_filters: Optional[list[Any]] = None,
+    num_filters: Optional[list[Any]] = None,
+) -> list[Any]:
+    """
+    Create a list of active filters for display.
+
+    Parameters
+    ----------
+    callback_context : dash.callback_context
+        The callback context containing states information
+    str_filters : list, optional
+        List of string filter values
+    num_filters : list, optional
+        List of numeric filter values (min/max pairs)
+
+    Returns
+    -------
+    list
+        List of html.Div elements representing active filters
+
+    """
+    active_filters_list = []
+
+    # string filters
+    if str_filters:
+        for i, filter_value in enumerate(str_filters):
+            if filter_value:
+                col_name = [k["id"]["index"] for k in callback_context.states_list[0]][
+                    i
+                ]
+                active_filters_list.append(
+                    html.Div(
+                        [
+                            html.Strong(f"{col_name}: "),
+                            ", ".join(str(v) for v in filter_value),
+                        ],
+                        className="mb-1",
+                    )
+                )
+
+    # numeric filters
+    if num_filters:
+        for i, filter_value in enumerate(num_filters):
+            if filter_value:
+                col_name = [k["id"]["index"] for k in callback_context.states_list[1]][
+                    i
+                ]
+                active_filters_list.append(
+                    html.Div(
+                        [
+                            html.Strong(f"{col_name}: "),
+                            f"{filter_value[0]} - {filter_value[1]}",
+                        ],
+                        className="mb-1",
+                    )
+                )
+
+    return active_filters_list
+
+
+def toggle_collapse(
+    callback_context: Any, is_open: List[bool], children: List[dict]
+) -> tuple[List[bool], List[List[dict]]]:
+    """
+    Toggle collapse state of filter checklists.
+
+    Parameters
+    ----------
+    callback_context : dash.callback_context
+        The callback context containing states information
+    is_open : List[bool]
+        List of current collapse states
+    children : List[dict]
+        List of current button children
+
+    Returns
+    -------
+    tuple[List[bool], List[List[dict]]]
+        Updated collapse states and button children
+
+    """
+    # callback not triggered
+    ctx = callback_context
+    if not ctx.triggered:
+        return [False] * len(is_open), children
+
+    # find which button was clicked
+    button_id = callback_context.triggered[0]["prop_id"].split(".")[0]
+    button_idx = eval(button_id)["index"]
+
+    # initialize
+    new_is_open = []
+    new_children = []
+
+    # update collapse states and button content
+    for _, (col, is_open_state, child) in enumerate(
+        zip(
+            [x["id"]["index"] for x in callback_context.inputs_list[0]],
+            is_open,
+            children,
+        )
+    ):
+        # collapse state
+        new_state = not is_open_state if col == button_idx else is_open_state
+        new_is_open.append(new_state)
+
+        # button content
+        label = child[0]["props"]["children"]  # Get the column name
+        new_children.append(
+            [
+                html.Span(label, style={"flex-grow": 1}),
+                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
+            ]
+        )
+
+    return new_is_open, new_children
+
+
 def get_card_list(config: Dict[str, Any]) -> List[str]:
     """
     Get list of variables to display in cards.
