@@ -9,6 +9,7 @@ import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 from dash_extensions.enrich import (
     ALL,
     Input,
@@ -280,37 +281,6 @@ def layout():
                                 className="mb-3",
                             ),
                             dbc.Row(
-                                dbc.Col(
-                                    html.Div(
-                                        [
-                                            html.Label(
-                                                "Issue Age",
-                                                className="text-center mb-2",
-                                            ),
-                                            dcc.Slider(
-                                                id="slider-issue-age",
-                                                min=0,
-                                                max=100,
-                                                value=0,
-                                                step=1,
-                                                marks={
-                                                    i: str(i) for i in range(0, 100, 10)
-                                                },
-                                                tooltip={
-                                                    "placement": "bottom",
-                                                    "always_visible": True,
-                                                },
-                                                className="mb-4",
-                                            ),
-                                        ],
-                                        id="slider-container",
-                                        style={"display": "none"},
-                                    ),
-                                    width=6,
-                                    className="mx-auto",
-                                ),
-                            ),
-                            dbc.Row(
                                 [
                                     dbc.Col(
                                         dcc.Loading(
@@ -331,6 +301,53 @@ def layout():
                                             color="#007bff",
                                             children=html.Div(
                                                 id="graph-compare-age-log",
+                                                className="bg-white rounded-3 shadow-sm p-3",
+                                            ),
+                                        ),
+                                        width=6,
+                                    ),
+                                ],
+                                className="mb-4",
+                            ),
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        html.Div(
+                                            [
+                                                html.Label(
+                                                    "Issue Age",
+                                                    className="text-center mb-2",
+                                                ),
+                                                dcc.Slider(
+                                                    id="slider-issue-age",
+                                                    min=0,
+                                                    max=100,
+                                                    value=-1,
+                                                    step=1,
+                                                    marks={
+                                                        i: str(i)
+                                                        for i in range(0, 100, 10)
+                                                    },
+                                                    tooltip={
+                                                        "placement": "bottom",
+                                                        "always_visible": True,
+                                                    },
+                                                    className="mb-4",
+                                                ),
+                                            ],
+                                            id="slider-container",
+                                            style={"display": "none"},
+                                        ),
+                                        width=6,
+                                        className="mx-auto",
+                                    ),
+                                    dbc.Col(
+                                        dcc.Loading(
+                                            id="loading-graph-compare-ratio",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(
+                                                id="graph-compare-ratio",
                                                 className="bg-white rounded-3 shadow-sm p-3",
                                             ),
                                         ),
@@ -652,11 +669,12 @@ def initialize_tables(
         Output("slider-issue-age", "value"),
         Output("slider-issue-age", "marks"),
     ],
-    [Input("store-table-compare", "data")],
+    [Input("store-table-compare", "data"), Input("slider-issue-age", "value")],
     prevent_initial_call=True,
 )
 def create_contour(
     compare_df,
+    issue_age_value,
 ):
     """Graph the mortality tables with a contour and comparison."""
     compare_df = pd.DataFrame(compare_df)
@@ -664,7 +682,8 @@ def create_contour(
     # get the slider values
     issue_age_min = compare_df["issue_age"].min()
     issue_age_max = compare_df["issue_age"].max()
-    issue_age_value = issue_age_min
+    if issue_age_value == -1:
+        issue_age_value = round((issue_age_max + issue_age_min) / 2, 0)
     issue_age_marks = {i: str(i) for i in range(issue_age_min, issue_age_max, 10)}
 
     # adding attained_age to additional hover data
@@ -679,6 +698,22 @@ def create_contour(
     issue_age, duration = np.meshgrid(grouped_data.columns, grouped_data.index)
     attained_age = issue_age + duration - 1
 
+    # custom colorscale
+    zmin = 0.5
+    zmax = 1.5
+    custom_colorscale = [
+        [0.0, "blue"],
+        [(1 - zmin - 0.01) / (zmax - zmin), "greenyellow"],
+        [(1 - zmin) / (zmax - zmin), "darkviolet"],
+        [min((1 - zmin + 0.01) / (zmax - zmin), 1), "yellow"],
+        [1.0, "crimson"],
+    ]
+    contours = {
+        "start": zmin,
+        "end": zmax,
+        "size": (zmax - zmin) / 11,
+    }
+
     # graph the tables
     graph_contour = charters.chart(
         compare_df,
@@ -687,6 +722,7 @@ def create_contour(
         color="ratio",
         type="contour",
         agg="mean",
+        # add custom hover data
         customdata=attained_age,
         hovertemplate=(
             "issue_age: %{x}<br>"
@@ -694,7 +730,22 @@ def create_contour(
             "attained_age: %{customdata}<br>"
             "ratio: %{z}<extra></extra>"
         ),
+        # custom colorscale and contours
+        colorscale=custom_colorscale,
+        zmin=zmin,
+        zmax=zmax,
+        contours=contours,
     )
+
+    # add the age line
+    age_line = go.Scatter(
+        x=[issue_age_value, issue_age_value],
+        y=[compare_df["duration"].min(), compare_df["duration"].max()],
+        mode="lines",
+        line={"color": "black", "width": 2},
+        name="age",
+    )
+    graph_contour.add_trace(age_line)
 
     graph_contour = dcc.Graph(figure=graph_contour)
 
@@ -712,6 +763,7 @@ def create_contour(
     [
         Output("graph-compare-age", "children"),
         Output("graph-compare-age-log", "children"),
+        Output("graph-compare-ratio", "children"),
     ],
     [Input("slider-issue-age", "value")],
     [
@@ -736,11 +788,18 @@ def update_graphs_from_slider(issue_age_value, compare_df):
         rates=["table_1", "table_2"],
         y_log=True,
     )
+    graph_compare_ratio = charters.chart(
+        compare_df[compare_df["issue_age"] == issue_age_value],
+        x_axis="attained_age",
+        y_axis="ratio",
+        type="line",
+    )
 
     graph_compare_age = dcc.Graph(figure=graph_compare_age)
     graph_compare_age_log = dcc.Graph(figure=graph_compare_age_log)
+    graph_compare_ratio = dcc.Graph(figure=graph_compare_ratio)
 
-    return graph_compare_age, graph_compare_age_log
+    return graph_compare_age, graph_compare_age_log, graph_compare_ratio
 
 
 @callback(
