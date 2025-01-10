@@ -548,15 +548,16 @@ class LeeCarter:
             f"calculating qx_raw rates using {self.actual_col} and {self.expose_col}"
         )
         lc_df["qx_raw"] = np.where(
-            lc_df[self.actual_col] == 0,
+            lc_df[self.expose_col] == 0,
             0,
             lc_df[self.actual_col] / lc_df[self.expose_col],
         )
         logger.info(
-            f"there were {len(lc_df[lc_df['qx_raw']>1])} rates "
-            f"over 1 that were capped."
+            f"floored {(lc_df['qx_raw'] <= 0).sum()} rates "
+            f"to 0.000001 and capped {len(lc_df[lc_df['qx_raw']>=1])} rates "
+            f"to 0.999999."
         )
-        lc_df["qx_raw"] = lc_df["qx_raw"].clip(upper=1)
+        lc_df["qx_raw"] = lc_df["qx_raw"].clip(lower=0.000001, upper=0.999999)
         self.lc_df = lc_df
         logger.info(f"crude_df shape: {self.lc_df.shape}")
 
@@ -855,15 +856,16 @@ class CBD:
             f"calculating qx_raw rates using {self.actual_col} and {self.expose_col}"
         )
         cbd_df["qx_raw"] = np.where(
-            cbd_df[self.actual_col] == 0,
+            cbd_df[self.expose_col] == 0,
             0,
             cbd_df[self.actual_col] / cbd_df[self.expose_col],
         )
         logger.info(
-            f"there were {len(cbd_df[cbd_df['qx_raw']>1])} rates "
-            f"over 1 that were capped."
+            f"floored {(cbd_df['qx_raw'] <= 0).sum()} rates "
+            f"to 0.000001 and capped {len(cbd_df[cbd_df['qx_raw']>=1])} rates "
+            f"to 0.999999."
         )
-        cbd_df["qx_raw"] = cbd_df["qx_raw"].clip(upper=1)
+        cbd_df["qx_raw"] = cbd_df["qx_raw"].clip(lower=0.000001, upper=0.999999)
         self.cbd_df = cbd_df
         logger.info(f"cbd_df shape: {self.cbd_df.shape}")
 

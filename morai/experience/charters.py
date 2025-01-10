@@ -1174,6 +1174,7 @@ def get_stats(df: pd.DataFrame, features: list) -> pd.DataFrame:
     # add additional statistics
     stats.loc["missing"] = df_stats.isnull().sum()
     stats.loc["missing_pct"] = (df_stats.isnull().sum() / len(df_stats) * 100).round(2)
+    stats.loc["zero_pct"] = (df_stats == 0).sum() / len(df_stats) * 100
 
     # format
     stats = stats.transpose()

@@ -228,8 +228,11 @@ def update_charts(pathname, dataset, config):
     config_dataset = config["datasets"][config["general"]["dataset"]]
     features = config_dataset["columns"]["features"]
     num_cols = dataset[features].select_dtypes(include=["number"]).columns.tolist()
+    measures = config_dataset["columns"]["measures"]
+
     # table
-    stats_df = charters.get_stats(dataset, features=num_cols)
+    stats_df = charters.get_stats(dataset, features=num_cols + measures)
+
     # charts
     chart_freq_num = charters.frequency(
         dataset,

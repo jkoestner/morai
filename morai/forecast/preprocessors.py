@@ -199,7 +199,7 @@ def preprocess_data(
             mapping[col] = {"values": weighted_avg.to_dict(), "type": "weighted_avg"}
 
     if standardize:
-        logger.info("standardizing the data")
+        logger.info("standardizing the data with StandardScaler")
         scaler = StandardScaler()
         scale_features = X.select_dtypes(include="number").columns.to_list()
         # fit data
