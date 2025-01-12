@@ -1,5 +1,8 @@
 """CDC dashboard."""
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
@@ -26,6 +29,10 @@ from morai.utils import custom_logger, helpers, sql
 logger = custom_logger.setup_logging(__name__)
 
 dash.register_page(__name__, path="/cdc", name="CDC", title="morai - CDC", order=5)
+
+# thread executor
+executor = ThreadPoolExecutor(max_workers=2)
+thread_lock = threading.Lock()
 
 # initialize variables
 LAST_UPDATED = cdc.get_last_updated()
@@ -561,35 +568,47 @@ def layout():
     Input("button-update-cdc", "n_clicks"),
     prevent_initial_call=True,
 )
-def update_cdc_data(n_clicks):
+def update_cdc_data_async(n_clicks):
     """Update CDC data when button is clicked."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
 
-    try:
-        last_updated = pd.to_datetime(cdc.get_last_updated())
-        days_since_update = (pd.Timestamp.now() - last_updated).days
-        if days_since_update < 14:
-            return (
-                True,
-                "Data was recently updated. Please wait 14 days before updating again.",
-                "warning",
-                "Warning",
-                dash.no_update,
-            )
-        refresh_cdc_data()
-        new_last_updated = cdc.get_last_updated()
+    def background_task():
+        try:
+            last_updated = pd.to_datetime(cdc.get_last_updated())
+            days_since_update = (pd.Timestamp.now() - last_updated).days
+            if days_since_update < 14:
+                return "recent", None
+            refresh_cdc_data()
+            new_last_updated = cdc.get_last_updated()
+            with thread_lock:
+                return "success", new_last_updated
+        except Exception as e:
+            with thread_lock:
+                return "error", str(e)
+
+    future = executor.submit(background_task)
+    status, result = future.result()  # This waits for the thread to complete
+    if status == "recent":
+        return (
+            True,
+            "Data was recently updated. Please wait 14 days before updating again.",
+            "warning",
+            "Warning",
+            dash.no_update,
+        )
+    elif status == "success":
         return (
             True,
             "CDC data successfully updated!",
             "success",
             "Success",
-            new_last_updated,
+            result,
         )
-    except Exception as e:
+    else:
         return (
             True,
-            f"Error updating CDC data: {e!s}",
+            f"Error updating CDC data: {result}",
             "danger",
             "Error",
             dash.no_update,
