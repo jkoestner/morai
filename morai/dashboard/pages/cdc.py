@@ -35,7 +35,6 @@ executor = ThreadPoolExecutor(max_workers=2)
 thread_lock = threading.Lock()
 
 # initialize variables
-LAST_UPDATED = cdc.get_last_updated()
 # provides when to use data from 18 dataset as there is overlap in 99 dataset
 NEW_DATASET_START_YEAR = 2021
 # training for trend chart
@@ -47,6 +46,7 @@ CATEGORY_COL = "simple_grouping"
 
 def layout():
     """CDC layout."""
+    last_updated = cdc.get_last_updated()
     return html.Div(
         [
             dcc.Store(id="store-cdc-results", storage_type="session"),
@@ -113,7 +113,7 @@ def layout():
                                             [
                                                 "Last Updated: ",
                                                 html.Span(
-                                                    LAST_UPDATED,
+                                                    last_updated,
                                                     id="last-updated-text",
                                                     className="text-muted small",
                                                 ),
