@@ -474,6 +474,7 @@ class LeeCarter:
         year_col: str = "observation_year",
         actual_col: str = "death_claim_amount",
         expose_col: str = "amount_exposed",
+        interval: Optional[int] = None,
     ) -> None:
         """
         Initialize the model.
@@ -488,6 +489,8 @@ class LeeCarter:
             The column name for the actual values
         expose_col : str, optional
             The column name for the exposure values
+        interval : int, optional
+            The interval for age groups
 
         """
         logger.info("initialized LeeCarter")
@@ -495,6 +498,7 @@ class LeeCarter:
         self.year_col = year_col
         self.actual_col = actual_col
         self.expose_col = expose_col
+        self.interval = interval
         # calculations
         self.a_x = None
         self.k_t = None
@@ -563,9 +567,15 @@ class LeeCarter:
 
         return self.lc_df
 
-    def fit(self, lc_df: pd.DataFrame) -> pd.DataFrame:
+    def fit(self, lc_df: pd.DataFrame, interval: Optional[int] = None) -> pd.DataFrame:
         """
         Fit the LeeCarter model from a crude_df which will add the qx_lc rates.
+
+        There are 4 parameters when fitting the LeeCarter model:
+          - a_x (age effect)
+          - k_t (time trend)
+          - b_x (age effect over time trend)
+          - b_x_k_t (matrix multiply)
 
         Parameters
         ----------
@@ -573,6 +583,9 @@ class LeeCarter:
             A DataFrame containing crude mortality rates for a given population.
             - rows: year
             - columns: age
+        interval : int, optional
+            The interval of ages for each iteration of fit.
+            Default is None which uses the entire range of ages in the data.
 
         Returns
         -------
@@ -589,63 +602,97 @@ class LeeCarter:
         crude_pivot = lc_df.pivot(
             index=self.year_col, columns=self.age_col, values="qx_raw"
         )
+        a_x = {}
+        k_t = {}
+        b_x = {}
+        b_x_k_t = {}
+        predictions_list = []
 
         year_start = crude_pivot.index.min()
         year_end = crude_pivot.index.max()
         age_start = int(crude_pivot.columns.min())
         age_end = int(crude_pivot.columns.max())
+        ages = crude_pivot.columns
+
+        if interval is None and self.interval is not None:
+            interval = self.interval
+        elif interval is None:
+            # interval would equal data range
+            interval = len(ages)
 
         logger.info(f"age range: {age_start}, {age_end}")
         logger.info(f"year range: {year_start}, {year_end}")
+        logger.info(f"creating `{len(ages) // interval}` intervals")
 
-        # qx is the mortality matrix
-        log_qx = np.log(crude_pivot)
+        for i in range(0, len(ages), interval):
+            interval_ages = ages[i : i + interval]
+            interval_pivot = crude_pivot[interval_ages]
+            interval_age_range = f"{interval_ages[0]}-{interval_ages[-1]}"
+            logger.debug(f"interval age range: {interval_age_range}")
 
-        # ax is the age effect (average mortality rate by age)
-        logger.debug("calculating a_x")
-        a_x = log_qx.mean(axis=0)
-        self.a_x = a_x
+            # qx is the mortality matrix
+            log_qx = np.log(interval_pivot)
 
-        # kt is the time trend
-        logger.debug("calculating k_t")
-        self.k_t = (log_qx - self.a_x).sum(axis=1)
-        e1 = (log_qx - self.a_x).multiply(self.k_t, axis="index")
-        e2 = e1.sum(axis=0)
-        e3 = self.k_t**2
-        e4 = e3.sum()
+            # ax is the age effect (average mortality rate by age)
+            logger.debug("calculating a_x")
+            a_x[interval_age_range] = log_qx.mean(axis=0)
 
-        # bx is the rate of change of age due to time trend
-        logger.debug("calculating b_x")
-        b_x = e2 / e4
-        self.b_x = b_x
+            # kt is the time trend
+            logger.debug("calculating k_t")
+            k_t[interval_age_range] = (log_qx - a_x[interval_age_range]).sum(axis=1)
+            e1 = (log_qx - a_x[interval_age_range]).multiply(
+                k_t[interval_age_range], axis="index"
+            )
+            e2 = e1.sum(axis=0)
+            e3 = k_t[interval_age_range] ** 2
+            e4 = e3.sum()
 
-        # matrix multiply for b_x_k_t
-        logger.debug("calculating b_x_k_t")
-        b_x_k_t = pd.DataFrame(np.outer(self.b_x, self.k_t))
-        b_x_k_t = b_x_k_t.transpose()
-        b_x_k_t.index = crude_pivot.index
-        b_x_k_t.columns = crude_pivot.columns
-        self.b_x_k_t = b_x_k_t
+            # bx is the rate of change of age due to time trend
+            logger.debug("calculating b_x")
+            b_x[interval_age_range] = e2 / e4
 
-        # calculate qx_lc
-        logger.info("calculating qx_lc = exp(a_x + b_x * k_t)")
-        qx_log_lc = a_x.values + b_x_k_t.values
-        qx_log_lc = pd.DataFrame(
-            qx_log_lc, index=crude_pivot.index, columns=crude_pivot.columns
-        )
-        qx_lc = np.exp(qx_log_lc)
+            # matrix multiply for b_x_k_t
+            logger.debug("calculating b_x_k_t")
+            b_x_k_t_df = pd.DataFrame(
+                np.outer(b_x[interval_age_range], k_t[interval_age_range])
+            )
+            b_x_k_t_df = b_x_k_t_df.transpose()
+            b_x_k_t_df.index = interval_pivot.index
+            b_x_k_t_df.columns = interval_pivot.columns
+            b_x_k_t[interval_age_range] = b_x_k_t_df
 
-        # adding predictions to lc_df
+            # calculate qx_lc
+            logger.debug("calculating qx_lc = exp(a_x + b_x * k_t)")
+            qx_log_lc = a_x[interval_age_range].values + b_x_k_t_df.values
+            qx_log_lc = pd.DataFrame(
+                qx_log_lc, index=interval_pivot.index, columns=interval_pivot.columns
+            )
+            qx_lc = np.exp(qx_log_lc)
+
+            # append predictions to list
+            predictions_list.append(
+                qx_lc.reset_index().melt(
+                    id_vars=self.year_col, var_name=self.age_col, value_name="qx_lc"
+                )
+            )
+
+        # merge predictions back into lc_df
         logger.info("adding qx_lc to lc_df")
+        predictions = pd.concat(predictions_list, axis=0)
         lc_df = pd.merge(
             lc_df,
-            qx_lc.reset_index().melt(
-                id_vars=self.year_col, var_name=self.age_col, value_name="qx_lc"
-            ),
+            predictions,
             on=[self.year_col, self.age_col],
             how="left",
         ).astype({self.age_col: "int32", self.year_col: "int32"})
+
+        # saving variables in class
+        self.a_x = a_x
+        self.k_t = k_t
+        self.b_x = b_x
+        self.b_x_k_t = b_x_k_t
         self.lc_df = lc_df
+        self.interval = interval
 
         return lc_df
 
@@ -674,37 +721,61 @@ class LeeCarter:
 
         # initialize the variables
         variance = 0
-        year_cols = list(range(self.k_t.index[-1] + 1, self.k_t.index[-1] + years + 1))
+        k_t_i = {}
+        forecast_list = []
+        a_x = self.a_x
+        k_t = self.k_t
+        b_x = self.b_x
+        b_x_k_t = self.b_x_k_t
 
         logger.info("forecasting qx_lc using deterministic random walk...")
-        # average change in k_t
-        mu = (self.k_t.iloc[-1] - self.k_t.iloc[0]) / len(self.k_t)
+        for interval_age_range in a_x.keys():
+            # year columns
+            year_cols = list(
+                range(
+                    k_t[interval_age_range].index[-1] + 1,
+                    k_t[interval_age_range].index[-1] + years + 1,
+                )
+            )
+            # average change in k_t
+            mu = (
+                k_t[interval_age_range].iloc[-1] - k_t[interval_age_range].iloc[0]
+            ) / len(k_t[interval_age_range])
 
-        # random walk
-        rng = np.random.default_rng(seed=seed)
-        k_t_i = (
-            self.k_t.iloc[-1]
-            + mu * np.arange(1, years + 1)
-            + rng.normal(scale=variance, size=years)
-        )
-        self.k_t_i = k_t_i
+            # random walk
+            rng = np.random.default_rng(seed=seed)
+            k_t_i[interval_age_range] = (
+                k_t[interval_age_range].iloc[-1]
+                + mu * np.arange(1, years + 1)
+                + rng.normal(scale=variance, size=years)
+            )
 
-        # qx_lc forecast
-        b_x_k_t_i = pd.DataFrame(np.outer(self.b_x, k_t_i))
-        b_x_k_t_i = b_x_k_t_i.transpose()
-        qx_log_lc = self.a_x.values + b_x_k_t_i.values
-        qx_lc = np.exp(qx_log_lc)
+            # qx_lc forecast
+            b_x_k_t_i = pd.DataFrame(
+                np.outer(b_x[interval_age_range], k_t_i[interval_age_range])
+            )
+            b_x_k_t_i = b_x_k_t_i.transpose()
+            qx_log_lc = a_x[interval_age_range].values + b_x_k_t_i.values
+            qx_lc = np.exp(qx_log_lc)
+
+            # append forecasts to list
+            forecast = pd.DataFrame(
+                qx_lc,
+                index=year_cols,
+                columns=b_x_k_t[interval_age_range].columns,
+            )
+            forecast.index.name = self.year_col
+            forecast_list.append(
+                forecast.reset_index().melt(
+                    id_vars=self.year_col, var_name=self.age_col, value_name="qx_lc"
+                )
+            )
 
         # dataframe with forecast
-        lcf_df = pd.DataFrame(
-            qx_lc,
-            index=year_cols,
-            columns=self.b_x_k_t.columns,
-        )
-        lcf_df.index.name = self.year_col
-        lcf_df = lcf_df.reset_index().melt(
-            id_vars=self.year_col, var_name=self.age_col, value_name="qx_lc"
-        )
+        lcf_df = pd.concat(forecast_list, axis=0)
+
+        # storing variables in class
+        self.k_t_i = k_t_i
 
         return lcf_df
 
@@ -781,6 +852,7 @@ class CBD:
         year_col: str = "observation_year",
         actual_col: str = "death_claim_amount",
         expose_col: str = "amount_exposed",
+        interval: Optional[int] = None,
     ) -> None:
         """
         Initialize the model.
@@ -795,6 +867,8 @@ class CBD:
             The column name for the actual values
         expose_col : str, optional
             The column name for the exposure values
+        interval : int, optional
+            The interval for age groups
 
         """
         logger.info("initialized CBD")
@@ -802,9 +876,10 @@ class CBD:
         self.year_col = year_col
         self.actual_col = actual_col
         self.expose_col = expose_col
+        self.interval = interval
         # calculations
         self.age_diff = None
-        self.ages = None
+        self.age_columns = None
         self.k_t_1 = None
         self.k_t_2 = None
         self.cbd_df = None
@@ -871,7 +946,11 @@ class CBD:
 
         return self.cbd_df
 
-    def fit(self, cbd_df: pd.DataFrame) -> pd.DataFrame:
+    def fit(
+        self,
+        cbd_df: pd.DataFrame,
+        interval: Optional[int] = None,
+    ) -> pd.DataFrame:
         """
         Get the forecasted mortality rates.
 
@@ -879,6 +958,8 @@ class CBD:
         ----------
         cbd_df : pd.DataFrame
             A DataFrame containing crude mortality rates for a given population.
+        interval : int, optional
+            The interval for age groups
 
         Returns
         -------
@@ -892,65 +973,100 @@ class CBD:
         crude_pivot = cbd_df.pivot(
             index=self.year_col, columns=self.age_col, values="qx_raw"
         )
+        k_t_1 = {}
+        k_t_2 = {}
+        age_diff = {}
+        age_columns = {}
+        predictions_list = []
 
         year_start = crude_pivot.index.min()
         year_end = crude_pivot.index.max()
         ages = crude_pivot.columns
-        self.ages = ages
         age_start = int(ages.min())
         age_end = int(ages.max())
-        age_mean = ages.to_series().mean()
+
+        if interval is None and self.interval is not None:
+            interval = self.interval
+        elif interval is None:
+            # interval would equal data range
+            interval = len(ages)
 
         logger.info(f"age range: {age_start}, {age_end}")
-        logger.info(f"average age: {age_mean}")
         logger.info(f"year range: {year_start}, {year_end}")
+        logger.info(f"creating `{len(ages) // interval}` intervals")
 
-        # qx_logit is the mortality matrix
-        logger.debug("calculating qx_logit")
-        qx_logit = self._logit(crude_pivot)
+        # error if there is only one age
+        if interval < 2 or len(ages) % interval == 1:
+            logger.error("age range must have more than one age")
+            return None
 
-        # k_t_1 is the age effect (average mortality rate by age)
-        logger.debug("calculating k_t_1 = mean rate per year")
-        k_t_1 = qx_logit.mean(axis=1)
-        self.k_t_1 = k_t_1
+        for i in range(0, len(ages), interval):
+            interval_ages = ages[i : i + interval]
+            interval_pivot = crude_pivot[interval_ages]
+            interval_age_range = f"{interval_ages[0]}-{interval_ages[-1]}"
+            interval_mean_age = interval_ages.to_series().mean()
+            age_columns[interval_age_range] = interval_pivot.columns
+            logger.debug(f"interval age range: {interval_age_range}")
 
-        # k_t_2 is the slope component
-        logger.debug(
-            "calculating k_t_2 = e1 / e2 \n"
-            "e1 = Σ((age - age_mean) * qx_logit) \n"
-            "e2 = Σ((age - age_mean)^2)"
-        )
-        age_diff = ages - age_mean
-        self.age_diff = age_diff
-        e1 = (age_diff * qx_logit).sum(axis=1)
-        e2 = (age_diff.values**2).sum()
-        k_t_2 = e1 / e2
-        self.k_t_2 = k_t_2
+            # qx_logit is the mortality matrix
+            logger.debug("calculating qx_logit")
+            qx_logit = self._logit(interval_pivot)
 
-        # qx_logit
-        logger.debug("calculating qx_logit_cbd = k_t_1 + (age - age_mean) * k_t_2")
-        qx_logit_cbd = k_t_1.values[:, np.newaxis] + (
-            age_diff.values * k_t_2.values[:, np.newaxis]
-        )
-        qx_logit_cbd = pd.DataFrame(
-            qx_logit_cbd, index=qx_logit.index, columns=qx_logit.columns
-        )
+            # k_t_1 is the age effect (average mortality rate by age)
+            logger.debug("calculating k_t_1 = mean rate per year")
+            k_t_1[interval_age_range] = qx_logit.mean(axis=1)
 
-        # qx_cbd
-        logger.debug("calculating qx_cbd = exp(qx_logit_cbd) / (1 + exp(qx_logit_cbd))")
-        qx_cbd = np.exp(qx_logit_cbd) / (1 + np.exp(qx_logit_cbd))
+            # k_t_2 is the slope component
+            logger.debug(
+                "calculating k_t_2 = e1 / e2 \n"
+                "e1 = Σ((age - age_mean) * qx_logit) \n"
+                "e2 = Σ((age - age_mean)^2)"
+            )
+            age_diff[interval_age_range] = interval_ages - interval_mean_age
+            e1 = (age_diff[interval_age_range] * qx_logit).sum(axis=1)
+            e2 = (age_diff[interval_age_range].values ** 2).sum()
+            k_t_2[interval_age_range] = e1 / e2
 
-        # adding predictions to cbd_df
+            # qx_logit
+            logger.debug("calculating qx_logit_cbd = k_t_1 + (age - age_mean) * k_t_2")
+            qx_logit_cbd = k_t_1[interval_age_range].values[:, np.newaxis] + (
+                age_diff[interval_age_range].values
+                * k_t_2[interval_age_range].values[:, np.newaxis]
+            )
+            qx_logit_cbd = pd.DataFrame(
+                qx_logit_cbd, index=qx_logit.index, columns=qx_logit.columns
+            )
+
+            # qx_cbd
+            logger.debug(
+                "calculating qx_cbd = exp(qx_logit_cbd) / (1 + exp(qx_logit_cbd))"
+            )
+            qx_cbd = np.exp(qx_logit_cbd) / (1 + np.exp(qx_logit_cbd))
+
+            # append predictions to list
+            predictions_list.append(
+                qx_cbd.reset_index().melt(
+                    id_vars=self.year_col, var_name=self.age_col, value_name="qx_cbd"
+                )
+            )
+
+        # merge predictions back into cbd_df
         logger.info("adding qx_cbd to cbd_df")
+        predictions = pd.concat(predictions_list, axis=0)
         cbd_df = pd.merge(
             cbd_df,
-            qx_cbd.reset_index().melt(
-                id_vars=self.year_col, var_name=self.age_col, value_name="qx_cbd"
-            ),
+            predictions,
             on=[self.year_col, self.age_col],
             how="left",
         ).astype({self.age_col: "int32", self.year_col: "int32"})
+
+        # saving variables in class
+        self.k_t_1 = k_t_1
+        self.k_t_2 = k_t_2
+        self.age_diff = age_diff
+        self.age_columns = age_columns
         self.cbd_df = cbd_df
+        self.interval = interval
 
         return cbd_df
 
@@ -979,57 +1095,80 @@ class CBD:
 
         # initialize the variables
         variance = 0
-        year_cols = list(
-            range(self.k_t_1.index[-1] + 1, self.k_t_1.index[-1] + years + 1)
-        )
+        forecast_list = []
+        k_t_1 = self.k_t_1
+        k_t_2 = self.k_t_2
+        age_diff = self.age_diff
+        age_columns = self.age_columns
 
         logger.info("forecasting qx_cbd using deterministic random walk...")
-        # average change in k_t_1 and k_t_2
-        mu = [
-            (self.k_t_1.iloc[-1] - self.k_t_1.iloc[0]) / len(self.k_t_1),
-            (self.k_t_2.iloc[-1] - self.k_t_2.iloc[0]) / len(self.k_t_2),
-        ]
+        for interval_age_range in k_t_1.keys():
+            # year columns
+            year_cols = list(
+                range(
+                    k_t_1[interval_age_range].index[-1] + 1,
+                    k_t_1[interval_age_range].index[-1] + years + 1,
+                )
+            )
+            # average change in k_t_1 and k_t_2
+            mu = [
+                (k_t_1[interval_age_range].iloc[-1] - k_t_1[interval_age_range].iloc[0])
+                / len(k_t_1[interval_age_range]),
+                (k_t_2[interval_age_range].iloc[-1] - k_t_2[interval_age_range].iloc[0])
+                / len(k_t_2[interval_age_range]),
+            ]
 
-        # random walk
-        rng = np.random.default_rng(seed=seed)
-        k_1_f = (
-            self.k_t_1.iloc[-1]
-            + mu[0] * np.arange(1, years + 1)
-            + rng.normal(scale=variance, size=years)
-        )
-        k_1_f = pd.Series(data=k_1_f, index=year_cols)
-        k_1_f.index.name = self.year_col
-        k_2_f = (
-            self.k_t_2.iloc[-1]
-            + mu[1] * np.arange(1, years + 1)
-            + rng.normal(scale=variance, size=years)
-        )
-        k_2_f = pd.Series(data=k_2_f, index=year_cols)
-        k_2_f.index.name = self.year_col
-        self.k_1_f = k_1_f
-        self.k_2_f = k_2_f
+            # random walk
+            rng = np.random.default_rng(seed=seed)
+            k_1_f = (
+                k_t_1[interval_age_range].iloc[-1]
+                + mu[0] * np.arange(1, years + 1)
+                + rng.normal(scale=variance, size=years)
+            )
+            k_1_f = pd.Series(data=k_1_f, index=year_cols)
+            k_1_f.index.name = self.year_col
+            k_2_f = (
+                k_t_2[interval_age_range].iloc[-1]
+                + mu[1] * np.arange(1, years + 1)
+                + rng.normal(scale=variance, size=years)
+            )
+            k_2_f = pd.Series(data=k_2_f, index=year_cols)
+            k_2_f.index.name = self.year_col
 
-        # qx_logit
-        logger.debug("calculating qx_logit_cbd = k_t_1 + (age - age_mean) * k_t_2")
-        qx_logit_cbd = k_1_f.values[:, np.newaxis] + (
-            self.age_diff.values * k_2_f.values[:, np.newaxis]
-        )
-        qx_logit_cbd = pd.DataFrame(qx_logit_cbd, index=year_cols, columns=self.ages)
+            # qx_logit
+            logger.debug("calculating qx_logit_cbd = k_t_1 + (age - age_mean) * k_t_2")
+            qx_logit_cbd = k_1_f.values[:, np.newaxis] + (
+                age_diff[interval_age_range].values * k_2_f.values[:, np.newaxis]
+            )
+            qx_logit_cbd = pd.DataFrame(
+                qx_logit_cbd, index=year_cols, columns=age_columns[interval_age_range]
+            )
 
-        # qx_cbd
-        logger.debug("calculating qx_cbd = exp(qx_logit_cbd) / (1 + exp(qx_logit_cbd))")
-        qx_cbd = np.exp(qx_logit_cbd) / (1 + np.exp(qx_logit_cbd))
+            # qx_cbd
+            logger.debug(
+                "calculating qx_cbd = exp(qx_logit_cbd) / (1 + exp(qx_logit_cbd))"
+            )
+            qx_cbd = np.exp(qx_logit_cbd) / (1 + np.exp(qx_logit_cbd))
+
+            # append forecasts to list
+            forecast = pd.DataFrame(
+                qx_cbd,
+                index=year_cols,
+                columns=age_columns[interval_age_range],
+            )
+            forecast.index.name = self.year_col
+            forecast_list.append(
+                forecast.reset_index().melt(
+                    id_vars=self.year_col, var_name=self.age_col, value_name="qx_cbd"
+                )
+            )
 
         # dataframe with forecast
-        cbdf_df = pd.DataFrame(
-            qx_cbd,
-            index=year_cols,
-            columns=self.ages,
-        )
-        cbdf_df.index.name = self.year_col
-        cbdf_df = cbdf_df.reset_index().melt(
-            id_vars=self.year_col, var_name=self.age_col, value_name="qx_cbd"
-        )
+        cbdf_df = pd.concat(forecast_list, axis=0)
+
+        # saving variables in class
+        self.k_1_f = k_1_f
+        self.k_2_f = k_2_f
 
         return cbdf_df
 

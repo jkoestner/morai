@@ -98,7 +98,7 @@ morai dashboard
 It also can be run locally by going to the dashboard folder and running below.
 
 ```python
-python app.py
+python -m morai.dashboard.app
 ```
 
 ## Other Tools

@@ -91,6 +91,10 @@ class MortTable:
         """
         Build a 1-d mortality table from a workbook.
 
+        A 1-d table is where there is a 'vals' column and all the other columns are the
+        features. If the workbook has a multiplier table, then the multiplier table will
+        be returned as well.
+
         Parameters
         ----------
         file_location : str
@@ -327,6 +331,80 @@ class MortTable:
         soa_xml = pymort.MortXML.from_id(table_id)
         return soa_xml
 
+    def calc_derived_table_from_mults(
+        self,
+        selected_dict: Optional[dict[str, list]] = None,
+    ) -> pd.DataFrame:
+        """
+        Calculate a derived rate table from the rate table and multiplier table.
+
+        The derived table is calculated by multiplying the rate table by the
+        multiplier table given the selected multiplier columns.
+
+        Parameters
+        ----------
+        selected_dict : dict, optional (default=None)
+            The selected multiplier columns.
+            If None, then the first subcategory multiplier of each category
+            will be used.
+
+        Returns
+        -------
+        derived_table : pd.DataFrame
+            The derived table.
+
+        """
+        if self.rate_table is None or self.mult_table is None:
+            raise ValueError(
+                "calc_derived_table_from_mults requires the rate table and "
+                "multiplier table to be set."
+            )
+
+        # get subcategory multipliers if not provided
+        if selected_dict is None:
+            first_mults = self.mult_table.groupby("category").first().reset_index()
+            selected_dict = (
+                first_mults.set_index("category")["subcategory"]
+                .apply(lambda x: [x])
+                .to_dict()
+            )
+
+        # check that subcategory and category are in the multiplier table
+        # if not set(selected_dict.keys()).issubset(self.mult_table["category"].unique()):
+        #     raise ValueError(
+        #         "selected_dict keys must be in the multiplier table `category` column"
+        #     )
+        # if not set(selected_dict.values()).issubset(
+        #     self.mult_table["subcategory"].unique()
+        # ):
+        #     raise ValueError(
+        #         "selected_dict values must be in the multiplier table "
+        #         "`subcategory` column."
+        #     )
+
+        # select the rows in mult_table that match the selected mults
+        selected_mults = self.mult_table[
+            self.mult_table.apply(
+                lambda row: row["subcategory"]
+                in selected_dict.get(row["category"], []),
+                axis=1,
+            )
+        ]
+
+        # calculate the multiplier
+        mean_category_mult = selected_mults.groupby("category")["multiple"].mean()
+        product_of_means = np.prod(mean_category_mult)
+        logger.info(f"derived table using multiplier: `{product_of_means:.2f}`")
+        logger.info(
+            f"used the following subcategories: " f"`{list(selected_dict.values())}`"
+        )
+
+        # apply the multiplier
+        derived_table = self.rate_table.copy()
+        derived_table["vals"] = derived_table["vals"] * product_of_means
+
+        return derived_table
+
     def _merge_tables(
         self,
         merge_table: pd.DataFrame,
@@ -426,6 +504,9 @@ def generate_table(
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate a 1-d mortality table based on model predictions.
+
+    A 1-d table is where there is a 'vals' column and all the other columns are the
+    features.
 
     Parameters
     ----------
@@ -745,7 +826,7 @@ def create_grid(
     mult_features: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     """
-    Create a grid from the dimensions.
+    Create an empty grid from the dimensions.
 
     Parameters
     ----------
