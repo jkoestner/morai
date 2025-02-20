@@ -249,7 +249,11 @@ def get_cdc_reference(sheet_name: str) -> pd.DataFrame:
 
 
 def map_reference(
-    df: pd.DataFrame, col: str, on_dict: Optional[dict] = None, sheet_name: str = "cod"
+    df: pd.DataFrame,
+    col: str,
+    on_dict: Optional[dict] = None,
+    sheet_name: str = "cod",
+    category: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Map a column from the CDC reference to the DataFrame.
@@ -266,12 +270,25 @@ def map_reference(
         If not provided, the default is {"icd-10_113_cause_list": "wonder_cause"}.
     sheet_name : str, optional
         The sheet name to use.
+    category : str, optional
+        The category to use.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        The dataframe with the column mapped.
 
     """
     logger.debug(f"mapping reference column: {col}")
+    # get the mapping sheet with appropiate reference and col
+    mapping = get_cdc_reference(sheet_name=sheet_name)
+    if category is not None:
+        if category not in mapping["category"].unique():
+            logger.error(f"The category {category} does not exist.")
+            return df
+        mapping = mapping[mapping["category"] == category]
     if on_dict is None:
         on_dict = {"icd-10_113_cause_list": "cause_wonder"}
-    mapping = get_cdc_reference(sheet_name=sheet_name)
     df_on = next(iter(on_dict.keys()))
     reference_on = next(iter(on_dict.values()))
     mapping = mapping[[reference_on, col]]
