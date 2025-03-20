@@ -5,7 +5,7 @@ import pandas as pd
 from morai.forecast import graduation
 from morai.utils import helpers
 
-test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast"
+test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast" / "graduation"
 
 
 def test_whl_1d() -> None:

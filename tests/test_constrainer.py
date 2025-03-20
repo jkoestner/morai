@@ -5,7 +5,7 @@ import pandas as pd
 from morai.forecast import constraint
 from morai.utils import helpers
 
-test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast"
+test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast" / "constraint"
 constraint_df = pd.read_csv(test_forecast_path / "constraint.csv")
 
 
