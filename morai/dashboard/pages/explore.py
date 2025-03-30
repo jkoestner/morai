@@ -2,6 +2,7 @@
 
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import polars as pl
 from dash_extensions.enrich import (
     Input,
     Output,
@@ -227,7 +228,18 @@ def update_charts(pathname, dataset, config):
     logger.debug("update explore charts")
     config_dataset = config["datasets"][config["general"]["dataset"]]
     features = config_dataset["columns"]["features"]
-    num_cols = dataset[features].select_dtypes(include=["number"]).columns.tolist()
+
+    is_lazy = isinstance(dataset, pl.LazyFrame)
+    if is_lazy:
+        schema = dataset.collect_schema()
+        num_cols = [
+            col
+            for col in features
+            if col in schema and schema[col] in pl.datatypes.group.NUMERIC_DTYPES
+        ]
+    else:
+        num_cols = dataset[features].select_dtypes(include=["number"]).columns.tolist()
+
     measures = config_dataset["columns"]["measures"]
 
     # table

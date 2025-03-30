@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import polars as pl
 from joblib import Parallel, cpu_count, delayed
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
@@ -24,7 +25,7 @@ chart_width = 1000
 
 
 def chart(
-    df: pd.DataFrame,
+    df: Union[pd.DataFrame, pl.LazyFrame],
     x_axis: str,
     y_axis: Optional[str] = None,
     color: Optional[str] = None,
@@ -39,7 +40,7 @@ def chart(
     agg: str = "sum",
     display: bool = True,
     **kwargs: Any,
-) -> Union[go.Figure, pd.DataFrame]:
+) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
     """
     Create a chart with Plotly Express.
 
@@ -53,8 +54,8 @@ def chart(
 
     Parameters
     ----------
-    df : pd.DataFrame
-        The dataframe to chart.
+    df : Union[pd.DataFrame, pl.LazyFrame]
+        The dataframe or LazyFrame to chart.
     x_axis : str
         The column name to use for the x-axis.
     y_axis : str
@@ -90,12 +91,16 @@ def chart(
 
     Returns
     -------
-    fig : Figure
-        The chart
+    fig : Figure or DataFrame/LazyFrame
+        The chart or grouped data if display=False
 
     """
+    # lazyframe check
+    is_lazy = isinstance(df, pl.LazyFrame)
+
     # initialize variables
-    df = df.copy()
+    if not is_lazy:
+        df = df.copy()
     use_num_and_den = True if numerator and denominator else False
 
     # heatmap sum values are color rather than y_axis
@@ -121,10 +126,17 @@ def chart(
     else:
         agg_cols = y_axis
 
-    # check if columns in dataframe
-    missing_columns = [
-        col for col in check_cols if col is not None and col not in df.columns
-    ]
+    # check if missing columns
+    if is_lazy:
+        schema = df.collect_schema()
+        columns = list(schema.keys())
+        missing_columns = [
+            col for col in check_cols if col is not None and col not in columns
+        ]
+    else:
+        missing_columns = [
+            col for col in check_cols if col is not None and col not in df.columns
+        ]
     if missing_columns:
         raise ValueError(
             f"The following column(s) are not in the "
@@ -136,15 +148,26 @@ def chart(
     if color:
         groupby_cols.append(color)
 
-    if x_bins:
-        logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
-        df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)
+    # group data
+    if is_lazy:
+        if x_bins:
+            logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
+            df = preprocessors.lazy_bin_feature(df, x_axis, x_bins, inplace=True)
 
-    grouped_data = (
-        df.groupby(groupby_cols, observed=True)[agg_cols].agg(agg).reset_index()
-    )
+        grouped_data = preprocessors.lazy_groupby(df, groupby_cols, agg_cols, agg)
+        grouped_data = grouped_data.collect().to_pandas()
 
-    # calculating fields
+    else:  # pandas
+        if x_bins:
+            logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
+            df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)
+
+        grouped_data = (
+            df.groupby(groupby_cols, observed=True)[agg_cols].agg(agg).reset_index()
+        )
+    grouped_data = grouped_data.sort_values(groupby_cols)
+
+    # calculate ratios if needed
     if use_num_and_den and y_axis == "ratio":
         grouped_data[y_axis] = grouped_data[numerator] / grouped_data[denominator]
     elif use_num_and_den and y_axis == "risk":
@@ -153,8 +176,13 @@ def chart(
             grouped_data[numerator] / grouped_data[denominator]
         ) / average_y_axis
 
+    # sort
     if y_sort:
         grouped_data = grouped_data.sort_values(by=y_axis, ascending=False)
+
+    # return data if not display
+    if not display:
+        return grouped_data
 
     # Selecting the plot type based on the 'chart_type' parameter
     if type == "line":
@@ -243,15 +271,11 @@ def chart(
         height=chart_height,
     )
 
-    # return the dataframe instead of figure
-    if not display:
-        fig = grouped_data
-
     return fig
 
 
 def compare_rates(
-    df: pd.DataFrame,
+    df: Union[pd.DataFrame, pl.LazyFrame],
     x_axis: str,
     rates: List[str],
     line_feature: Optional[str] = None,
@@ -261,7 +285,7 @@ def compare_rates(
     x_bins: Optional[int] = None,
     display: bool = True,
     **kwargs: Any,
-) -> Union[go.Figure, pd.DataFrame]:
+) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
     """
     Compare rates by a feature.
 
@@ -275,8 +299,8 @@ def compare_rates(
 
     Parameters
     ----------
-    df : pd.DataFrame
-        The DataFrame to use.
+    df : Union[pd.DataFrame, pl.LazyFrame]
+        The DataFrame or LazyFrame to use.
     x_axis : str
         The name for the column to compare by.
     rates : list
@@ -298,25 +322,37 @@ def compare_rates(
 
     Returns
     -------
-    fig : Figure
-        The chart
+    fig : Figure or DataFrame/LazyFrame
+        The chart or grouped data if display=False
 
     """
-    df = df.copy()
-    if df.empty:
-        logger.warning("DataFrame is empty.")
-        return go.Figure()
-    # check if feature, secondary, line_feature is string and is in dataframe
+    # check if lazy
+    is_lazy = isinstance(df, pl.LazyFrame)
+
+    if is_lazy:
+        if df.collect().height == 0:
+            logger.warning("DataFrame is empty.")
+            return go.Figure()
+        schema = df.collect_schema()
+        columns = list(schema.keys())
+    else:
+        df = df.copy()
+        if df.empty:
+            logger.warning("DataFrame is empty.")
+            return go.Figure()
+        columns = df.columns
+
+    # check parameters
     parameters = [x_axis, secondary, line_feature]
     for parameter in parameters:
         if parameter and not isinstance(parameter, str):
             raise ValueError(f"{parameter} should be a string.")
-        if parameter and parameter not in df.columns:
+        if parameter and parameter not in columns:
             raise ValueError(
-                f"Variable {parameter} is not in the DataFrame columns {df.columns}."
+                f"Variable {parameter} is not in the DataFrame columns {columns}."
             )
 
-    # check if weights list length matches the rates list
+    # check weights
     if weights is not None and len(rates) != len(weights):
         logger.info(
             f"The weights list is {len(weights)} long and should "
@@ -324,60 +360,93 @@ def compare_rates(
         )
         weights = [weights[0]] * len(rates)
 
-    # group and calculate weighted means
     groupby_features = [x_axis]
     if line_feature:
         groupby_features.append(line_feature)
-    if x_bins:
-        logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
-        df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)
-    grouped_df = df.groupby(groupby_features, observed=True).apply(
-        lambda x: pd.Series(
-            {
-                **{
-                    rate: helpers._weighted_mean(x[rate], weights=x[weight])
-                    if weight
-                    else x[rate].mean()
-                    for rate, weight in zip(
-                        rates,
-                        [None] * len(rates) if weights is None else weights,
-                    )
-                },
-                **({secondary: x[secondary].sum()} if secondary else {}),
-            }
-        )
-    )
-    grouped_df = grouped_df.reset_index()
 
-    # Create a subplot with a secondary y-axis
+    # create grouped data
+    if is_lazy:
+        if x_bins:
+            logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
+            df = preprocessors.lazy_bin_feature(df, x_axis, x_bins, inplace=True)
+        agg_exprs = []
+        for rate, weight in zip(
+            rates, [None] * len(rates) if weights is None else weights, strict=False
+        ):
+            if weight:
+                agg_exprs.append(
+                    (
+                        (pl.col(rate) * pl.col(weight)).sum() / pl.col(weight).sum()
+                    ).alias(rate)
+                )
+            else:
+                agg_exprs.append(pl.mean(pl.col(rate)).alias(rate))
+        if secondary:
+            agg_exprs.append(pl.sum(secondary).alias(secondary))
+
+        grouped_data = (
+            df.group_by(groupby_features).agg(agg_exprs).collect().to_pandas()
+        )
+    else:  # pandas
+        if x_bins:
+            logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
+            df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)
+        grouped_data = (
+            df.groupby(groupby_features, observed=True)
+            .apply(
+                lambda x: pd.Series(
+                    {
+                        **{
+                            rate: helpers._weighted_mean(x[rate], weights=x[weight])
+                            if weight
+                            else x[rate].mean()
+                            for rate, weight in zip(
+                                rates,
+                                [None] * len(rates) if weights is None else weights,
+                                strict=False,
+                            )
+                        },
+                        **({secondary: x[secondary].sum()} if secondary else {}),
+                    }
+                )
+            )
+            .reset_index()
+        )
+    grouped_data = grouped_data.sort_values(groupby_features)
+
+    # return data if not display
+    if not display:
+        return grouped_data
+
+    # create figures
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     if secondary:
-        # Add the bar chart for secondary variable first (background)
         fig.add_trace(
             go.Bar(
-                x=grouped_df[x_axis],
-                y=grouped_df[secondary],
+                x=grouped_data[x_axis],
+                y=grouped_data[secondary],
                 name=secondary,
                 marker_color="rgba(135, 206, 250, 0.6)",
             ),
             secondary_y=True,
         )
 
-    # Add the lines for rates (foreground)
-    line_feature_values = grouped_df[line_feature].unique() if line_feature else [None]
+    # add lines
+    line_feature_values = (
+        grouped_data[line_feature].unique() if line_feature else [None]
+    )
 
     for rate in rates:
         for line_value in line_feature_values:
             if line_feature:
-                df_subset = grouped_df[grouped_df[line_feature] == line_value]
+                df_subset = grouped_data[grouped_data[line_feature] == line_value]
                 x_values, y_values = df_subset[x_axis], df_subset[rate]
                 trace_name = f"{rate} - {line_value}"
             else:
-                x_values, y_values = grouped_df[x_axis], grouped_df[rate]
+                x_values, y_values = grouped_data[x_axis], grouped_data[rate]
                 trace_name = rate
 
-            # Add trace to the figure
             fig.add_trace(
                 go.Scatter(
                     x=x_values,
@@ -389,7 +458,7 @@ def compare_rates(
                 secondary_y=False,
             )
 
-    # Set plot layout
+    # plot layout
     yaxis_type = "-"
     y_title = "Rates"
     if y_log:
@@ -399,21 +468,14 @@ def compare_rates(
     fig.update_layout(
         title_text=f"Comparison of '{rates}' by '{x_axis}'",
         yaxis_type=yaxis_type,
-        height=chart_height,
+        yaxis_title=y_title,
     )
-    fig.update_xaxes(title_text=x_axis)
-    fig.update_yaxes(title_text=y_title, secondary_y=False)
-    fig.update_yaxes(title_text=secondary, secondary_y=True)
-
-    # return the dataframe instead of figure
-    if not display:
-        fig = grouped_df
 
     return fig
 
 
 def frequency(
-    df: pd.DataFrame,
+    df: Union[pd.DataFrame, pl.LazyFrame],
     cols: int = 1,
     features: Optional[List[str]] = None,
     sum_var: Optional[str] = None,
@@ -423,8 +485,8 @@ def frequency(
 
     Parameters
     ----------
-    df : pd.DataFrame
-        The DataFrame to use.
+    df : Union[pd.DataFrame, pl.LazyFrame]
+        The DataFrame or LazyFrame to use.
     cols : int, optional (default=1)
         The number of columns to use for the subplots.
     features : list, optional (default=None)
@@ -438,13 +500,27 @@ def frequency(
         The chart
 
     """
-    # get the features for the plot
+    is_lazy = isinstance(df, pl.LazyFrame)
+
+    # get the non-numeric features for the plot
     if features is None:
         logger.info("No features provided, using all non-numeric features.")
-        features = df.select_dtypes(exclude=[np.number]).columns.to_list()
+        if is_lazy:
+            schema = df.collect_schema()
+            features = [
+                col
+                for col, dtype in schema.items()
+                if schema[col] not in pl.datatypes.group.NUMERIC_DTYPES
+            ]
+        else:
+            features = df.select_dtypes(exclude=[np.number]).columns.to_list()
+
     if sum_var is None:
         sum_var = "_count"
-        df["_count"] = 1
+        if is_lazy:
+            df = df.with_columns(pl.lit(1).alias("_count"))
+        else:
+            df["_count"] = 1
 
     # creating the plot grid
     rows = len(features) // cols + (len(features) % cols > 0)
@@ -452,9 +528,14 @@ def frequency(
 
     # create frequency plot for each feature
     for i, col in enumerate(features, start=1):
-        frequency = df.groupby(col, observed=True)[sum_var].sum().reset_index()
-        frequency.columns = [col, sum_var]
-        frequency = frequency.sort_values(by=col, ascending=True)
+        if is_lazy:
+            frequency_lazy = df.group_by(col).agg(pl.sum(sum_var).alias(sum_var))
+            frequency_lazy = frequency_lazy.sort(col)
+            frequency = frequency_lazy.collect().to_pandas()
+        else:
+            frequency = df.groupby(col, observed=True)[sum_var].sum().reset_index()
+            frequency.columns = [col, sum_var]
+            frequency = frequency.sort_values(by=col, ascending=True)
 
         # create the subplot
         row = math.ceil(i / cols)
@@ -867,7 +948,7 @@ def matrix(
         yaxis={"showgrid": False},
     )
 
-    # Add annotations for significant correlations
+    # add annotations for significant correlations
     for i in range(df.shape[0]):
         for j in range(df.shape[1]):
             if not mask[i, j]:
@@ -891,7 +972,7 @@ def matrix(
 
 
 def target(
-    df: pd.DataFrame,
+    df: Union[pd.DataFrame, pl.LazyFrame],
     target: Union[List[str], str],
     features: Optional[List[str]] = None,
     cols: int = 3,
@@ -911,8 +992,8 @@ def target(
 
     Parameters
     ----------
-    df : pd.DataFrame
-        The DataFrame to use.
+    df : pd.DataFrame or pl.LazyFrame
+        The DataFrame or LazyFrame to use.
     target : list or str
         The target variable.
     features : list, optional
@@ -938,9 +1019,17 @@ def target(
         The chart
 
     """
+    # check if lazy
+    is_lazy = isinstance(df, pl.LazyFrame)
+
     # default parameters
     if features is None:
-        features = df.columns
+        if is_lazy:
+            schema = df.collect_schema()
+            features = list(schema.keys())
+        else:  # pandas
+            features = df.columns
+
     if normalize is None:
         normalize = []
     if denominator is None:
@@ -949,8 +1038,15 @@ def target(
         numerator = []
     if weights is None:
         weights = []
+
     features = [*features, "_aggregate"]
-    df.loc[:, "_aggregate"] = 1
+
+    # add _aggregate column
+    if is_lazy:
+        df = df.with_columns(pl.lit(1).alias("_aggregate"))
+    else:  # pandas
+        df.loc[:, "_aggregate"] = 1
+
     if isinstance(target, str):
         target = [target]
     if isinstance(weights, str):
@@ -972,16 +1068,22 @@ def target(
         numerator = [numerator[0]] * len(denominator)
 
     # ensure all features are in df
-    if not set(features).issubset(df.columns):
-        missing_features = set(features) - set(df.columns)
+    if is_lazy:
+        schema = df.collect_schema()
+        df_columns = list(schema.keys())
+    else:  # pandas
+        df_columns = df.columns
+
+    if not set(features).issubset(df_columns):
+        missing_features = set(features) - set(df_columns)
         raise ValueError(f"Features {missing_features} not in DataFrame columns.")
-    if not set(normalize).issubset(df.columns):
-        missing_features = set(normalize) - set(df.columns)
+    if not set(normalize).issubset(df_columns):
+        missing_features = set(normalize) - set(df_columns)
         raise ValueError(f"Normalize {missing_features} not in DataFrame columns.")
 
     # check that the right parameters are set for the function
     for idx, _ in enumerate(target):
-        if target[idx] not in [*list(df.columns), "ratio", "risk"]:
+        if target[idx] not in [*list(df_columns), "ratio", "risk"]:
             raise ValueError(
                 f"Target '{target[idx]}' needs to be in DataFrame columns, "
                 f"'ratio', or 'risk'"
@@ -1044,48 +1146,124 @@ def target(
         col = (i - 1) % cols + 1
 
         # create line for targets
+        # ratio or risk
         for idx, _ in enumerate(target):
             if target[idx] in ["ratio", "risk"]:
-                grouped_data = (
-                    df.groupby(plot_feature, observed=True)[
-                        [numerator[idx], denominator[idx]]
-                    ]
-                    .sum()
-                    .reset_index()
-                )
-                if target[idx] == "ratio":
-                    grouped_data[target[idx]] = (
-                        grouped_data[numerator[idx]] / grouped_data[denominator[idx]]
-                    )
-                elif target[idx] == "risk":
-                    grouped_data[target[idx]] = (
-                        grouped_data[numerator[idx]] / grouped_data[denominator[idx]]
-                    ) / (df[numerator[idx]].sum() / df[denominator[idx]].sum())
-            elif weights:
-                grouped_data = (
-                    df.groupby(plot_feature, observed=True)[[target[idx], weights[idx]]]
-                    .apply(
-                        lambda x: helpers._weighted_mean(
-                            x.iloc[:, 0], weights=x.iloc[:, 1]
+                if is_lazy:
+                    grouped_data = (
+                        df.group_by(plot_feature)
+                        .agg(
+                            [
+                                pl.sum(numerator[idx]).alias(numerator[idx]),
+                                pl.sum(denominator[idx]).alias(denominator[idx]),
+                            ]
                         )
+                        .collect()
+                        .to_pandas()
                     )
-                    .reset_index(name=f"{target[idx]}")
-                )
-            else:
-                grouped_data = (
-                    df.groupby(plot_feature, observed=True)[target[idx]]
-                    .mean()
-                    .reset_index()
-                )
+                    if target[idx] == "ratio":
+                        grouped_data[target[idx]] = (
+                            grouped_data[numerator[idx]]
+                            / grouped_data[denominator[idx]]
+                        )
+                    elif target[idx] == "risk":
+                        num_sum = (
+                            df.select(pl.col(numerator[idx]).sum()).collect().item()
+                        )
+                        denom_sum = (
+                            df.select(pl.col(denominator[idx]).sum()).collect().item()
+                        )
+                        grouped_data[target[idx]] = (
+                            grouped_data[numerator[idx]]
+                            / grouped_data[denominator[idx]]
+                        ) / (num_sum / denom_sum)
+                else:  # pandas
+                    grouped_data = (
+                        df.groupby(plot_feature, observed=True)[
+                            [numerator[idx], denominator[idx]]
+                        ]
+                        .sum()
+                        .reset_index()
+                    )
+                    if target[idx] == "ratio":
+                        grouped_data[target[idx]] = (
+                            grouped_data[numerator[idx]]
+                            / grouped_data[denominator[idx]]
+                        )
+                    elif target[idx] == "risk":
+                        grouped_data[target[idx]] = (
+                            grouped_data[numerator[idx]]
+                            / grouped_data[denominator[idx]]
+                        ) / (df[numerator[idx]].sum() / df[denominator[idx]].sum())
+
+            # weighted average
+            elif weights:
+                if is_lazy:
+                    grouped_data = (
+                        df.select([*plot_feature, target[idx], weights[idx]])
+                        .groupby(plot_feature)
+                        .agg(
+                            [
+                                (pl.col(target[idx]) * pl.col(weights[idx]))
+                                .sum()
+                                .alias("weighted_sum"),
+                                pl.col(weights[idx]).sum().alias("weight_sum"),
+                            ]
+                        )
+                        .with_columns(
+                            (pl.col("weighted_sum") / pl.col("weight_sum")).alias(
+                                target[idx]
+                            )
+                        )
+                        .select([*plot_feature, target[idx]])
+                        .collect()
+                        .to_pandas()
+                    )
+                else:  # pandas
+                    grouped_data = (
+                        df.groupby(plot_feature, observed=True)[
+                            [target[idx], weights[idx]]
+                        ]
+                        .apply(
+                            lambda x: helpers._weighted_mean(
+                                x.iloc[:, 0], weights=x.iloc[:, 1]
+                            )
+                        )
+                        .reset_index(name=f"{target[idx]}")
+                    )
+
+            # mean
+            else:  # noqa: PLR5501
+                if is_lazy:
+                    grouped_data = (
+                        df.group_by(plot_feature)
+                        .agg(pl.mean(target[idx]).alias(target[idx]))
+                        .collect()
+                        .to_pandas()
+                    )
+                else:  # pandas
+                    grouped_data = (
+                        df.groupby(plot_feature, observed=True)[target[idx]]
+                        .mean()
+                        .reset_index()
+                    )
+            grouped_data = grouped_data.sort_values(by=plot_feature)
 
             # adding trace for current target within the subplot for the feature
             if len(plot_feature) == 2:
                 feature_1, feature_2 = plot_feature
-                feature_x = (
-                    feature_1
-                    if df[feature_1].nunique() > df[feature_2].nunique()
-                    else feature_2
-                )
+
+                if is_lazy:
+                    f1_nunique = df.select(pl.col(feature_1)).collect().n_unique()
+                    f2_nunique = df.select(pl.col(feature_2)).collect().n_unique()
+                    feature_x = feature_1 if f1_nunique > f2_nunique else feature_2
+                else:  # pandas
+                    feature_x = (
+                        feature_1
+                        if df[feature_1].nunique() > df[feature_2].nunique()
+                        else feature_2
+                    )
+
                 feature_color = feature_2 if feature_x == feature_1 else feature_1
                 target_name = f"{target[idx]}_{idx}"
                 line_fig = px.line(
@@ -1116,6 +1294,7 @@ def target(
                     col=col,
                 )
                 legend_added.add(target_name)
+
             # add trace for line
             if add_line:
                 line_name = "y=1"
@@ -1151,14 +1330,14 @@ def target(
     return fig
 
 
-def get_stats(df: pd.DataFrame, features: list) -> pd.DataFrame:
+def get_stats(df: Union[pd.DataFrame, pl.LazyFrame], features: list) -> pd.DataFrame:
     """
     Generate summary statistics for the dataset.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        The DataFrame to use.
+    df : Union[pd.DataFrame, pl.LazyFrame]
+        The DataFrame or LazyFrame to use.
     features : list
         The features to use.
 
@@ -1168,13 +1347,40 @@ def get_stats(df: pd.DataFrame, features: list) -> pd.DataFrame:
         DataFrame containing summary statistics
 
     """
-    df_stats = df[features]
-    stats = df_stats.describe()
+    # check if lazy
+    is_lazy = isinstance(df, pl.LazyFrame)
 
-    # add additional statistics
-    stats.loc["missing"] = df_stats.isnull().sum()
-    stats.loc["missing_pct"] = (df_stats.isnull().sum() / len(df_stats) * 100).round(2)
-    stats.loc["zero_pct"] = (df_stats == 0).sum() / len(df_stats) * 100
+    if is_lazy:
+        stats = df.select(features).describe().to_pandas()
+        stats = stats.set_index("statistic")
+        stats = stats.astype(float)
+        # get numeric features
+        schema = df.collect_schema()
+        num_features = [
+            feature
+            for feature in features
+            if schema[feature] in pl.datatypes.group.NUMERIC_DTYPES
+        ]
+        # add additional statistics (null and zero counts)
+        stats.loc["null_pct"] = (
+            stats.loc["null_count"] / stats.loc["count"] * 100
+        ).round(2)
+        exprs = []
+        for num_feature in num_features:
+            exprs.extend([pl.col(num_feature).eq(0).sum().alias(num_feature)])
+        zero_counts = df.select(exprs).collect().to_pandas().iloc[0].to_dict()
+        stats.loc["zero_count"] = pd.Series(zero_counts)
+        stats.loc["zero_pct"] = (
+            stats.loc["zero_count"] / stats.loc["count"] * 100
+        ).round(2)
+
+    else:  # pandas
+        df_stats = df[features]
+        stats = df_stats.describe()
+        # add additional statistics
+        stats.loc["null_count"] = df_stats.isnull().sum()
+        stats.loc["null_pct"] = (df_stats.isnull().sum() / len(df_stats) * 100).round(2)
+        stats.loc["zero_pct"] = (df_stats == 0).sum() / len(df_stats) * 100
 
     # format
     stats = stats.transpose()

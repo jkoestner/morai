@@ -131,4 +131,4 @@ app.layout = html.Div(
 
 if __name__ == "__main__":
     custom_logger.set_log_level("DEBUG", module_prefix="pages")
-    app.run_server(debug=True)
+    app.run(debug=True)

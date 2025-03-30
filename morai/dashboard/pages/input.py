@@ -250,16 +250,18 @@ def load_config(n_clicks, dataset):
         config["general"]["dataset"] = dataset
 
     # load dataset
+    # only works with parquet, csv files
+    # could add more
     logger.debug("load data")
     config_dataset = config["datasets"][config["general"]["dataset"]]
     file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
     if file_path.suffix == ".parquet":
         pl.enable_string_cache()
         lzdf = pl.scan_parquet(file_path)
-        dataset = lzdf.collect()
-        dataset = dataset.to_pandas()
+    if file_path.suffix == ".csv":
+        lzdf = pl.read_csv(file_path)
 
-    return config, Serverside(dataset, key=config["general"]["dataset"])
+    return config, Serverside(lzdf, key=config["general"]["dataset"])
 
 
 @callback(

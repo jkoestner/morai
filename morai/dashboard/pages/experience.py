@@ -4,6 +4,7 @@ import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 import pandas as pd
+import polars as pl
 from dash_extensions.enrich import (
     ALL,
     Input,
@@ -641,7 +642,11 @@ def reset_filters(n_clicks, dataset, filter_dict):
     logger.debug("resetting filters")
     str_reset_values = [[]] * len(filter_dict["str_cols"])
     num_reset_values = [
-        [dataset[col].min(), dataset[col].max()] for col in filter_dict["num_cols"]
+        [
+            dataset.select(pl.col(col).min()).collect().item(),
+            dataset.select(pl.col(col).max()).collect().item(),
+        ]
+        for col in filter_dict["num_cols"]
     ]
     return str_reset_values, num_reset_values
 
@@ -712,7 +717,12 @@ def toggle_collapse(n_clicks, is_open, children):
     new_children = []
 
     for _, (col, is_open_state, child) in enumerate(
-        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
+        zip(
+            [x["id"]["index"] for x in ctx.inputs_list[0]],
+            is_open,
+            children,
+            strict=False,
+        )
     ):
         # Update collapse state
         new_state = not is_open_state if col == button_idx else is_open_state
@@ -749,17 +759,19 @@ def update_active_filters_card(
     active_filters = []
 
     # Check string filters
-    for filter_val, filter_id in zip(str_filters, str_filter_ids):
-        if filter_val and len(filter_val) < len(dataset[filter_id["index"]].unique()):
-            active_filters.append(filter_id["index"])
+    for filter_val, filter_id in zip(str_filters, str_filter_ids, strict=False):
+        col = filter_id["index"]
+        unique_count = dataset.select(pl.col(col).unique()).collect().height
+        if filter_val and len(filter_val) < unique_count:
+            active_filters.append(col)
 
     # Check numeric filters
-    for filter_val, filter_id in zip(num_filters, num_filter_ids):
+    for filter_val, filter_id in zip(num_filters, num_filter_ids, strict=False):
         if filter_val:
             col = filter_id["index"]
-            if (filter_val[0] > dataset[col].min()) or (
-                filter_val[1] < dataset[col].max()
-            ):
+            min_val = dataset.select(pl.col(col).min()).collect().item()
+            max_val = dataset.select(pl.col(col).max()).collect().item()
+            if (filter_val[0] > min_val) or (filter_val[1] < max_val):
                 active_filters.append(col)
 
     # Create card content

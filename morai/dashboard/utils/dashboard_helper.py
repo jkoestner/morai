@@ -5,7 +5,7 @@ Provides functions for common used functions in app.
 """
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -40,7 +40,7 @@ def convert_to_short_number(number: float) -> str:
     return f"{number:.1f}T"
 
 
-def read_table(filepath: str) -> pl.DataFrame:
+def read_table(filepath: str) -> pl.LazyFrame:
     """
     Read table from file.
 
@@ -53,33 +53,38 @@ def read_table(filepath: str) -> pl.DataFrame:
 
     Returns
     -------
-    df : pd.DataFrame
-        Dataframe from the file.
+    df : pl.LazyFrame
+        Lazy Dataframe from the file.
 
     """
-    print(type(filepath))
-    print(filepath)
     if filepath.suffix == ".csv":
-        df = pl.read_csv(filepath)
+        df = pl.scan_csv(filepath)
+    elif filepath.suffix == ".parquet":
+        df = pl.scan_parquet(filepath)
     elif filepath.suffix == ".xlsx":
-        df = pl.read_excel(filepath, sheet_name="rate_table")
+        df = pl.read_excel(filepath, sheet_name="rate_table").lazy()
     else:
         raise ValueError(f"File type not supported: {filepath}")
+
+    # return dataframe
+    if isinstance(df, pl.LazyFrame):
+        df = df.collect()
+
     return df
 
 
 def filter_data(
-    df: pl.DataFrame,
+    df: Union[pd.DataFrame, pl.LazyFrame],
     callback_context: list[dict],
     num_to_str_count: int = num_to_str_count,
-) -> pl.DataFrame:
+) -> Union[pd.DataFrame, pl.LazyFrame]:
     """
     Filter data based on the number of unique values.
 
     Parameters
     ----------
-    df : pl.DataFrame
-        Dataframe to filter.
+    df : pd.DataFrame or pl.LazyFrame
+        Lazy dataframe to filter.
     callback_context : list
         List of callback context.
     num_to_str_count : int
@@ -87,40 +92,56 @@ def filter_data(
 
     Returns
     -------
-    filtered_df : pl.DataFrame
+    filtered_df : pd.DataFrame or pl.LazyFrame
         Filtered dataframe.
 
     """
-    filtered_df = df
+    is_lazy = isinstance(df, pl.LazyFrame)
+    if not is_lazy:
+        df = pl.from_pandas(df).lazy()
+    schema = df.collect_schema()
+
     str_cols = []
     num_cols = []
-    for col in filtered_df.columns:
-        if isinstance(filtered_df[col][0], str):
-            str_cols.append(col)
-        elif filtered_df[col].nunique() < num_to_str_count:
-            str_cols.append(col)
+    for col_name, dtype in schema.items():
+        if dtype == pl.Utf8:
+            str_cols.append(col_name)
+        elif dtype in (pl.Int64, pl.Int32, pl.Int16, pl.Int8, pl.Float64, pl.Float32):
+            unique_count_expr = pl.col(col_name).n_unique()
+            unique_count = df.select(unique_count_expr).collect().item()
+
+            if unique_count < num_to_str_count:
+                str_cols.append(col_name)
+            else:
+                num_cols.append(col_name)
         else:
-            num_cols.append(col)
+            num_cols.append(col_name)
+
+    filtered_df = df
 
     # filter string columns
     for col in str_cols:
         str_values = _inputs_parse_id(callback_context, col)
         if str_values:
-            filtered_df = filtered_df[filtered_df[col].isin(str_values)]
+            filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
 
     # filter numeric columns
     for col in num_cols:
         num_values = _inputs_parse_id(callback_context, col)
         if num_values:
-            filtered_df = filtered_df[
-                (filtered_df[col] >= num_values[0])
-                & (filtered_df[col] <= num_values[1])
-            ]
+            filtered_df = filtered_df.filter(
+                (pl.col(col) >= num_values[0]) & (pl.col(col) <= num_values[1])
+            )
+
+    # convert back to pandas
+    if not is_lazy:
+        filtered_df = filtered_df.collect().to_pandas()
+
     return filtered_df
 
 
 def generate_filters(
-    df: pl.DataFrame,
+    df: Union[pd.DataFrame, pl.LazyFrame],
     prefix: str,
     num_to_str_count: int = num_to_str_count,
     config: Optional[Dict[str, Any]] = None,
@@ -131,8 +152,8 @@ def generate_filters(
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Dataframe to generate dropdown options.
+    df : pd.DataFrame or pl.LazyFrame
+        Lazy dataframe to generate dropdown options.
     prefix : str
         Prefix for the dropdown options.
     num_to_str_count : int
@@ -151,13 +172,20 @@ def generate_filters(
             - num_cols: list of numeric columns
 
     """
+    # initialize
     filters = []
     str_cols = []
     num_cols = []
     prefix_str_filter = f"{prefix}-str-filter"
     prefix_num_filter = f"{prefix}-num-filter"
 
-    columns = list(df.columns)
+    # get column types
+    is_lazy = isinstance(df, pl.LazyFrame)
+    if not is_lazy:
+        df = pl.from_pandas(df).lazy()
+    schema = df.collect_schema()
+    columns = list(schema.keys())
+
     if config:
         config_dataset = config["datasets"][config["general"]["dataset"]]
         config_columns = config_dataset["columns"]["features"]
@@ -173,19 +201,33 @@ def generate_filters(
 
     # create filters
     for col in columns:
-        if isinstance(df[col][0], str) or df[col].nunique() < num_to_str_count:
-            # create options
-            if isinstance(df[col].dtype, pd.CategoricalDtype):
+        col_dtype = schema[col]
+
+        # check if categorical (non-numeric or low unique count)
+        is_categorical = False
+        if col_dtype not in pl.datatypes.group.NUMERIC_DTYPES:
+            is_categorical = True
+        else:
+            unique_count = df.select(pl.col(col).n_unique()).collect().item()
+            if unique_count < num_to_str_count:
+                is_categorical = True
+
+        # create options for categorical
+        if is_categorical:
+            unique_values = (
+                df.select(pl.col(col)).drop_nulls().unique().collect().to_pandas()
+            )
+            if isinstance(unique_values[col].dtype, pd.CategoricalDtype):
                 options = [
                     {"label": str(i), "value": i}
-                    for i in df[col].dropna().cat.categories
+                    for i in unique_values[col].cat.categories
                 ]
             else:
                 options = [
                     {"label": str(i), "value": i}
-                    for i in sorted(df[col].dropna().astype(str).unique())
+                    for i in sorted(unique_values[col].astype(str).unique())
                 ]
-            # Create collapsible checklist for string columns
+
             filter = html.Div(
                 [
                     dbc.Button(
@@ -212,8 +254,12 @@ def generate_filters(
                 className="mb-3",
             )
             str_cols.append(col)
-        # slider for numeric columns
+
+        # create slider for numeric columns
         else:
+            min_val = df.select(pl.col(col).min()).collect().item()
+            max_val = df.select(pl.col(col).max()).collect().item()
+
             filter = html.Div(
                 [
                     dbc.Button(
@@ -228,11 +274,11 @@ def generate_filters(
                     dbc.Collapse(
                         dcc.RangeSlider(
                             id={"type": prefix_num_filter, "index": col},
-                            min=df[col].min(),
-                            max=df[col].max(),
+                            min=min_val,
+                            max=max_val,
                             step=1,
                             marks=None,
-                            value=[df[col].min(), df[col].max()],
+                            value=[min_val, max_val],
                             tooltip={"always_visible": True, "placement": "bottom"},
                         ),
                         id={"type": f"{prefix}-collapse", "index": col},
@@ -350,6 +396,7 @@ def toggle_collapse(
             [x["id"]["index"] for x in callback_context.inputs_list[0]],
             is_open,
             children,
+            strict=False,
         )
     ):
         # collapse state
@@ -394,7 +441,7 @@ def get_card_list(config: Dict[str, Any]) -> List[str]:
 
 
 def generate_card(
-    df: pl.DataFrame,
+    df: pl.LazyFrame,
     card_list: List[str],
     title: str = "Data",
     color: str = "Azure",
@@ -406,8 +453,8 @@ def generate_card(
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Dataframe to gather KPI from.
+    df : pl.LazyFrame
+        Lazy dataframe to gather KPI from.
     card_list : list
         List of cards to generate.
     title : str
@@ -428,7 +475,8 @@ def generate_card(
     card_body_content = []
 
     for column in card_list:
-        value_text = f"{column}: {convert_to_short_number(df[column].sum())}"
+        column_sum = df.select(pl.col(column).sum()).collect().item()
+        value_text = f"{column}: {convert_to_short_number(column_sum)}"
         card_body_content.append(html.P(value_text, className="card-text"))
 
     card = dbc.Card(
@@ -826,25 +874,33 @@ def list_files_in_folder(folder_path: str) -> List[str]:
     return files
 
 
-def flatten_columns(df: pl.DataFrame) -> pl.DataFrame:
+def flatten_columns(df: pl.LazyFrame) -> pl.LazyFrame:
     """
     Flatten columns in dataframe.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Dataframe to flatten columns.
+    df : pl.LazyFrame
+        Lazy dataframe to flatten columns.
 
     Returns
     -------
-    df : pd.DataFrame
+    df : pl.LazyFrame
         Dataframe with flattened columns.
 
     """
-    df.columns = [
-        "__".join(col).strip() if isinstance(col, tuple) else col for col in df.columns
-    ]
-    return df
+    columns = df.columns
+
+    new_columns = []
+    for col in columns:
+        if isinstance(col, tuple):
+            new_columns.append("__".join(str(c).strip() for c in col))
+        else:
+            new_columns.append(col)
+
+    # rename columns
+    rename_dict = dict(zip(columns, new_columns, strict=False))
+    return df.rename(rename_dict)
 
 
 def _inputs_flatten_list(input_list: List[Any]) -> List[Any]:

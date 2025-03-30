@@ -1,9 +1,10 @@
 """Preprocessors used in the models."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
+import polars as pl
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 
 from morai.utils import custom_logger, helpers
@@ -160,7 +161,9 @@ def preprocess_data(
         logger.info(f"ordinal - ordinal encoded: {ordinal_cols}")
         ordinal_encoder = OrdinalEncoder()
         X[ordinal_cols] = ordinal_encoder.fit_transform(X[ordinal_cols]).astype("int16")
-        for col, categories in zip(ordinal_cols, ordinal_encoder.categories_):
+        for col, categories in zip(
+            ordinal_cols, ordinal_encoder.categories_, strict=False
+        ):
             mapping[col] = {
                 "values": {category: i for i, category in enumerate(categories)},
                 "type": "ordinal",
@@ -294,7 +297,7 @@ def bin_feature(feature: pd.Series, bins: int) -> pd.Series:
 
     # generate lables for the bins
     labels = [
-        f"{int(bin_edges[i])+1}-{int(bin_edges[i+1])}"
+        f"{int(bin_edges[i]) + 1}-{int(bin_edges[i + 1])}"
         for i in range(len(bin_edges) - 1)
     ]
 
@@ -304,6 +307,124 @@ def bin_feature(feature: pd.Series, bins: int) -> pd.Series:
         feature, bins=bin_edges, labels=labels, include_lowest=True, right=True
     )
     return binned_feature
+
+
+def lazy_bin_feature(
+    lf: pl.LazyFrame, feature: str, bins: int, inplace: bool = False
+) -> pl.LazyFrame:
+    """
+    Bin a feature in a LazyFrame.
+
+    This is separated as there is logic to update the LazyFrame.
+
+    Parameters
+    ----------
+    lf : pl.LazyFrame
+        The LazyFrame containing the feature to bin.
+    feature : str
+        The name of the feature/column to bin.
+    bins : int
+        The number of bins to use.
+    inplace : bool, optional
+        If True, the original column will be replaced with the binned values.
+        If False, a new column named "{feature}_binned" will be created.
+        Default is False.
+
+    Returns
+    -------
+    pl.LazyFrame
+        A new LazyFrame with the binned feature added or replaced.
+
+    """
+    # check if feature exists
+    if feature not in lf.columns:
+        raise ValueError(
+            f"Feature '{feature}' not found in LazyFrame columns: {lf.columns}"
+        )
+
+    # get min/max
+    stats = lf.select(
+        [pl.col(feature).min().alias("min"), pl.col(feature).max().alias("max")]
+    ).collect()
+    range_min, range_max = stats["min"][0] - 1, stats["max"][0]
+
+    # create bin edges, labels, and unique values
+    bin_edges = np.linspace(range_min, range_max, bins + 1)
+    labels = [
+        f"{int(bin_edges[i]) + 1}-{int(bin_edges[i + 1])}"
+        for i in range(len(bin_edges) - 1)
+    ]
+    unique_vals = lf.select(pl.col(feature).unique()).collect()[feature].to_list()
+
+    # create a new lzdf with binned values column
+    binned_vals = pd.cut(
+        pd.Series(unique_vals),
+        bins=bin_edges,
+        labels=labels,
+        include_lowest=True,
+        right=True,
+    )
+    bin_mapping = dict(zip(unique_vals, binned_vals.astype(str), strict=False))
+    output_col = feature if inplace else f"{feature}_binned"
+
+    lf = lf.with_columns(pl.col(feature).replace(bin_mapping).alias(output_col))
+
+    return lf
+
+
+def lazy_groupby(
+    df: pl.LazyFrame,
+    groupby_cols: Union[str, List[str]],
+    agg_cols: Union[str, List[str]],
+    agg: str,
+) -> pl.LazyFrame:
+    """
+    Mimics a Pandas groupby call using Polars' lazy API.
+
+    Parameters
+    ----------
+    df : pl.LazyFrame
+        The LazyFrame to group.
+    groupby_cols : str or list
+        The column name(s) to group by.
+    agg_cols : str or list
+        The column name(s) on which to perform the aggregation.
+    agg : str
+        The aggregation function to apply.
+        Supported values are 'sum', 'mean', and 'count'.
+
+    Returns
+    -------
+    pl.LazyFrame
+        The grouped and aggregated LazyFrame.
+    """
+    # check if columns are list or string and build aggregation expressions
+    # defaults to sum aggregation
+    if isinstance(agg_cols, list):
+        agg_expr = []
+        for col in agg_cols:
+            if agg == "sum":
+                agg_expr.append(pl.sum(col).alias(col))
+            elif agg == "mean":
+                agg_expr.append(pl.mean(col).alias(col))
+            elif agg == "count":
+                agg_expr.append(pl.count(col).alias(col))
+            else:
+                agg_expr.append(pl.sum(col).alias(col))
+    else:
+        if agg == "sum":
+            agg_expr = pl.sum(agg_cols).alias(agg_cols)
+        elif agg == "mean":
+            agg_expr = pl.mean(agg_cols).alias(agg_cols)
+        elif agg == "count":
+            agg_expr = pl.count(agg_cols).alias(agg_cols)
+        else:
+            agg_expr = pl.sum(agg_cols).alias(agg_cols)
+
+    # groupby and aggregate
+    grouped_df = df.group_by(groupby_cols).agg(agg_expr)
+
+    return grouped_df
 
 
 def get_dimensions(mapping: Dict[str, Any]) -> pd.DataFrame:
