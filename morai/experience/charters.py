@@ -165,7 +165,7 @@ def chart(
         grouped_data = (
             df.groupby(groupby_cols, observed=True)[agg_cols].agg(agg).reset_index()
         )
-    grouped_data = grouped_data.sort_values(groupby_cols)
+    grouped_data = grouped_data.sort_values(groupby_cols, key=lambda x: x.astype(str))
 
     # calculate ratios if needed
     if use_num_and_den and y_axis == "ratio":
@@ -412,7 +412,9 @@ def compare_rates(
             )
             .reset_index()
         )
-    grouped_data = grouped_data.sort_values(groupby_features)
+    grouped_data = grouped_data.sort_values(
+        groupby_features, key=lambda x: x.astype(str)
+    )
 
     # return data if not display
     if not display:
@@ -535,7 +537,9 @@ def frequency(
         else:
             frequency = df.groupby(col, observed=True)[sum_var].sum().reset_index()
             frequency.columns = [col, sum_var]
-            frequency = frequency.sort_values(by=col, ascending=True)
+            frequency = frequency.sort_values(
+                by=col, ascending=True, key=lambda x: x.astype(str)
+            )
 
         # create the subplot
         row = math.ceil(i / cols)
@@ -679,7 +683,7 @@ def pdp(
             df.groupby(grouped_features, observed=True)[secondary]
             .sum()
             .reset_index()
-            .sort_values(by=grouped_features)
+            .sort_values(by=grouped_features, key=lambda x: x.astype(str))
         )
 
     # quick method for pdp
@@ -767,7 +771,7 @@ def pdp(
     if mapping and line_color and line_color in mapping and line_color != "ohe":
         pdp_df[line_color] = preprocessors.remap_values(pdp_df[line_color], mapping)
 
-    pdp_df = pdp_df.sort_values(by=grouped_features)
+    pdp_df = pdp_df.sort_values(by=grouped_features, key=lambda x: x.astype(str))
 
     # bin the feature if x_bins is provided
     # note: can't bin prior to prediction, because the prediction is based on the
@@ -1247,7 +1251,9 @@ def target(
                         .mean()
                         .reset_index()
                     )
-            grouped_data = grouped_data.sort_values(by=plot_feature)
+            grouped_data = grouped_data.sort_values(
+                by=plot_feature, key=lambda x: x.astype(str)
+            )
 
             # adding trace for current target within the subplot for the feature
             if len(plot_feature) == 2:
