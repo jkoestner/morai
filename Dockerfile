@@ -7,7 +7,7 @@
 #   `docker build --build-arg BRANCH_NAME=dev --no-cache -t morai .`
 #
 # slim was used instead of alpine because of the need of numpy
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # Install dependencies, git
 RUN apt-get update && \

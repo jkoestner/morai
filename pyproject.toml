@@ -21,7 +21,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pandas>=2.2.3",
     "plotly>=6.0.1",
-    "polars>=1.25.2",
+    "polars>=1.26.0",
     "pyarrow>=19.0.1",
     "pymort>=2.0.1",
     "scikit-learn>=1.6.1",                # h-statistic available in https://github.com/scikit-learn/scikit-learn/pull/28375
@@ -31,6 +31,7 @@ dependencies = [
     "tqdm>=4.67.1",
 
     # dashboard
+    "dash>=3.0.1",                     # only for dash
     "dash-ag-grid>=31.3.1",             # only for dash
     "dash-bootstrap-components>=2.0.0", # only for dash
     "dash-extensions>=1.0.20",          # only for dash

@@ -19,7 +19,7 @@ _pycache_/
 build/
 catboost_info/
 docs/coverage/
-morai/dashboard/file_system_backend/
+file_system_backend/
 morai.egg-info/
 notebooks/working/
 
