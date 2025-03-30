@@ -703,7 +703,12 @@ def toggle_pdp_collapse(n_clicks, is_open, children):
     new_children = []
 
     for _, (col, is_open_state, child) in enumerate(
-        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
+        zip(
+            [x["id"]["index"] for x in ctx.inputs_list[0]],
+            is_open,
+            children,
+            strict=False,
+        )
     ):
         # Update collapse state
         new_state = not is_open_state if col == button_idx else is_open_state

@@ -13,7 +13,9 @@ import polars as pl
 import yaml
 from dash import dcc, html
 
-from morai.utils import helpers
+from morai.utils import custom_logger, helpers
+
+logger = custom_logger.setup_logging(__name__)
 
 num_to_str_count = 10
 
@@ -104,18 +106,14 @@ def filter_data(
     str_cols = []
     num_cols = []
     for col_name, dtype in schema.items():
-        if dtype == pl.Utf8:
-            str_cols.append(col_name)
-        elif dtype in (pl.Int64, pl.Int32, pl.Int16, pl.Int8, pl.Float64, pl.Float32):
-            unique_count_expr = pl.col(col_name).n_unique()
-            unique_count = df.select(unique_count_expr).collect().item()
-
+        if dtype in pl.datatypes.group.NUMERIC_DTYPES:
+            unique_count = df.select(pl.col(col_name).n_unique()).collect().item()
             if unique_count < num_to_str_count:
                 str_cols.append(col_name)
             else:
                 num_cols.append(col_name)
         else:
-            num_cols.append(col_name)
+            str_cols.append(col_name)
 
     filtered_df = df
 
@@ -217,16 +215,10 @@ def generate_filters(
             unique_values = (
                 df.select(pl.col(col)).drop_nulls().unique().collect().to_pandas()
             )
-            if isinstance(unique_values[col].dtype, pd.CategoricalDtype):
-                options = [
-                    {"label": str(i), "value": i}
-                    for i in unique_values[col].cat.categories
-                ]
-            else:
-                options = [
-                    {"label": str(i), "value": i}
-                    for i in sorted(unique_values[col].astype(str).unique())
-                ]
+            options = [
+                {"label": str(i), "value": i}
+                for i in sorted(unique_values[col].astype(str).unique())
+            ]
 
             filter = html.Div(
                 [
@@ -874,33 +866,52 @@ def list_files_in_folder(folder_path: str) -> List[str]:
     return files
 
 
-def flatten_columns(df: pl.LazyFrame) -> pl.LazyFrame:
+def flatten_columns(
+    df: Union[pd.DataFrame, pl.LazyFrame],
+) -> Union[pd.DataFrame, pl.LazyFrame]:
     """
     Flatten columns in dataframe.
 
     Parameters
     ----------
-    df : pl.LazyFrame
-        Lazy dataframe to flatten columns.
+    df : pd.DataFrame or pl.LazyFrame
+        DataFrame to flatten columns.
 
     Returns
     -------
-    df : pl.LazyFrame
-        Dataframe with flattened columns.
+    df : pd.DataFrame or pl.LazyFrame
+        DataFrame with flattened columns.
 
     """
-    columns = df.columns
+    # check if lazy
+    is_lazy = isinstance(df, pl.LazyFrame)
 
-    new_columns = []
-    for col in columns:
-        if isinstance(col, tuple):
-            new_columns.append("__".join(str(c).strip() for c in col))
-        else:
-            new_columns.append(col)
+    if is_lazy:
+        schema = df.collect_schema()
+        columns = list(schema.keys())
+        new_columns = []
+        for col in columns:
+            if isinstance(col, tuple):
+                new_columns.append("__".join(str(c).strip() for c in col))
+            else:
+                new_columns.append(col)
+        rename_dict = {
+            old: new
+            for old, new in zip(columns, new_columns, strict=False)
+            if old != new
+        }
+        df = df.rename(rename_dict)
+    else:  # pandas
+        columns = df.columns
+        new_columns = []
+        for col in columns:
+            if isinstance(col, tuple):
+                new_columns.append("__".join(str(c).strip() for c in col))
+            else:
+                new_columns.append(col)
+        df.columns = new_columns
 
-    # rename columns
-    rename_dict = dict(zip(columns, new_columns, strict=False))
-    return df.rename(rename_dict)
+    return df
 
 
 def _inputs_flatten_list(input_list: List[Any]) -> List[Any]:

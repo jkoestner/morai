@@ -2,10 +2,11 @@
 
 import json
 from io import StringIO
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import sklearn.metrics as skm
 
 from morai.utils import custom_logger, helpers
@@ -59,22 +60,26 @@ def ae(y_true: pd.Series, y_pred: pd.Series) -> float:
 
 
 def ae_rank(
-    df: pd.DataFrame, features: list, actuals: str, expecteds: str, exposures: str
+    df: Union[pd.DataFrame, pl.LazyFrame],
+    features: list,
+    actuals: str,
+    expecteds: str,
+    exposures: str,
 ) -> pd.DataFrame:
     """
     Calculate the actual/expected ranking.
 
     There are 2 types of ranks
-      - rank1 = abs((actuals - expected) * (actuals/expected - 1))
+      - rank_issue = abs((actuals - expected) * (actuals/expected - 1))
          - high loss value with high loss percentage will rank higher, which identifies
            issues with data better
-      - rank2 = abs((actuals - expected) * (1 - exposure/total_exposure))
+      - rank_driver = abs((actuals - expected) * (1 - exposure/total_exposure))
          - high loss value with small exposure will rank higher, which identifies
            drivers better
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : pd.DataFrame or pl.LazyFrame
         The DataFrame.
     features : list
         The features.
@@ -91,36 +96,79 @@ def ae_rank(
         The DataFrame with the actual/expected ranking.
 
     """
-    df = df[[*features, actuals, expecteds, exposures]]
-    total_exposure = df[exposures].sum()
-    ae = df[actuals].sum() / df[expecteds].sum()
+    is_lazy = isinstance(df, pl.LazyFrame)
+    if not is_lazy:
+        df = pl.from_pandas(df).lazy()
+
+    df = df.select([*features, actuals, expecteds, exposures])
+    agg_result = df.select(
+        [
+            pl.sum(exposures).alias("total_exposure"),
+            pl.sum(actuals).alias("total_actuals"),
+            pl.sum(expecteds).alias("total_expecteds"),
+        ]
+    ).collect()
+    total_exposure = agg_result["total_exposure"][0]
+    ae = agg_result["total_actuals"][0] / agg_result["total_expecteds"][0]
+    logger.info(f"The total AE with {expecteds} as E for dataset is {ae * 100:.1f}%")
 
     # dataframe with attributes and attribute values
-    rank_df = pd.melt(
-        df,
-        id_vars=[actuals, expecteds, exposures],
-        value_vars=features,
-        var_name="attribute",
-        value_name="attribute_value",
+    melted_dfs = []
+    for feature in features:
+        feature_df = df.select(
+            [
+                pl.lit(feature).alias("attribute"),
+                pl.col(feature).cast(pl.Utf8).alias("attribute_value"),
+                pl.col(actuals),
+                pl.col(expecteds),
+                pl.col(exposures),
+            ]
+        )
+        melted_dfs.append(feature_df)
+    melted_df = pl.concat(melted_dfs)
+
+    rank_df = melted_df.group_by(["attribute", "attribute_value"]).agg(
+        [
+            pl.sum(actuals).alias(actuals),
+            pl.sum(expecteds).alias(expecteds),
+            pl.sum(exposures).alias(exposures),
+        ]
     )
-    rank_df = rank_df.groupby(["attribute", "attribute_value"]).sum().reset_index()
+
+    # calculate inputs to rank formula
+    rank_df = rank_df.with_columns(
+        [
+            (pl.col(actuals) / pl.col(expecteds)).alias("ae"),
+            (pl.col(actuals) - pl.col(expecteds)).alias("a-e"),
+            (pl.col(exposures) / total_exposure).alias("exposure_pct"),
+        ]
+    )
+    rank_df = rank_df.with_columns(
+        [
+            ((pl.col(actuals) - pl.col(expecteds)).abs() * (pl.col("ae") - 1)).alias(
+                "issue_value"
+            )
+        ]
+    )
+    rank_df = rank_df.with_columns(
+        [
+            (
+                (pl.col(actuals) - pl.col(expecteds)).abs()
+                * (1 - pl.col("exposure_pct"))
+            ).alias("driver_value")
+        ]
+    )
+    rank_df = rank_df.collect().to_pandas()
 
     # calculate ranks and sort by rank_combined
-    logger.info(f"The total AE with {expecteds} as E for dataset is {ae*100:.1f}%")
-    rank_df["ae"] = rank_df[actuals] / rank_df[expecteds]
-    rank_df["a-e"] = rank_df[actuals] - rank_df[expecteds]
-    rank_df["exposure_pct"] = rank_df[exposures] / total_exposure
     rank_df["rank_issue"] = (
-        abs((rank_df[actuals] - rank_df[expecteds]) * (rank_df["ae"] - 1))
-        .rank(ascending=False, method="dense")
-        .astype(int)
+        rank_df["issue_value"].rank(ascending=False, method="dense").astype(int)
     )
     rank_df["rank_driver"] = (
-        abs((rank_df[actuals] - rank_df[expecteds]) * (1 - rank_df["exposure_pct"]))
-        .rank(ascending=False, method="dense")
-        .astype(int)
+        rank_df["driver_value"].rank(ascending=False, method="dense").astype(int)
     )
     rank_df["rank_combined"] = rank_df["rank_issue"] + rank_df["rank_driver"]
+    rank_df = rank_df.drop(columns=["issue_value", "driver_value"])
     rank_df = rank_df.sort_values(by="rank_combined")
 
     return rank_df
@@ -173,7 +221,7 @@ def calculate_metrics(
                 )
             except AttributeError:
                 logger.error(
-                    f"Model `{model}` does not have AIC attribute, " f"returning None"
+                    f"Model `{model}` does not have AIC attribute, returning None"
                 )
                 metric_dict[f"{prefix}_{metric}"] = None
         else:
