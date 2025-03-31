@@ -165,7 +165,10 @@ def chart(
         grouped_data = (
             df.groupby(groupby_cols, observed=True)[agg_cols].agg(agg).reset_index()
         )
-    grouped_data = grouped_data.sort_values(groupby_cols, key=lambda x: x.astype(str))
+    grouped_data = grouped_data.sort_values(
+        groupby_cols,
+        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
+    )
 
     # calculate ratios if needed
     if use_num_and_den and y_axis == "ratio":
@@ -413,7 +416,8 @@ def compare_rates(
             .reset_index()
         )
     grouped_data = grouped_data.sort_values(
-        groupby_features, key=lambda x: x.astype(str)
+        groupby_features,
+        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
     )
 
     # return data if not display
@@ -538,7 +542,11 @@ def frequency(
             frequency = df.groupby(col, observed=True)[sum_var].sum().reset_index()
             frequency.columns = [col, sum_var]
             frequency = frequency.sort_values(
-                by=col, ascending=True, key=lambda x: x.astype(str)
+                by=col,
+                ascending=True,
+                key=lambda x: x.astype(str)
+                if pd.api.types.is_categorical_dtype(x)
+                else x,
             )
 
         # create the subplot
@@ -683,7 +691,12 @@ def pdp(
             df.groupby(grouped_features, observed=True)[secondary]
             .sum()
             .reset_index()
-            .sort_values(by=grouped_features, key=lambda x: x.astype(str))
+            .sort_values(
+                by=grouped_features,
+                key=lambda x: x.astype(str)
+                if pd.api.types.is_categorical_dtype(x)
+                else x,
+            )
         )
 
     # quick method for pdp
@@ -771,7 +784,10 @@ def pdp(
     if mapping and line_color and line_color in mapping and line_color != "ohe":
         pdp_df[line_color] = preprocessors.remap_values(pdp_df[line_color], mapping)
 
-    pdp_df = pdp_df.sort_values(by=grouped_features, key=lambda x: x.astype(str))
+    pdp_df = pdp_df.sort_values(
+        by=grouped_features,
+        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
+    )
 
     # bin the feature if x_bins is provided
     # note: can't bin prior to prediction, because the prediction is based on the
@@ -1252,7 +1268,10 @@ def target(
                         .reset_index()
                     )
             grouped_data = grouped_data.sort_values(
-                by=plot_feature, key=lambda x: x.astype(str)
+                by=plot_feature,
+                key=lambda x: x.astype(str)
+                if pd.api.types.is_categorical_dtype(x)
+                else x,
             )
 
             # adding trace for current target within the subplot for the feature

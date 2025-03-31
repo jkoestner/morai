@@ -50,6 +50,7 @@ https://tinyurl.com/
 
 **📊 Dashboard:**
 
+- [Dashboard](https://morai.koestner.fun)
 - Data Overview: ![dash_data_input](docs/screenshots/morai_data.gif)
 - Data Tables: ![dash_data_tables](docs/screenshots/morai_tables.gif)
 - Data CDC: ![dash_cdc](docs/screenshots/morai_cdc.gif)

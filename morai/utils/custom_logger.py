@@ -82,16 +82,28 @@ def set_log_level(new_level: str, module_prefix: str = "morai") -> None:
         the module logger prefix to set the log level for
 
     """
-    options = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    if new_level not in options:
-        raise ValueError(f"Log level must be one of {options}")
-    numeric_level = logging.getLevelName(new_level)
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+    if new_level not in level_map:
+        raise ValueError(f"Log level must be one of {list(level_map.keys())}")
+    numeric_level = level_map[new_level]
+
+    # root logger level
+    if not module_prefix:
+        logging.getLogger().setLevel(numeric_level)
+        return
+
     # update the log level for all project loggers
-    for logger_name, logger in logging.Logger.manager.loggerDict.items():
-        # Check if the logger's name starts with the specified prefix
+    for logger_name in list(logging.Logger.manager.loggerDict.keys()):
+        # check if the logger's name starts with the specified prefix
         if logger_name.startswith(module_prefix):
-            if isinstance(logger, logging.Logger):
-                logger.setLevel(numeric_level)
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(numeric_level)
 
 
 def get_log_level(module_prefix: str = "morai") -> str:
@@ -109,14 +121,27 @@ def get_log_level(module_prefix: str = "morai") -> str:
         the log level
 
     """
-    log_level = None
-    for logger_name, logger in logging.Logger.manager.loggerDict.items():
+    level_name_map = {
+        logging.DEBUG: "DEBUG",
+        logging.INFO: "INFO",
+        logging.WARNING: "WARNING",
+        logging.ERROR: "ERROR",
+        logging.CRITICAL: "CRITICAL",
+    }
+
+    # root logger level
+    if not module_prefix:
+        level = logging.getLogger().getEffectiveLevel()
+        return level_name_map.get(level)
+
+    for logger_name in list(logging.Logger.manager.loggerDict.keys()):
         # Check if the logger's name starts with the specified prefix
         if logger_name.startswith(module_prefix):
-            if isinstance(logger, logging.Logger):
-                log_level = logging.getLevelName(logger.getEffectiveLevel())
-                break
-    return log_level
+            logger = logging.getLogger(logger_name)
+            level = logger.getEffectiveLevel()
+            return level_name_map.get(level)
+
+    return None
 
 
 def suppress_logs(func: Callable) -> Callable:
