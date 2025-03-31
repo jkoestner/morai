@@ -1,3 +1,4 @@
 # removing the following files from github's language stats
 docs/* linguist-vendored
 notebooks/* linguist-vendored
+notebooks/**/*.ipynb linguist-vendored

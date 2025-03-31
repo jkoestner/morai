@@ -38,6 +38,7 @@ dependencies = [
     "gunicorn>=23.0.0",                 # only for dash
 
     # models
+    "pygam>=0.9.1",                     # only for pygam
     "catboost>=1.2.7",                  # only for catboost
     "graphviz>=0.20.3",                 # only for lightgbm
     "lightgbm>=4.6.0",                  # only for lightgbm
