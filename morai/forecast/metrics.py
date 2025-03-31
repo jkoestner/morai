@@ -2,9 +2,11 @@
 
 import json
 from io import StringIO
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import sklearn.metrics as skm
 
 from morai.utils import custom_logger, helpers
@@ -12,7 +14,7 @@ from morai.utils import custom_logger, helpers
 logger = custom_logger.setup_logging(__name__)
 
 
-def smape(y_true, y_pred, epsilon=1e-10):
+def smape(y_true: pd.Series, y_pred: pd.Series, epsilon: float = 1e-10) -> float:
     """
     Calculate the Symetric Mean Absolute Percentage Error (sMAPE).
 
@@ -37,7 +39,7 @@ def smape(y_true, y_pred, epsilon=1e-10):
     return np.mean((y_true - y_pred).abs() / denominator)
 
 
-def ae(y_true, y_pred):
+def ae(y_true: pd.Series, y_pred: pd.Series) -> float:
     """
     Calculate the actual/expected.
 
@@ -57,21 +59,27 @@ def ae(y_true, y_pred):
     return y_true.sum() / y_pred.sum()
 
 
-def ae_rank(df, features, actuals, expecteds, exposures):
+def ae_rank(
+    df: Union[pd.DataFrame, pl.LazyFrame],
+    features: list,
+    actuals: str,
+    expecteds: str,
+    exposures: str,
+) -> pd.DataFrame:
     """
     Calculate the actual/expected ranking.
 
     There are 2 types of ranks
-      - rank1 = abs((actuals - expected) * (actuals/expected - 1))
+      - rank_issue = abs((actuals - expected) * (actuals/expected - 1))
          - high loss value with high loss percentage will rank higher, which identifies
            issues with data better
-      - rank2 = abs((actuals - expected) * (1 - exposure/total_exposure))
+      - rank_driver = abs((actuals - expected) * (1 - exposure/total_exposure))
          - high loss value with small exposure will rank higher, which identifies
            drivers better
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : pd.DataFrame or pl.LazyFrame
         The DataFrame.
     features : list
         The features.
@@ -88,39 +96,143 @@ def ae_rank(df, features, actuals, expecteds, exposures):
         The DataFrame with the actual/expected ranking.
 
     """
-    df = df[[*features, actuals, expecteds, exposures]]
-    total_exposure = df[exposures].sum()
-    ae = df[actuals].sum() / df[expecteds].sum()
+    is_lazy = isinstance(df, pl.LazyFrame)
+    if not is_lazy:
+        df = pl.from_pandas(df).lazy()
+
+    df = df.select([*features, actuals, expecteds, exposures])
+    agg_result = df.select(
+        [
+            pl.sum(exposures).alias("total_exposure"),
+            pl.sum(actuals).alias("total_actuals"),
+            pl.sum(expecteds).alias("total_expecteds"),
+        ]
+    ).collect()
+    total_exposure = agg_result["total_exposure"][0]
+    ae = agg_result["total_actuals"][0] / agg_result["total_expecteds"][0]
+    logger.info(f"The total AE with {expecteds} as E for dataset is {ae * 100:.1f}%")
 
     # dataframe with attributes and attribute values
-    rank_df = pd.melt(
-        df,
-        id_vars=[actuals, expecteds, exposures],
-        value_vars=features,
-        var_name="attribute",
-        value_name="attribute_value",
+    melted_dfs = []
+    for feature in features:
+        feature_df = df.select(
+            [
+                pl.lit(feature).alias("attribute"),
+                pl.col(feature).cast(pl.Utf8).alias("attribute_value"),
+                pl.col(actuals),
+                pl.col(expecteds),
+                pl.col(exposures),
+            ]
+        )
+        melted_dfs.append(feature_df)
+    melted_df = pl.concat(melted_dfs)
+
+    rank_df = melted_df.group_by(["attribute", "attribute_value"]).agg(
+        [
+            pl.sum(actuals).alias(actuals),
+            pl.sum(expecteds).alias(expecteds),
+            pl.sum(exposures).alias(exposures),
+        ]
     )
-    rank_df = rank_df.groupby(["attribute", "attribute_value"]).sum().reset_index()
+
+    # calculate inputs to rank formula
+    rank_df = rank_df.with_columns(
+        [
+            (pl.col(actuals) / pl.col(expecteds)).alias("ae"),
+            (pl.col(actuals) - pl.col(expecteds)).alias("a-e"),
+            (pl.col(exposures) / total_exposure).alias("exposure_pct"),
+        ]
+    )
+    rank_df = rank_df.with_columns(
+        [
+            ((pl.col(actuals) - pl.col(expecteds)).abs() * (pl.col("ae") - 1)).alias(
+                "issue_value"
+            )
+        ]
+    )
+    rank_df = rank_df.with_columns(
+        [
+            (
+                (pl.col(actuals) - pl.col(expecteds)).abs()
+                * (1 - pl.col("exposure_pct"))
+            ).alias("driver_value")
+        ]
+    )
+    rank_df = rank_df.collect().to_pandas()
 
     # calculate ranks and sort by rank_combined
-    logger.info(f"The total AE with {expecteds} as E for dataset is {ae*100:.1f}%")
-    rank_df["ae"] = rank_df[actuals] / rank_df[expecteds]
-    rank_df["a-e"] = rank_df[actuals] - rank_df[expecteds]
-    rank_df["exposure_pct"] = rank_df[exposures] / total_exposure
     rank_df["rank_issue"] = (
-        abs((rank_df[actuals] - rank_df[expecteds]) * (rank_df["ae"] - 1))
-        .rank(ascending=False, method="dense")
-        .astype(int)
+        rank_df["issue_value"].rank(ascending=False, method="dense").astype(int)
     )
     rank_df["rank_driver"] = (
-        abs((rank_df[actuals] - rank_df[expecteds]) * (1 - rank_df["exposure_pct"]))
-        .rank(ascending=False, method="dense")
-        .astype(int)
+        rank_df["driver_value"].rank(ascending=False, method="dense").astype(int)
     )
     rank_df["rank_combined"] = rank_df["rank_issue"] + rank_df["rank_driver"]
+    rank_df = rank_df.drop(columns=["issue_value", "driver_value"])
     rank_df = rank_df.sort_values(by="rank_combined")
 
     return rank_df
+
+
+def calculate_metrics(
+    y_true: pd.Series,
+    y_pred: pd.Series,
+    metrics: list,
+    prefix: str = "",
+    model: Optional[Any] = None,
+    **kwargs,
+) -> dict:
+    """
+    Calculate the metrics.
+
+    Parameters
+    ----------
+    y_true : series
+        The actual column name
+    y_pred : series
+        The predicted column name
+    metrics : list
+        The metrics to calculate
+    prefix : str, optional (default="")
+        The prefix for the metrics
+    model : model, optional (default=None)
+        The model to calculate the AIC
+    kwargs : dict
+        The keyword arguments for the metrics calculation from sklearn.metrics
+
+    Returns
+    -------
+    metric_dict : dict
+        The dictionary of metrics
+
+    """
+    metric_dict = {}
+    for metric in metrics:
+        if metric == "smape":
+            metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred)
+        elif metric == "shape":
+            metric_dict[f"{prefix}_{metric}"] = y_true.shape[0]
+        elif metric == "ae":
+            metric_dict[f"{prefix}_{metric}"] = ae(y_true, y_pred)
+        elif metric == "aic":
+            try:
+                metric_dict[f"{prefix}_{metric}"] = (
+                    model.aic if model is not None else None
+                )
+            except AttributeError:
+                logger.error(
+                    f"Model `{model}` does not have AIC attribute, returning None"
+                )
+                metric_dict[f"{prefix}_{metric}"] = None
+        else:
+            try:
+                metric_dict[f"{prefix}_{metric}"] = getattr(skm, metric)(
+                    y_true, y_pred, **kwargs
+                )
+            except AttributeError:
+                logger.error(f"Metric `{metric}` not found in sklearn.metrics")
+                metric_dict[f"{prefix}_{metric}"] = None
+    return metric_dict
 
 
 class ModelResults:
@@ -141,7 +253,9 @@ class ModelResults:
 
     """
 
-    def __init__(self, filepath=None, metrics=None):
+    def __init__(
+        self, filepath: Optional[str] = None, metrics: Optional[list] = None
+    ) -> None:
         self.filepath = filepath
 
         # load model results from file
@@ -177,14 +291,14 @@ class ModelResults:
 
     def add_model(
         self,
-        model_name,
-        data_path,
-        data_shape,
-        preprocess_dict,
-        model_params,
-        scorecard,
-        importance=None,
-    ):
+        model_name: str,
+        data_path: str,
+        data_shape: tuple,
+        preprocess_dict: dict,
+        model_params: dict,
+        scorecard: pd.DataFrame,
+        importance: pd.DataFrame = None,
+    ) -> None:
         """
         Add the model.
 
@@ -273,7 +387,7 @@ class ModelResults:
                 [self.importance, importance_row], ignore_index=True
             )
 
-    def remove_model(self, model_name):
+    def remove_model(self, model_name: str) -> None:
         """
         Remove the model.
 
@@ -292,7 +406,7 @@ class ModelResults:
         self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
         self.importance = self.importance[self.importance["model_name"] != model_name]
 
-    def save_model(self, filepath=None):
+    def save_model(self, filepath: Optional[str] = None) -> None:
         """
         Save the model.
 
@@ -333,16 +447,16 @@ class ModelResults:
 
     def get_scorecard(
         self,
-        y_true_train,
-        y_pred_train,
-        weights_train=None,
-        y_true_test=None,
-        y_pred_test=None,
-        weights_test=None,
-        metrics=None,
-        model=None,
+        y_true_train: pd.Series,
+        y_pred_train: pd.Series,
+        weights_train: pd.Series = None,
+        y_true_test: pd.Series = None,
+        y_pred_test: pd.Series = None,
+        weights_test: pd.Series = None,
+        metrics: Optional[list] = None,
+        model: Optional[Any] = None,
         **kwargs,
-    ):
+    ) -> pd.DataFrame:
         """
         Get the metrics.
 
@@ -395,42 +509,30 @@ class ModelResults:
             y_true_test = y_true_test * weights_test
             y_pred_test = y_pred_test * weights_test
 
-        def calculate_metrics(y_true, y_pred, prefix):
-            metric_dict = {}
-            for metric in metrics:
-                if metric == "smape":
-                    metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred)
-                elif metric == "shape":
-                    metric_dict[f"{prefix}_{metric}"] = y_true.shape[0]
-                elif metric == "ae":
-                    metric_dict[f"{prefix}_{metric}"] = ae(y_true, y_pred)
-                elif metric == "aic":
-                    try:
-                        metric_dict[f"{prefix}_{metric}"] = (
-                            model.aic if model is not None else None
-                        )
-                    except AttributeError:
-                        logger.error(
-                            f"Model `{model}` does not have AIC attribute, "
-                            f"returning None"
-                        )
-                        metric_dict[f"{prefix}_{metric}"] = None
-                else:
-                    try:
-                        metric_dict[f"{prefix}_{metric}"] = getattr(skm, metric)(
-                            y_true, y_pred, **kwargs
-                        )
-                    except AttributeError:
-                        logger.error(f"Metric `{metric}` not found in sklearn.metrics")
-                        metric_dict[f"{prefix}_{metric}"] = None
-            return metric_dict
-
         # calculate train
-        results.update(calculate_metrics(y_true_train, y_pred_train, "train"))
+        results.update(
+            calculate_metrics(
+                y_true=y_true_train,
+                y_pred=y_pred_train,
+                prefix="train",
+                metrics=metrics,
+                model=model,
+                **kwargs,
+            )
+        )
 
         # calculate test if provided
         if y_true_test is not None and y_pred_test is not None:
-            results.update(calculate_metrics(y_true_test, y_pred_test, "test"))
+            results.update(
+                calculate_metrics(
+                    y_true=y_true_test,
+                    y_pred=y_pred_test,
+                    prefix="test",
+                    metrics=metrics,
+                    model=model,
+                    **kwargs,
+                )
+            )
 
         # create dataframe
         scorecard = pd.DataFrame([results])
@@ -443,7 +545,7 @@ class ModelResults:
 
         return scorecard
 
-    def check_duplicate_name(self, model_name):
+    def check_duplicate_name(self, model_name: str) -> bool:
         """
         Check if the model name already exists.
 

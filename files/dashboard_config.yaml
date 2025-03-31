@@ -44,6 +44,49 @@ datasets:
       - ae_vbt15
       weights:
       - exp_amt_vbt15
+  full_mortality_grouped:
+    filename: full_mortality_grouped.parquet
+    description: Mortality data that used the "MIB_NAIC_20240119_2009_19.txt" as the
+      source data.  The data was grouped and also filtered using a "base" filter.
+      The grouped data was not sampled.
+    columns:
+      features:
+      - attained_age
+      - duration
+      - face_amount_band
+      - insurance_plan
+      - issue_age
+      - issue_year
+      - number_of_pfd_classes
+      - observation_year
+      - preferred_class
+      - sex
+      - smoker_status
+      - soa_post_lvl_ind
+      measures:
+      - amount_exposed
+      - death_claim_amount
+      - death_count
+      - policies_exposed
+      - exp_amt_vbt15
+      rates:
+      - ae_vbt15
+      - qx_raw
+      - qx_vbt15
+      actuals_amt: death_claim_amount
+      exposure_amt: amount_exposed
+      expecteds_amt: exp_amt_vbt15
+      actuals_cnt: death_count
+      exposure_cnt: policies_exposed
+    defaults:
+      numerator: death_claim_amount
+      denominator: amount_exposed
+      x_axis: observation_year
+      y_axis: ratio
+      rates:
+      - ae_vbt15
+      weights:
+      - exp_amt_vbt15
   model_data:
     filename: model_data.parquet
     description: Mortality data that used the "mortality_grouped" as the source data.
@@ -64,6 +107,8 @@ datasets:
       - smoker_status
       - soa_post_lvl_ind
       - capped_duration
+      - binned_face
+      - class_enh
       measures:
       - amount_exposed
       - death_claim_amount

@@ -9,42 +9,57 @@ dynamic = ["version"]
 authors = [{ name = "John Koestner", email = "johnkoestner@outlook.com" }]
 readme = 'README.md'
 license = { file = 'LICENSE.md' }
-requires-python = '>=3.9'
+requires-python = '>=3.12'
 
 dependencies = [
     "arrow>=1.3.0",
     "colorama>=0.4.6",
-    "dash-ag-grid>=31.0.1",             # only for dash
-    "dash-bootstrap-components>=1.5.0", # only for dash
-    "dash-extensions>=1.0.14",          # only for dash
-    "graphviz>=0.20.1",                 # only for lightgbm
-    "gunicorn>=21.2.0",                 # only for dash
-    "jupyterlab>=4.0.10",
-    "lightgbm>=4.3.0",                  # only for lightgbm
-    "numpy>=1.24.4",
-    "pandas>=2.0.3",
-    "plotly>=5.19.0",
-    "polars>=0.20.9",
-    "pyarrow>=14.0.2",
+    "fastexcel>=0.13.0",                # only for polars
+    "ipywidgets>=8.1.5",
+    "jupyterlab>=4.3.6",
+    "numpy>=1.26.4",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "plotly>=6.0.1",
+    "polars>=1.26.0",
+    "pyarrow>=19.0.1",
     "pymort>=2.0.1",
-    "scikit-learn>=1.4",
+    "scikit-learn>=1.6.1",                # h-statistic available in https://github.com/scikit-learn/scikit-learn/pull/28375
     "seaborn>=0.13.2",
-    "statsmodels>=0.14.1",
-    "uv>=0.1.36",
-    "xgboost>=2.0.3",                   # only for xgboost
+    "shap>=0.47.0",
+    "statsmodels>=0.14.4",
+    "tqdm>=4.67.1",
+
+    # dashboard
+    "dash>=3.0.1",                     # only for dash
+    "dash-ag-grid>=31.3.1",             # only for dash
+    "dash-bootstrap-components>=2.0.0", # only for dash
+    "dash-extensions>=1.0.20",          # only for dash
+    "gunicorn>=23.0.0",                 # only for dash
+
+    # models
+    "catboost>=1.2.7",                  # only for catboost
+    "graphviz>=0.20.3",                 # only for lightgbm
+    "lightgbm>=4.6.0",                  # only for lightgbm
+    "xgboost>=3.0.0",                   # only for xgboost
 ]
 
 [project.optional-dependencies]
 dev = [
-    "black>=23.12.1",
-    "isort>=5.13.2",
-    "jupyterlab-code-formatter>=2.2.1",
-    "jupyter-resource-usage>=1.0.1",
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
-    "ruff>=0.1.11",
+    "black>=25.1.0",
+    "isort>=6.0.1",
+    "jupyterlab-code-formatter>=3.0.2",
+    "jupyter-resource-usage>=1.1.1",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.11.0",
     "sphinx>=6.0, <7.2",
-    "sphinx_rtd_theme>=1.2.2",
+    "sphinx_rtd_theme>=3.0.2",
+]
+
+ai_adv = [
+    "h2o>=3.46.0",                      # only for h2o
+    "pytorch>=2.0.1",                   # only for neural network class
 ]
 
 [project.scripts]
@@ -76,7 +91,6 @@ omit = [
 
 [tool.coverage.html]
 directory = "docs/coverage/htmlcov"
-
 
 [tool.ruff]
 line-length = 88
@@ -114,8 +128,8 @@ select = [
     "TID",
     # implicit string concatenation
     "ISC",
-    # type-checking imports
-    "TCH",
+    # type hint
+    "ANN",
     # comprehensions
     "C4",
     # pygrep-hooks
@@ -136,8 +150,11 @@ select = [
 
 ignore = [
     ### Intentionally disabled
-    # logging statement uses f-string
-    "G004",
+    # type hinting exceptions
+    "ANN002",
+    "ANN003",
+    "ANN101",
+    "ANN401",
     # ignore __init__ docstring
     "D107",
     # these are conflicting errors
@@ -145,6 +162,9 @@ ignore = [
     "D212",
     # ignore == False vs is False due to pandas series
     "E712",
+    # logging statement uses f-string
+    "G004",
+    # ignore f-string in logging statement
     "ISC001",
     # ruff too many branches and too many statements
     "PLR0912",
@@ -155,5 +175,9 @@ ignore = [
 ]
 
 [tool.ruff.lint]
-exclude = ["*.ipynb"]
+exclude = ["*.ipynb", "__init__.py"]
 pylint.max-args = 10
+
+[tool.ruff.lint.per-file-ignores]
+"morai/dashboard/pages/*.py" = ["ANN", "E501"]
+"tests/*.py" = ["ANN201"]

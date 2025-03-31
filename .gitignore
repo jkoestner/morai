@@ -4,8 +4,11 @@
 .DS_Store
 .env
 files/dataset/*
+files/integrations/cdc/cdc.sql
+files/integrations/cdc/txt/*
 files/models/*
 files/partition/*
+files/rates/*
 files/result/*
 
 # folders
@@ -13,11 +16,15 @@ files/result/*
 .vscode/
 _build/
 _pycache_/
+build/
+catboost_info/
 docs/coverage/
-morai/dashboard/file_system_backend/
+file_system_backend/
+morai.egg-info/
 notebooks/working/
 
 
-# include tests/files/
+# include below even though they are excluded above
 !.gitkeep
 !tests/files/
+!files/rates/rate_map_example.yaml

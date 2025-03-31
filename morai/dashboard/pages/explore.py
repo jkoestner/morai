@@ -1,6 +1,8 @@
 """Explore dashboard."""
 
+import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import polars as pl
 from dash_extensions.enrich import (
     Input,
     Output,
@@ -35,44 +37,141 @@ def layout():
             ),
             html.Div(  # Main content container
                 [
-                    html.H4(
-                        "Explore Data",
-                        className="bg-primary text-white p-2 mb-2 text-center",
+                    html.Div(
+                        [
+                            html.H4(
+                                [
+                                    html.I(className="fas fa-search me-2"),
+                                    "Data Exploration",
+                                ],
+                                className="mb-1",
+                            ),
+                            html.P(
+                                "Analyze and visualize your data distributions",
+                                className="text-white-50 mb-0 small",
+                            ),
+                        ],
+                        className="bg-gradient bg-primary text-white p-4 mb-4 rounded-3 shadow-sm",
                     ),
                     html.Div(
                         [
-                            html.Div(
-                                id="data-description",
+                            # Dataset description card
+                            dbc.Card(
+                                dbc.CardBody(
+                                    html.Div(
+                                        id="data-description",
+                                        className="mb-0",
+                                    )
+                                ),
+                                className="shadow-sm mb-4",
                             ),
-                            html.H5(
-                                "Frequency Number",
-                                id="section-freq-num",
-                                className="bg-secondary text-white p-2 mb-2",
+                            # Summary Statistics Table
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H5(
+                                            [
+                                                html.I(
+                                                    className="fas fa-chart-bar me-2"
+                                                ),
+                                                "Summary Statistics",
+                                            ],
+                                            id="section-summary-stat",
+                                            className="mb-0",
+                                        ),
+                                        className="bg-light",
+                                    ),
+                                    dbc.CardBody(
+                                        dcc.Loading(
+                                            id="loading-table-stats",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(id="table-stats"),
+                                        ),
+                                    ),
+                                ],
+                                className="shadow-sm mb-4",
                             ),
-                            dcc.Loading(
-                                id="loading-chart-freq-num",
-                                type="dot",
-                                children=html.Div(id="chart-freq-num"),
+                            # Numerical Frequencies Section
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H5(
+                                            [
+                                                html.I(
+                                                    className="fas fa-chart-bar me-2"
+                                                ),
+                                                "Numerical Frequencies",
+                                            ],
+                                            id="section-freq-num",
+                                            className="mb-0",
+                                        ),
+                                        className="bg-light",
+                                    ),
+                                    dbc.CardBody(
+                                        dcc.Loading(
+                                            id="loading-chart-freq-num",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(id="chart-freq-num"),
+                                        ),
+                                    ),
+                                ],
+                                className="shadow-sm mb-4",
                             ),
-                            html.H5(
-                                "Frequency Categorical",
-                                id="section-freq-cat",
-                                className="bg-secondary text-white p-2 mb-2",
+                            # Categorical Frequencies Section
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H5(
+                                            [
+                                                html.I(
+                                                    className="fas fa-chart-pie me-2"
+                                                ),
+                                                "Categorical Frequencies",
+                                            ],
+                                            id="section-freq-cat",
+                                            className="mb-0",
+                                        ),
+                                        className="bg-light",
+                                    ),
+                                    dbc.CardBody(
+                                        dcc.Loading(
+                                            id="loading-chart-freq-cat",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(id="chart-freq-cat"),
+                                        ),
+                                    ),
+                                ],
+                                className="shadow-sm mb-4",
                             ),
-                            dcc.Loading(
-                                id="loading-chart-freq-cat",
-                                type="dot",
-                                children=html.Div(id="chart-freq-cat"),
-                            ),
-                            html.H5(
-                                "Target",
-                                id="section-target",
-                                className="bg-secondary text-white p-2 mb-2",
-                            ),
-                            dcc.Loading(
-                                id="loading-chart-target",
-                                type="dot",
-                                children=html.Div(id="chart-target"),
+                            # Target Analysis Section
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H5(
+                                            [
+                                                html.I(
+                                                    className="fas fa-bullseye me-2"
+                                                ),
+                                                "Target Analysis",
+                                            ],
+                                            id="section-target",
+                                            className="mb-0",
+                                        ),
+                                        className="bg-light",
+                                    ),
+                                    dbc.CardBody(
+                                        dcc.Loading(
+                                            id="loading-chart-target",
+                                            type="default",
+                                            color="#007bff",
+                                            children=html.Div(id="chart-target"),
+                                        ),
+                                    ),
+                                ],
+                                className="shadow-sm mb-4",
                             ),
                         ],
                     ),
@@ -114,6 +213,7 @@ def set_active_link(hash, href):
 
 @callback(
     [
+        Output("table-stats", "children"),
         Output("chart-freq-num", "children"),
         Output("chart-freq-cat", "children"),
         Output("chart-target", "children"),
@@ -128,7 +228,23 @@ def update_charts(pathname, dataset, config):
     logger.debug("update explore charts")
     config_dataset = config["datasets"][config["general"]["dataset"]]
     features = config_dataset["columns"]["features"]
-    num_cols = dataset[features].select_dtypes(include=["number"]).columns.tolist()
+
+    is_lazy = isinstance(dataset, pl.LazyFrame)
+    if is_lazy:
+        schema = dataset.collect_schema()
+        num_cols = [
+            col
+            for col in features
+            if col in schema and schema[col] in pl.datatypes.group.NUMERIC_DTYPES
+        ]
+    else:
+        num_cols = dataset[features].select_dtypes(include=["number"]).columns.tolist()
+
+    measures = config_dataset["columns"]["measures"]
+
+    # table
+    stats_df = charters.get_stats(dataset, features=num_cols + measures)
+
     # charts
     chart_freq_num = charters.frequency(
         dataset,
@@ -137,7 +253,9 @@ def update_charts(pathname, dataset, config):
         sum_var=config_dataset["columns"]["exposure_amt"],
     )
 
-    chart_freq_cat = charters.frequency(dataset, cols=3, sum_var="amount_exposed")
+    chart_freq_cat = charters.frequency(
+        dataset, cols=3, sum_var=config_dataset["columns"]["exposure_amt"]
+    )
 
     chart_target = charters.target(
         df=dataset,
@@ -148,11 +266,19 @@ def update_charts(pathname, dataset, config):
         denominator=[config_dataset["defaults"]["denominator"]],
     )
 
+    stats_table = dbc.Table.from_dataframe(
+        stats_df,
+        striped=True,
+        bordered=True,
+        hover=True,
+        responsive=True,
+        className="mb-0",
+    )
     chart_freq_num = dcc.Graph(figure=chart_freq_num)
     chart_freq_cat = dcc.Graph(figure=chart_freq_cat)
     chart_target = dcc.Graph(figure=chart_target)
 
-    return chart_freq_num, chart_freq_cat, chart_target
+    return stats_table, chart_freq_num, chart_freq_cat, chart_target
 
 
 @callback(

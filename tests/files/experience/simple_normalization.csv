@@ -1,4 +1,4 @@
-year,lob,year_lob_rate,year_lob_multi_rate,year_rate,lob_rate,year_lob_rate,exposed,expected
+year,lob,year_lob_rate,year_lob_multi_rate,year_rate,lob_rate,yearlob_rate,exposed,expected
 2019,UL,1.1,1.1,1,1.1,1,50,0.55
 2020,UL,1.21,1.2705,1.1,1.1,1.05,50,0.63525
 2021,UL,1.21,1.2705,1.1,1.1,1.05,50,0.63525

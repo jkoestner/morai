@@ -1,6 +1,6 @@
 
 <div align="center">
-  <img src="morai/dashboard/assets/morai_logo.jpg"><br>
+  <img src="morai/dashboard/assets/morai_logo.png"><br>
 </div>
 
 # Morai
@@ -10,15 +10,18 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ## Table of Contents
-- [Overview](#overview)
-- [Installation](#installation)
-  - [Local Install](#local-install)
-  - [Docker Install](#docker-install)
-- [Usage](#usage)
-  - [CLI](#cli)
-- [Other Tools](#other-tools)
-  - [Jupyter Lab Usage](#jupyter-lab-usage)
-  - [Logging](#logging)
+- [Morai](#morai)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Installation](#installation)
+    - [Local Install](#local-install)
+    - [Docker Install](#docker-install)
+  - [Usage](#usage)
+    - [CLI](#cli)
+  - [Other Tools](#other-tools)
+    - [Jupyter Lab Usage](#jupyter-lab-usage)
+    - [Logging](#logging)
+    - [Coverage](#coverage)
 
 ## Overview
 
@@ -47,12 +50,10 @@ https://tinyurl.com/
 
 **📊 Dashboard:**
 
-- Morai Dashboard - Coming Soon
-- Data Input: ![dash_data_input](docs/screenshots/dash_data_input.png)
-- Data Explore: ![dash_explore](docs/screenshots/dash_explore.png)
-- Data Experience: ![dash_experience](docs/screenshots/dash_experience.png)
-- Data Models: ![dash_models](docs/screenshots/dash_models.png)
-- Table Explorer: ![dash_tables](docs/screenshots/dash_tables.png)
+- [Dashboard](https://morai.koestner.fun)
+- Data Overview: ![dash_data_input](docs/screenshots/morai_data.gif)
+- Data Tables: ![dash_data_tables](docs/screenshots/morai_tables.gif)
+- Data CDC: ![dash_cdc](docs/screenshots/morai_cdc.gif)
 
 ## Installation
 
@@ -63,14 +64,11 @@ the environment of choice.
 The following command can be run to install the packages in the pyproject.toml file.
 
 ```
-pip install -e .
+uv pip install -e .
 ```
 
 ### Docker Install
 The package can also be run in docker which provides a containerized environment, and can host the web dashboard.
-
-To run the web dashboard there are a few prerequisites.
-  - Docker
 
 ```bash
 version: "3.8"
@@ -92,7 +90,7 @@ services:
 
 ### CLI
 
-CLI can be used for easier commands of python scripts for both portfolio or manager. An example of a CLI command is shown below.
+CLI can be used for easier commands of python scripts for both portfolio or manager. An example of a CLI command is shown below. When running the dashboard the `MORAI_FILES_PATH` environment variable needs to be set to the directory where the files are stored.
 
 ```commandline
 morai dashboard
@@ -101,7 +99,7 @@ morai dashboard
 It also can be run locally by going to the dashboard folder and running below.
 
 ```python
-python app.py
+python -m morai.dashboard.app
 ```
 
 ## Other Tools
@@ -113,6 +111,11 @@ in the conda environment.
 ```
 python -m ipykernel install --user --name=morai
 ```
+
+If plotly images are not showing in the default set up there may need to be some extensions added to JupyterLab.
+The extension particularly needed is the jupyterlab-plotly extension.
+This is also discussed more in this issue: [Plotly Issue](https://github.com/plotly/plotly.py/issues/2672)
+
 ### Logging
 
 If wanting to get more detail in output of messages the logging can increased

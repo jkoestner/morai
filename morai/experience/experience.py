@@ -1,13 +1,27 @@
 """Experience study model."""
 
+from typing import List, Optional
+
+import numpy as np
+import pandas as pd
+
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
 
-def normalize(df, features, numerator, denominator=None, suffix=None):
+def normalize(
+    df: pd.DataFrame,
+    features: List[str],
+    numerator: str,
+    denominator: Optional[str] = None,
+    add_norm_col: Optional[bool] = False,
+) -> pd.DataFrame:
     """
     Normalize a column (numerator) based on a number of features.
+
+    The normalization is done by calculating the relative risk of the numerator
+    for each feature group and can be weighted by the denominator if provided.
 
     Normalizing over the features is a crude method to adjust data for differences
     in the feature groups. when the features are independent, this method is
@@ -43,19 +57,17 @@ def normalize(df, features, numerator, denominator=None, suffix=None):
         Column to normalize.
     denominator : str, optional
         Weighting column.
-    suffix : str, optional
-        Additional suffix for the normalized column if doing multiple normalizations.
+    add_norm_col : bool, optional
+        Add the normalized column instead of overwriting.
 
     Returns
     -------
     df : pd.DataFrame
-        DataFrame with additional column for normalized values with prefix '_norm'.
+        DataFrame with normalized values.
 
 
     """
-    numerator_norm = f"{numerator}_norm"
-    if suffix is not None:
-        numerator_norm = f"{numerator_norm}_{suffix}"
+    numerator_col = numerator if not add_norm_col else f"{numerator}_norm"
 
     # calculate the relative risk
     df = calc_relative_risk(
@@ -63,13 +75,18 @@ def normalize(df, features, numerator, denominator=None, suffix=None):
     )
 
     # normalize the numerator
-    df[numerator_norm] = df[numerator] / df["risk"]
+    df[numerator_col] = df[numerator] / df["risk"]
     df = df.drop(columns=["risk"])
 
     return df
 
 
-def calc_relative_risk(df, features, numerator, denominator=None):
+def calc_relative_risk(
+    df: pd.DataFrame,
+    features: List[str],
+    numerator: str,
+    denominator: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Calculate relative risk of a column (numerator) based on a number of features.
 
@@ -114,3 +131,187 @@ def calc_relative_risk(df, features, numerator, denominator=None):
         df = df.drop(columns=["temp_one"])
 
     return df
+
+
+def calc_variance(
+    df: pd.DataFrame,
+    rate_col: str,
+    exposure_col: str,
+    amount_col: Optional[str] = None,
+) -> pd.Series:
+    """
+    Calculate the variance of a binomial distribution.
+
+    variance = amount^2 * exposure * rate * (1 - rate)
+
+    Notes
+    -----
+    Needs to be based on seriatim data and not aggregated data.
+
+    Reference
+    ---------
+    https://www.soa.org/resources/tables-calcs-tools/table-development/
+    page 59
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the data.
+    rate_col : str
+        Column name of the rate.
+    exposure_col : str
+        Column name of the exposure.
+    amount_col : str, optional
+        Column name of the face amount.
+
+    Returns
+    -------
+    variance : pd.Series
+        Series with the variance values.
+
+    """
+    # check the columns exist
+    missing_cols = [col for col in [rate_col, exposure_col] if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
+        )
+    amount = 1 if amount_col is None else df[amount_col]
+
+    # calculate the variance
+    variance = amount**2 * df[exposure_col] * df[rate_col] * (1 - df[rate_col])
+
+    return variance
+
+
+def calc_moments(
+    df: pd.DataFrame,
+    rate_col: str,
+    exposure_col: str,
+    amount_col: Optional[str] = None,
+    sffx: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Calculate the moment variables of a binomial distribution.
+
+    moment_1 = amount * exposure * rate
+    moment_2_p1 = amount^2 * exposure * rate
+    moment_2_p2 = amount^2 * exposure * rate^2
+    moment_3_p1 = amount^3 * exposure * rate
+    moment_3_p2 = amount^3 * exposure * rate^2
+    moment_3_p3 = amount^3 * exposure * rate^3
+
+    mean = moment_1
+    variance = (moment_2_p1 - moment_2_p2)
+    skewness = -(moment_3_p1 - 3 * moment_3_p2 + 2 * moment_3_p3) / variance ** 1.5
+
+    Notes
+    -----
+    Needs to be based on seriatim data and not aggregated data.
+
+    skewnes can also be calculated as:
+    skewness = (2 * rate - 1) / (amount^2 * exposure * rate * (1 - rate)) ^ 0.5
+
+    Reference
+    ---------
+    https://en.wikipedia.org/wiki/Moment_(mathematics)
+    https://proofwiki.org/wiki/Skewness_of_Binomial_Distribution
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the data.
+    rate_col : str
+        Column name of the rate.
+    exposure_col : str
+        Column name of the exposure.
+    amount_col : str, optional
+        Column name of the face amount.
+    sffx : str, optional
+        Suffix for the moment columns.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with additional columns for variance measures.
+
+
+    """
+    # check the columns exist
+    missing_cols = [col for col in [rate_col, exposure_col] if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
+        )
+    if sffx is None:
+        sffx = ""
+    else:
+        sffx = f"_{sffx}"
+        logger.info(f"Adding the label: '{sffx}' to the moment columns.")
+    amount = 1 if amount_col is None else df[amount_col]
+
+    # calculate the moments
+    logger.info(
+        "Calculating moments for the binomial distribution, need to be seriatim data."
+    )
+    moment_1 = amount * df[exposure_col] * df[rate_col]
+    moment_2_p1 = amount**2 * df[exposure_col] * df[rate_col]
+    moment_2_p2 = amount**2 * df[exposure_col] * df[rate_col] ** 2
+    moment_3_p1 = amount**3 * df[exposure_col] * df[rate_col]
+    moment_3_p2 = amount**3 * df[exposure_col] * df[rate_col] ** 2
+    moment_3_p3 = amount**3 * df[exposure_col] * df[rate_col] ** 3
+
+    # add the moments to the dataframe
+    df[f"moment{sffx}_1"] = moment_1
+    df[f"moment{sffx}_2_p1"] = moment_2_p1
+    df[f"moment{sffx}_2_p2"] = moment_2_p2
+    df[f"moment{sffx}_3_p1"] = moment_3_p1
+    df[f"moment{sffx}_3_p2"] = moment_3_p2
+    df[f"moment{sffx}_3_p3"] = moment_3_p3
+
+    return df
+
+
+def calc_qx_exp_ae(
+    model_data: pd.DataFrame,
+    predictions: pd.Series,
+    model_name: str,
+    exposure_col: str,
+    actual_col: str,
+) -> pd.DataFrame:
+    """
+    Add to the model data the qx, expected amount, and ae.
+
+    Parameters
+    ----------
+    model_data : pd.DataFrame
+        DataFrame with the model data.
+    predictions : pd.DataFrame
+        DataFrame with the predictions.
+    model_name : str
+        Name of the model.
+    exposure_col : str
+        Column name of the exposure.
+    actual_col : str
+        Column name of the actual values.
+
+    Returns
+    -------
+    model_data : pd.DataFrame
+        DataFrame with additional columns for the model data.
+
+    """
+    model_data[f"qx_{model_name}"] = predictions
+    model_data[f"exp_amt_{model_name}"] = (
+        model_data[f"qx_{model_name}"] * model_data[exposure_col]
+    )
+    model_data[f"ae_{model_name}"] = np.where(
+        model_data[exposure_col] == 0,
+        0,
+        np.where(
+            model_data[f"exp_amt_{model_name}"] == 0,
+            1,
+            model_data[actual_col] / model_data[f"exp_amt_{model_name}"],
+        ),
+    )
+    return model_data

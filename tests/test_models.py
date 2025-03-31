@@ -17,7 +17,7 @@ from xgboost import XGBRegressor
 from morai.forecast import models, preprocessors
 from morai.utils import helpers
 
-test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast"
+test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast" / "models"
 simple_data = pd.read_csv(test_forecast_path / "simple_data.csv")
 seed = 42
 
@@ -41,7 +41,7 @@ weights = preprocess_dict["weights"]
 colspecs = [(2, 7), (15, 20), (31, 40), (46, 56), (62, 72)]
 colnames = ["observation_year", "attained_age", "female", "male", "qx_raw"]
 hmd_usa_df = pd.read_fwf(
-    "tests/files/forecast/hmd_usa_qx.txt",
+    test_forecast_path / "hmd_usa_qx.txt",
     skiprows=3,
     colspecs=colspecs,
     names=colnames,

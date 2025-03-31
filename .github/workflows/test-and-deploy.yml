@@ -13,12 +13,13 @@ jobs:
       - name: Install Python 3
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: 3.12
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install .
-          pip install .[dev]
+          pip install uv
+          uv pip install --system .
+          uv pip install --system .[dev]
       - name: test imports
         run: |
           python -c "

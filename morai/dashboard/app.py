@@ -1,9 +1,10 @@
 """
 Building plotly dashboard.
 
-Builds plotly pages with call backs. There are 2 options the user has for running code.
+Builds plotly pages with call backs. There are 3 options the user has for running code.
 1. Local running
-2. Docker running (coming soon)
+2. Docker running
+3. CLI running
 
 To run locally:
 1. cd into directory with app.py
@@ -34,6 +35,7 @@ app = DashProxy(
         # "https://codepen.io/chriddyp/pen/bWLwgP.css",
         dbc_css,
         dbc.themes.FLATLY,
+        "https://use.fontawesome.com/releases/v5.15.4/css/all.css",
     ],
     transforms=[ServersideOutputTransform()],
 )
@@ -42,6 +44,27 @@ app.config.suppress_callback_exceptions = True
 
 app.title = "Morai Dashboard"
 app._favicon = "morai_logo.ico"
+# adding shortcut icons
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        <link rel="manifest" href="/assets/manifest.json">
+        {%favicon%}
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
 
 # creating the navbar
 page_links = [
@@ -108,4 +131,4 @@ app.layout = html.Div(
 
 if __name__ == "__main__":
     custom_logger.set_log_level("DEBUG", module_prefix="pages")
-    app.run_server(debug=True)
+    app.run(debug=True)

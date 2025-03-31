@@ -1,60 +1,148 @@
 """Mortality Table Builder."""
 
+import copy
 import itertools
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import polars as pl
 import pymort
+import yaml
 
+from morai.forecast import models, preprocessors
 from morai.utils import custom_logger, helpers
+from morai.utils.custom_logger import suppress_logs
 
 logger = custom_logger.setup_logging(__name__)
 
-# creating presets
-presets = {
-    "vbt15": {
-        "table_list": [3224, 3234, 3252, 3262],
-        "extra_dims": {"sex": ["F", "M"], "smoker_status": ["NS", "S"]},
-        "juv_list": [3273, 3273, 3274, 3274],
-        "extend": True,
-    }
-}
+if TYPE_CHECKING:
+    from pathlib import Path
+    from xml.etree.ElementTree import Element
 
 
 class MortTable:
-    """A mortality table class that can be used to build a 1-d mortality table."""
+    """
+    A mortality table class that can be used to build a 1-d mortality table.
+
+    There are a number of functions in the class including:
+        - build_table: build a 1-d mortality table from a list of tables
+        - get_soa_xml: get the soa xml object
+    """
 
     def __init__(
         self,
-        preset=None,
-    ):
+        rate: Optional[pd.DataFrame] = None,
+        rate_filename: Optional[Union[str, "Path"]] = None,
+    ) -> None:
         """
         Initialize the Table class.
 
         Parameters
         ----------
-        preset : str, optional (default=None)
-            A preset to use for the table. The preset can be "vbt15".
+        rate : str, optional (default=None)
+            A rate to use for the table. The rate can be "vbt15".
+        rate_filename : str, optional (default=None)
+            The filename of the rate map. default name is rate_map.yaml.
 
         """
-        self.table_list = presets.get(preset, {}).get("table_list", None)
-        self.extra_dims = presets.get(preset, {}).get("extra_dims", None)
-        self.juv_list = presets.get(preset, {}).get("juv_list", None)
-        self.extend = presets.get(preset, {}).get("extend", False)
+        self.rate_table = None
+        self.mult_table = None
+        self.rate_dict = None
+        self.rate_name = None
         self.select_period = None
-        self.df = None
         self.max_age = 121
+        if rate_filename is None:
+            rate_filename = "rate_map.yaml"
 
-        if preset:
-            self.build_table(
-                table_list=self.table_list,
-                extra_dims=self.extra_dims,
-                juv_list=self.juv_list,
-                extend=self.extend,
-            )
+        # building rate based on the rate file
+        if rate:
+            self.rate_dict = get_rate_dict(rate, rate_filename)
+            rate_type = next(iter(self.rate_dict["type"].keys()))
+            col_keys = self.rate_dict["keys"] + ["vals"]
+            logger.info(f"building table for rate: '{rate}' with format: '{rate_type}'")
+            self.rate_name = f"qx_{self.rate_dict['rate']}"
+            if rate_type == "soa":
+                self.rate_table = self.build_table_soa(
+                    table_list=self.rate_dict["type"]["soa"]["table_list"],
+                    extra_dims=self.rate_dict["type"]["soa"]["extra_dims"],
+                    juv_list=self.rate_dict["type"]["soa"]["juv_list"],
+                    extend=self.rate_dict["type"]["soa"]["extend"],
+                )
+            elif rate_type == "csv":
+                csv_location = get_filepath(self.rate_dict["type"]["csv"]["filename"])
+                # read in the csv
+                try:
+                    self.rate_table = pd.read_csv(csv_location, usecols=col_keys)
+                except ValueError as ve:
+                    raise ValueError(f"Error reading csv: {csv_location}. ") from ve
+            elif rate_type == "workbook":
+                workbook_location = get_filepath(
+                    self.rate_dict["type"]["workbook"]["filename"]
+                )
+                self.rate_table, self.mult_table = self.build_table_workbook(
+                    file_location=workbook_location,
+                    has_mults=self.rate_dict["type"]["workbook"]["mult_table"],
+                )
 
-    def build_table(self, table_list, extra_dims=None, juv_list=None, extend=False):
+    def build_table_workbook(
+        self, file_location: Union[str, "Path"], has_mults: bool = False
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Build a 1-d mortality table from a workbook.
+
+        A 1-d table is where there is a 'vals' column and all the other columns are the
+        features. If the workbook has a multiplier table, then the multiplier table will
+        be returned as well.
+
+        Parameters
+        ----------
+        file_location : str
+            The location of the workbook.
+        has_mults : bool, optional (default=False)
+            Whether the workbook has a multiplier table.
+
+        Returns
+        -------
+        rate_table : pd.DataFrame
+            The rate table.
+        mult_table : pd.DataFrame
+            The multiplier table.
+
+        """
+        mult_table = None
+
+        # read in the rate_table
+        try:
+            rate_table = pd.read_excel(file_location, sheet_name="rate_table")
+        except ValueError as ve:
+            raise ValueError(
+                f"Error reading workbook: {file_location}. "
+                f"The Excel file should have a sheet named 'rate_table'. "
+            ) from ve
+
+        # read in the mult_table
+        if has_mults:
+            try:
+                mult_table = pd.read_excel(file_location, sheet_name="mult_table")
+            except ValueError as ve:
+                raise ValueError(
+                    f"Error reading workbook: {file_location}. "
+                    f"The Excel file should have a sheet named 'mult_table'. "
+                ) from ve
+
+        self.rate_table = rate_table
+        self.mult_table = mult_table
+
+        return rate_table, mult_table
+
+    def build_table_soa(
+        self,
+        table_list: List[int],
+        extra_dims: Optional[Dict[str, List[str]]] = None,
+        juv_list: Optional[List[int]] = None,
+        extend: bool = False,
+    ) -> pd.DataFrame:
         """
         Build a 1-d mortality dataframe from a list of tables.
 
@@ -113,7 +201,8 @@ class MortTable:
             "issue_age": range(max_age + 1),
             "duration": range(1, max_age + 2),
         } | extra_dims
-        mort_table = create_grid(dims=dims, max_age=max_age)
+        mort_table = suppress_logs(create_grid)(dims=dims, max_age=max_age)
+        mort_table["vals"] = np.nan
         if "attained_age" not in mort_table.columns:
             mort_table["attained_age"] = (
                 mort_table["issue_age"] + mort_table["duration"] - 1
@@ -213,7 +302,7 @@ class MortTable:
         if extend:
             logger.info(f"extend: True, filled in {missing} missing values.")
 
-        self.df = mort_table
+        self.rate_table = mort_table
         self.table_list = table_list
         self.extra_dims = extra_dims
         self.juv_list = juv_list
@@ -222,7 +311,7 @@ class MortTable:
 
         return mort_table
 
-    def get_soa_xml(self, table_id):
+    def get_soa_xml(self, table_id: int) -> Any:
         """
         Get the soa xml object.
 
@@ -242,9 +331,88 @@ class MortTable:
         soa_xml = pymort.MortXML.from_id(table_id)
         return soa_xml
 
+    def calc_derived_table_from_mults(
+        self,
+        selected_dict: Optional[dict[str, list]] = None,
+    ) -> pd.DataFrame:
+        """
+        Calculate a derived rate table from the rate table and multiplier table.
+
+        The derived table is calculated by multiplying the rate table by the
+        multiplier table given the selected multiplier columns.
+
+        Parameters
+        ----------
+        selected_dict : dict, optional (default=None)
+            The selected multiplier columns.
+            If None, then the first subcategory multiplier of each category
+            will be used.
+
+        Returns
+        -------
+        derived_table : pd.DataFrame
+            The derived table.
+
+        """
+        if self.rate_table is None or self.mult_table is None:
+            raise ValueError(
+                "calc_derived_table_from_mults requires the rate table and "
+                "multiplier table to be set."
+            )
+
+        # get subcategory multipliers if not provided
+        if selected_dict is None:
+            first_mults = self.mult_table.groupby("category").first().reset_index()
+            selected_dict = (
+                first_mults.set_index("category")["subcategory"]
+                .apply(lambda x: [x])
+                .to_dict()
+            )
+
+        # check that subcategory and category are in the multiplier table
+        # if not set(selected_dict.keys()).issubset(self.mult_table["category"].unique()):
+        #     raise ValueError(
+        #         "selected_dict keys must be in the multiplier table `category` column"
+        #     )
+        # if not set(selected_dict.values()).issubset(
+        #     self.mult_table["subcategory"].unique()
+        # ):
+        #     raise ValueError(
+        #         "selected_dict values must be in the multiplier table "
+        #         "`subcategory` column."
+        #     )
+
+        # select the rows in mult_table that match the selected mults
+        selected_mults = self.mult_table[
+            self.mult_table.apply(
+                lambda row: row["subcategory"]
+                in selected_dict.get(row["category"], []),
+                axis=1,
+            )
+        ]
+
+        # calculate the multiplier
+        mean_category_mult = selected_mults.groupby("category")["multiple"].mean()
+        product_of_means = np.prod(mean_category_mult)
+        logger.info(f"derived table using multiplier: `{product_of_means:.2f}`")
+        logger.info(
+            f"used the following subcategories: " f"`{list(selected_dict.values())}`"
+        )
+
+        # apply the multiplier
+        derived_table = self.rate_table.copy()
+        derived_table["vals"] = derived_table["vals"] * product_of_means
+
+        return derived_table
+
     def _merge_tables(
-        self, merge_table, source_table, merge_keys, column_rename, extra_dims_list=None
-    ):
+        self,
+        merge_table: pd.DataFrame,
+        source_table: pd.DataFrame,
+        merge_keys: List[str],
+        column_rename: str,
+        extra_dims_list: Optional[List[Tuple[str, Any]]] = None,
+    ) -> pd.DataFrame:
         """
         Merge the source table into the merge table.
 
@@ -279,7 +447,9 @@ class MortTable:
         merge_table = merge_table.drop(columns=column_rename)
         return merge_table
 
-    def _process_soa_table(self, soa_xml, table_index, is_select):
+    def _process_soa_table(
+        self, soa_xml: "Element", table_index: int, is_select: bool
+    ) -> Tuple[Any, int, int]:
         """
         Gather the metadata from the soa table.
 
@@ -323,9 +493,340 @@ class MortTable:
         return soa_table, select_period, min_age
 
 
-def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
+def generate_table(
+    model: Any,
+    mapping: Dict[str, Any],
+    preprocess_feature_dict: Dict[str, Any],
+    preprocess_params: Dict[str, Any],
+    grid: Optional[pd.DataFrame] = None,
+    mult_features: Optional[List[str]] = None,
+    mult_method: str = "mean",
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Create a grid from the dimensions.
+    Generate a 1-d mortality table based on model predictions.
+
+    A 1-d table is where there is a 'vals' column and all the other columns are the
+    features.
+
+    Parameters
+    ----------
+    model : model
+        The model to use for generating the table
+    mapping : dict
+        The mapping dictionary. This is used for a number of processes
+          - creating the grid if it is not provided
+          - identifying the mult_features and then predicting based on type
+          - remapping the encoded values back to the original values
+    preprocess_feature_dict : dict
+        The preprocess feature dictionary that was used for the model that will
+        encode the features
+    preprocess_params : dict
+        The parameters that were used for preprocessing that will also be used to
+        encode the features
+    grid : pd.DataFrame, optional
+        The grid to use for the table.
+    mult_features : list, optional
+        The features to use for the multiplier table. This is based on the method
+        of `mult_method`.
+    mult_method : str, optional
+        The method to use for the multiplier table. The options are:
+          - "mean": the mean prediction for the feature
+          - "glm": uses the initial log ratio of the glm model
+
+
+    Returns
+    -------
+    tuple
+        rate_table : pd.DataFrame
+            The 1-d mortality rate_table
+        mult_table : pd.DataFrame
+            The multiplier table
+
+    """
+    # initialize the variables
+    logger.info(f"generating table for model {type(model).__name__}")
+    models.ModelWrapper(model).check_predict()
+    rate_mapping = mapping
+    rate_feature_dict = {
+        k: v
+        for k, v in preprocess_feature_dict.items()
+        if k not in ["target", "weight"]
+    }
+    mult_table = None
+
+    # remove the 'add_constant' parameter, due to already in mapping
+    preprocess_params["add_constant"] = False
+
+    # create separate mult_mapping and rate_mapping
+    if mult_features:
+        logger.warning(
+            "THIS IS EXPERIMENTAL: "
+            "the multipliers most likely not match the predictions exactly from "
+            "the model and is used to simplify the output."
+        )
+        mult_mapping = {k: v for k, v in rate_mapping.items() if k in mult_features}
+        rate_mapping = _remove_mult_from_rate_mapping(
+            mapping=rate_mapping, mult_features=mult_features
+        )
+
+    # create the grid from the mapping
+    if grid is None:
+        grid = suppress_logs(create_grid)(mapping=rate_mapping)
+        grid = suppress_logs(remove_duplicates)(df=grid)
+
+    # preprocess the data
+    preprocess_dict = suppress_logs(preprocessors.preprocess_data)(
+        model_data=grid,
+        feature_dict=rate_feature_dict,
+        **preprocess_params,
+    )
+    rate_table = preprocess_dict["md_encoded"]
+
+    # add the mult_features to the predictions
+    if mult_features:
+        rate_table = _add_null_mult_features(
+            df=rate_table, mapping=mapping, mult_features=mult_features
+        )
+
+    # prediction needs to be in same order as model
+    model_features = models.ModelWrapper(model).get_features()
+    rate_table = rate_table.loc[:, model_features]
+
+    # make predictions
+    try:
+        rate_table["vals"] = model.predict(rate_table)
+    except Exception as e:
+        raise ValueError("Error during preprocessing or prediction") from e
+
+    # create the multiplier table
+    if mult_features:
+        mult_list = []
+        if mult_method == "mean":
+            logger.info("creating multiplier table based on the 'mean'")
+            base = rate_table["vals"].mean()
+
+            for feature, feature_map in mult_mapping.items():
+                mult_table = rate_table.copy()
+                mult_table = mult_table.drop(columns=["vals"])
+                feature_vals = list(feature_map["values"].keys())
+                feature_encoded = list(feature_map["values"].values())
+                feature_type = feature_map["type"]
+
+                if feature_type == "ohe":
+                    for i, value in enumerate(feature_encoded):
+                        if i == 0:
+                            vals = model.predict(mult_table)
+                        else:
+                            mult_table[value] = 1
+                            vals = model.predict(mult_table)
+                            mult_table[value] = 0
+
+                        multiple = vals.mean() / base
+                        mult_list.append(
+                            {
+                                "category": feature,
+                                "subcategory": feature_vals[i],
+                                "multiple": multiple,
+                            }
+                        )
+
+                # add all feature values to the table
+                else:
+                    extended_tables = [
+                        mult_table.assign(**{feature: value})
+                        for value in feature_encoded
+                    ]
+                    extended_table = pd.concat(extended_tables, ignore_index=True)
+                    extended_table["vals"] = model.predict(extended_table)
+
+                    grouped = extended_table.groupby(feature)["vals"].mean()
+                    for i, value in enumerate(feature_encoded):
+                        multiple = grouped.loc[value] / base
+                        mult_list.append(
+                            {
+                                "category": feature,
+                                "subcategory": feature_vals[i],
+                                "multiple": multiple,
+                            }
+                        )
+        elif mult_method == "glm":
+            logger.info("creating multiplier table based on the 'glm'")
+            for feature, feature_map in mult_mapping.items():
+                if not hasattr(model, "params"):
+                    raise ValueError(
+                        f"model: {model}, does not have 'params' attribute"
+                    )
+                odds = np.exp(model.params)
+                feature_vals = list(feature_map["values"].keys())
+                if feature_map["type"] == "ohe":
+                    for feature_val in feature_vals:
+                        feature_lookup = f"{feature}_{feature_val}"
+                        multiple = odds.get(feature_lookup, 1)
+                        mult_list.append(
+                            {
+                                "category": feature,
+                                "subcategory": feature_val,
+                                "multiple": multiple,
+                            }
+                        )
+                else:
+                    for i, feature_val in enumerate(feature_vals):
+                        multiple = np.exp(model.params.get(feature, 0) * i)
+                        mult_list.append(
+                            {
+                                "category": feature,
+                                "subcategory": feature_val,
+                                "multiple": multiple,
+                            }
+                        )
+        else:
+            raise ValueError(f"mult_method: {mult_method} not recognized")
+
+        mult_table = pd.DataFrame(mult_list)
+        mult_table = mult_table.sort_values(by=["category", "subcategory"])
+        logger.info(f"mult_table rows: {mult_table.shape[0]}")
+
+    rate_table = preprocessors.remap_values(df=rate_table, mapping=mapping)
+    col_reorder = [col for col in rate_table.columns if col != "vals"] + ["vals"]
+    rate_table = rate_table[col_reorder]
+    if mult_features is not None:
+        rate_table = rate_table.drop(columns=mult_features)
+    logger.info(f"rate_table shape: {rate_table.shape}")
+
+    return rate_table, mult_table
+
+
+def map_rates(
+    df: pd.DataFrame,
+    rate: str,
+    rate_to_df_map: Optional[Dict[str, str]] = None,
+    rate_filename: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Map rates to the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to map the rates to.
+    rate : str
+        The rate to map to be looked up in the rate mapping file.
+    rate_to_df_map : dict, optional
+        The key dictionary. If no key dictionary is provided, the mapping will
+        be based on the key list in the rate file mapping.
+          - The keys are the rate map keys
+          - The values are the dataframe keys
+    rate_filename : str, optional
+        The location of the rate map file. If none this is assumed to
+        be in the dataset/tables folder.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        The DataFrame with the mapped rates.
+
+    """
+    # get the table
+    mt = suppress_logs(MortTable)(rate=rate, rate_filename=rate_filename)
+    rate_table = mt.rate_table
+    mult_table = mt.mult_table
+    rate_dict = mt.rate_dict
+    rate_type = next(iter(rate_dict["type"].keys()))
+    rate_name = mt.rate_name
+    logger.info(f"mapping rate: '{rate_name}' with format: '{rate_type}'")
+
+    # create rate_to_df_map if not provided
+    if rate_to_df_map is None:
+        logger.debug(
+            "create 'rate_to_df_map' which assumes the keys are the same "
+            "between the rate and df."
+        )
+        rate_cols = rate_dict["keys"]
+        rate_to_df_map = {col: col for col in rate_cols}
+    # check if columns are in the DataFrame
+    for df_col in rate_to_df_map.values():
+        if df_col not in df.columns:
+            raise ValueError(f"column: '{df_col}' not in the DataFrame.")
+    # update the mapping if there is a mult_table
+    if mult_table is not None:
+        mult_to_df_map = {
+            mult_col: df_col
+            for mult_col, df_col in rate_to_df_map.items()
+            if mult_col in list(mult_table["category"].unique())
+        }
+        rate_to_df_map = {
+            rate_col: df_col
+            for rate_col, df_col in rate_to_df_map.items()
+            if rate_col in rate_table.columns
+        }
+
+    # update the rate_table to merge with the df
+    merge_keys = list(rate_to_df_map.values())
+    table_rate_name = "vals"
+    rate_table = rate_table.rename(columns=rate_to_df_map)
+    for df_col in rate_to_df_map.values():
+        rate_table[df_col] = rate_table[df_col].astype(df[df_col].dtype)
+    rate_table = rate_table[[*merge_keys, table_rate_name]]
+    rate_table = rate_table.rename(columns={table_rate_name: rate_name})
+    if rate_name in df.columns:
+        logger.warning(
+            f"rate: '{rate_name}' already exists in the DataFrame. "
+            f"Overwriting the rate."
+        )
+        df = df.drop(columns=[rate_name])
+
+    # update the mult_table to merge with the df
+    if mult_table is not None:
+        for mult_col in mult_to_df_map:
+            _pivot = (
+                mult_table[mult_table["category"] == mult_col]
+                .pivot(index="subcategory", columns="category", values="multiple")
+                .reset_index()
+                .rename(
+                    columns={mult_col: f"_mult_{mult_col}", "subcategory": mult_col}
+                )
+            )
+            _pivot[mult_col] = _pivot[mult_col].astype(df[mult_col].dtype)
+            df = df.merge(_pivot, on=mult_col, how="left")
+            # check for missing values in table
+            missing_mult_values = set(df[mult_col].unique()) - set(
+                _pivot[mult_col].unique()
+            )
+            if missing_mult_values:
+                logger.warning(
+                    f"Missing values in the mult_table for '{mult_col}' but in df: "
+                    f"{missing_mult_values}"
+                )
+        mult_cols = [col for col in df.columns if "_mult_" in col]
+
+    # merge in the rates
+    df = df.merge(rate_table, on=merge_keys, how="left")
+    if mult_table is not None:
+        for mult_col in mult_cols:
+            df[rate_name] = df[rate_name] * df[mult_col]
+        df = df.drop(columns=mult_cols)
+        merge_keys = merge_keys + list(mult_to_df_map.keys())
+    logger.info(f"the mapped rates are based on the following " f"keys: {merge_keys}")
+
+    # check if there are any missing rates
+    missing_rates = df[df[rate_name].isnull()]
+    if not missing_rates.empty:
+        logger.warning(
+            f" there are '{len(missing_rates)}' missing values for '{rate_name}'."
+        )
+
+    return df
+
+
+def create_grid(
+    dims: Optional[Dict[str, Union[List[Any], np.ndarray]]] = None,
+    mapping: Optional[Dict[str, Dict[str, Union[List[Any], np.ndarray]]]] = None,
+    max_age: int = 121,
+    max_grid_size: int = 5_000_000,
+    mult_features: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """
+    Create an empty grid from the dimensions.
 
     Parameters
     ----------
@@ -337,6 +838,8 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
         The maximum age.
     max_grid_size : int, optional (default=5,000,000)
         The maximum grid size.
+    mult_features : list, optional
+        The features to use for the multiplier table.
 
     Returns
     -------
@@ -347,6 +850,8 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
     if (not dims and not mapping) or (dims and mapping):
         raise ValueError("Either dims or mapping must be provided.")
     if mapping:
+        if mult_features:
+            mapping = _remove_mult_from_rate_mapping(mapping, mult_features)
         dims = {col: list(val["values"].keys()) for col, val in mapping.items()}
     dimensions = list(dims.values())
 
@@ -366,7 +871,7 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
     logger.info(f"Creating grid with dimensions: {column_names}")
 
     # create mort grid (polars is much quicker)
-    mort_grid = pl.DataFrame(grid, schema=column_names)
+    mort_grid = pl.DataFrame(grid, schema=column_names, orient="row")
     mort_grid = mort_grid.sort(by=mort_grid.columns)
 
     # convert objects to categorical
@@ -380,11 +885,12 @@ def create_grid(dims=None, mapping=None, max_age=121, max_grid_size=5000000):
     mort_grid = mort_grid.to_pandas()
     mort_grid = check_aa_ia_dur_cols(mort_grid, max_age=max_age)
 
-    mort_grid["vals"] = np.nan
     return mort_grid
 
 
-def compare_tables(table_1, table_2, value_col="vals"):
+def compare_tables(
+    table_1: pd.DataFrame, table_2: pd.DataFrame, value_col: str = "vals"
+) -> pd.DataFrame:
     """
     Compare two tables.
 
@@ -451,7 +957,7 @@ def compare_tables(table_1, table_2, value_col="vals"):
     return compare_df
 
 
-def check_aa_ia_dur_cols(df, max_age=121):
+def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     """
     Check attained age, issue age, and duration columns.
 
@@ -501,7 +1007,7 @@ def check_aa_ia_dur_cols(df, max_age=121):
     return df
 
 
-def add_aa_ia_dur_cols(df):
+def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add attained age, issue age, and duration columns.
 
@@ -572,7 +1078,7 @@ def add_aa_ia_dur_cols(df):
     return df
 
 
-def remove_duplicates(df, suppress_log=False):
+def remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     """
     Remove duplicates from the DataFrame.
 
@@ -580,8 +1086,6 @@ def remove_duplicates(df, suppress_log=False):
     ----------
     df : pd.DataFrame
         The DataFrame.
-    suppress_log : bool, optional (default=False)
-        Whether to suppress the log.
 
     Returns
     -------
@@ -592,24 +1096,221 @@ def remove_duplicates(df, suppress_log=False):
     initial_rows = len(df)
     df = df.drop_duplicates().reset_index(drop=True)
     removed_rows = initial_rows - len(df)
-    if removed_rows and not suppress_log:
-        logger.info(f"Removed '{removed_rows}' duplicates.")
+    logger.info(f"Removed '{removed_rows}' duplicates.")
 
     return df
 
 
-def output_table(df, name="table.csv"):
+def output_table(
+    rate_table: pd.DataFrame,
+    filename: str = "table.csv",
+    mult_table: Optional[pd.DataFrame] = None,
+) -> None:
     """
     Output the table to a csv file.
 
     Parameters
     ----------
-    df : pd.DataFrame
+    rate_table : pd.DataFrame
         The DataFrame.
-    name : str, optional (default="table.csv")
+    filename : str, optional (default="table.csv")
         The name of the file.
+    mult_table : pd.DataFrame, optional (default=None)
+        The multiplier table.
 
     """
-    path = helpers.FILES_PATH / "dataset" / "tables" / name
-    df.to_csv(path, index=False)
-    logger.info(f"Output table to: {path}")
+    path = helpers.FILES_PATH / "rates" / filename
+
+    # check if path exists
+    if not path.parent.exists():
+        logger.error(f"directory does not exist: {path.parent}")
+    else:
+        if mult_table is None:
+            # check if .csv if not change it to .csv
+            if path.suffix != ".csv":
+                logger.warning(
+                    f"changing file extension to .csv as it was {path.suffix}"
+                )
+                path = path.with_suffix(".csv")
+            rate_table.to_csv(path, index=False)
+        else:
+            if path.suffix != ".xlsx":
+                logger.warning(
+                    f"changing file extension to .xlsx as it was {path.suffix}"
+                )
+                path = path.with_suffix(".xlsx")
+            with pd.ExcelWriter(path) as writer:
+                rate_table.to_excel(writer, sheet_name="rate_table", index=False)
+                if mult_table is not None:
+                    mult_table.to_excel(writer, sheet_name="mult_table", index=False)
+        logger.info(f"saving table to {path}")
+
+
+def get_su_table(df: pd.DataFrame, select_period: int) -> pd.DataFrame:
+    """
+    Calculate the select and ultimate ratio.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame.
+    select_period : int
+        The select period.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        The DataFrame with the ratio column.
+
+    """
+    # getting the ultimate period and table
+    if isinstance(select_period, str):
+        logger.debug(
+            f"select period is: '{select_period}'. Defaulting to 'max duration'"
+        )
+        # max duration
+        select_period = df["duration"].max()
+
+    # the minimum issue age will have the longest duration values
+    logger.debug(
+        f"calculating select ultimate ratio for select period: '{select_period}'"
+    )
+    ult = df[df["issue_age"] == df["issue_age"].min()].rename(
+        columns={"vals": "vals_ult"}
+    )
+    drop_cols = [
+        col
+        for col in ult.columns
+        if any(keyword in col for keyword in ["duration", "issue_age"])
+    ]
+    if drop_cols:
+        ult = ult.drop(columns=drop_cols)
+
+    # merge the ultimate values and calculate the ratio
+    merge_cols = [col for col in ult.columns if col != "vals_ult"]
+    df = df.merge(ult, on=merge_cols, how="left")
+    df["su_ratio"] = df["vals_ult"] / df["vals"]
+    df = df[df["duration"] <= (select_period + 1)]
+
+    return df
+
+
+def get_rates(rate_filename: Optional[str] = None) -> List[str]:
+    """
+    Get the possible rates in rate mapping file.
+
+    Parameters
+    ----------
+    rate_filename : str, optional
+        The filename of the rate map file. If none this is assumed to
+        be in the dataset/tables folder.
+
+    Returns
+    -------
+    rates : list
+        The rates in the rate mapping file.
+
+    """
+    # load rate map file
+    if rate_filename is None:
+        rate_filename = "rate_map.yaml"
+    rate_map_location = get_filepath(rate_filename)
+    with open(rate_map_location, "r") as file:
+        rate_map = yaml.safe_load(file)
+
+    rates = list(rate_map.keys())
+
+    return rates
+
+
+def get_rate_dict(rate: str, rate_filename: Optional[str] = None) -> Dict[str, str]:
+    """
+    Process the rate file.
+
+    Parameters
+    ----------
+    rate : str
+        The rate to be looked up in the rate mapping file.
+    rate_filename : str, optional
+        The filename of the rate map file. If none this is assumed to
+        be in the dataset/tables folder.
+
+    Returns
+    -------
+    rate_dict : dict
+        The rate dictionary
+
+    """
+    # load rate map file
+    if rate_filename is None:
+        rate_filename = "rate_map.yaml"
+    rate_map_location = get_filepath(rate_filename)
+    with open(rate_map_location, "r") as file:
+        rate_map = yaml.safe_load(file)
+
+    # check if rate is in the rate mapping
+    if rate not in rate_map:
+        rates = list(rate_map.keys())
+        raise ValueError(f"Rate: {rate} not in rate_mapping. Try one of: {rates}.")
+
+    # get the rate dictionary
+    logger.info(f"loading '{rate}' from mapping file: {rate_map_location}")
+    rate_dict = rate_map[rate]
+
+    return rate_dict
+
+
+def get_filepath(filename: str) -> "Path":
+    """
+    Get the file path based on a number of paths.
+
+    Parameters
+    ----------
+    filename : str
+        The file location.
+
+    Returns
+    -------
+    filepath : file
+        The file.
+
+    """
+    filepaths = [
+        helpers.FILES_PATH / "rates" / filename,
+        helpers.ROOT_PATH / "tests" / "files" / "experience" / "tables" / filename,
+        filename,
+    ]
+    for filepath in filepaths:
+        if filepath.exists():
+            break
+    if not filepath.exists():
+        raise ValueError(f"File: {filename} not found in any of the paths.")
+    return filepath
+
+
+def _add_null_mult_features(
+    df: pd.DataFrame, mapping: Dict[str, Dict[str, Any]], mult_features: List[str]
+) -> pd.DataFrame:
+    logger.debug("adding initial value for multiplier features")
+    for feature in mult_features:
+        type_ = mapping[feature]["type"]
+        if type_ == "ohe":
+            ohe_dict = dict(list(mapping[feature]["values"].items())[1:])
+            for col in ohe_dict.values():
+                df[col] = 0
+        else:
+            df[feature] = next(iter(mapping[feature]["values"].values()))
+
+    return df
+
+
+def _remove_mult_from_rate_mapping(
+    mapping: Dict[str, Dict[str, Any]], mult_features: List[str]
+) -> Dict[str, Dict[str, Any]]:
+    logger.debug("removing multiplier features from rate mapping")
+    mapping = copy.deepcopy(mapping)
+    for key, sub_dict in mapping.items():
+        if key in mult_features and "values" in sub_dict:
+            first_key = next(iter(sub_dict["values"]))
+            sub_dict["values"] = {first_key: sub_dict["values"][first_key]}
+    return mapping
