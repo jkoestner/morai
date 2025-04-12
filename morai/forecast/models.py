@@ -9,6 +9,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from scipy.stats import chi2
 from sklearn.base import BaseEstimator, RegressorMixin
+from statsmodels.gam.api import BSplines, GLMGam
 
 from morai.utils import custom_logger
 
@@ -45,6 +46,8 @@ class GLM(BaseEstimator, RegressorMixin):
         """
         Fit the GLM model.
 
+        Parameters
+        ----------
         X : pd.DataFrame
             The features
         y : pd.Series
@@ -371,6 +374,234 @@ class GLM(BaseEstimator, RegressorMixin):
         return model
 
 
+class GAM(BaseEstimator, RegressorMixin):
+    """
+    Create a GAM model.
+
+    The BaseEstimator and RegressorMixin classes are used to interface with
+    scikit-learn with certain functions.
+    """
+
+    def __init__(
+        self,
+    ) -> None:
+        """Initialize the model."""
+        self.mapping = None
+        self.model = None
+        self.smoother_cols = None
+        self.is_fitted_ = False
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        weights: pd.Series = None,
+        family: sm.families = None,
+        mapping: Optional[dict] = None,
+        spline_dict: Optional[dict] = None,
+        **kwargs,
+    ) -> Any:
+        """
+        Fit the GAM model.
+
+        GAM model will assume only linear variabes if mapping or r_style is not
+        provided.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
+        weights : pd.Series, optional
+            The weights
+        family : sm.families, optional
+            The family to use for the GLM model
+        mapping : dict, optional
+            The mapping of the features to the encoding and only needed
+            if r_style is True
+        spline_dict : dict, optional
+            The dictionary of the splines to use for the GAM model
+            example:
+                {
+                    "column_1": {"df": 12, "degree": 3},
+                    "column_2": {"df": 10, "degree": 3},
+                }
+            function:
+              - https://www.statsmodels.org/stable/generated/statsmodels.gam.smooth_basis.BSplines.html
+        kwargs : dict, optional
+            Additional keyword arguments to apply to the model
+
+        Returns
+        -------
+        model : GAM
+            The GAM model
+
+        """
+        logger.info("fiting the model")
+        self.mapping = mapping
+        model = self._setup_model(X, y, weights, family, spline_dict, **kwargs)
+        model = model.fit()
+        self.model = model
+        self.is_fitted_ = True
+
+        return model
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """
+        Predict the target.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+
+        Returns
+        -------
+        predictions : np.ndarray
+            The predictions
+
+        """
+        if not self.is_fitted_:
+            raise ValueError("model is not fitted use fit method")
+
+        if self.model is None:
+            raise ValueError("please create a model first")
+
+        smoother_cols = self.smoother_cols
+        non_smoother_cols = [col for col in X.columns if col not in smoother_cols]
+        predictions = np.array(
+            self.model.predict(exog=X[non_smoother_cols], exog_smooth=X[smoother_cols])
+        )
+
+        return predictions
+
+    def get_formula(self, X: pd.DataFrame, y: pd.Series, smoother: Any) -> str:
+        """
+        Get the formula for the GAM model.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
+        smoother : Any
+            The smoother with the splines
+
+        Returns
+        -------
+        formula : str
+            The formula
+
+        """
+        if self.mapping:
+            # categorical and linear
+            cat_pass_keys = {
+                key: value
+                for key, value in self.mapping.items()
+                if value["type"] == "cat_pass" and key not in self.smoother_cols
+            }
+            other_keys = {
+                key: value
+                for key, value in self.mapping.items()
+                if value["type"] != "cat_pass" and key not in self.smoother_cols
+            }
+            non_categorical_part = " + ".join(other_keys) if other_keys else ""
+            categorical_part = (
+                " + ".join([f"C({key})" for key in cat_pass_keys])
+                if cat_pass_keys
+                else ""
+            )
+
+            if non_categorical_part and categorical_part:
+                formula = f"{y.name} ~ {non_categorical_part} + {categorical_part}"
+            elif non_categorical_part:
+                formula = f"{y.name} ~ {non_categorical_part}"
+            elif categorical_part:
+                formula = f"{y.name} ~ {categorical_part}"
+            else:
+                formula = f"{y.name} ~ 1"
+        else:
+            # assumes all linear
+            non_smoother_cols = [
+                col for col in X.columns if col not in self.smoother_cols
+            ]
+            formula = f"{y.name} ~ {' + '.join(non_smoother_cols)}"
+
+        logger.debug(f"using the following formula: '{formula}'")
+
+        return formula
+
+    def _setup_model(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        weights: pd.Series = None,
+        family: sm.families = None,
+        spline_dict: Optional[dict] = None,
+        **kwargs,
+    ) -> Any:
+        """
+        Set up the GAM model.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        y : pd.Series
+            The target
+        weights : pd.Series, optional
+            The weights
+        family : sm.families, optional
+            The family to use for the GAM model
+        spline_dict : dict, optional
+            The dictionary of the splines to use for the GAM model
+            example:
+                {
+                    "column_1": {"df": 12, "degree": 3},
+                    "column_2": {"df": 10, "degree": 3},
+                }
+        kwargs : dict, optional
+            Additional keyword arguments to apply to the model
+
+        Returns
+        -------
+        model : GAM
+            The GAM model
+
+        """
+        if family is None:
+            family = sm.families.Binomial()
+        logger.info(f"setup GAM model with statsmodels and {family} family...")
+
+        # create the splines
+        splines = X[spline_dict.keys()]
+        df_list = []
+        degree_list = []
+        for spline in spline_dict:
+            df_list.append(spline_dict[spline]["df"])
+            degree_list.append(spline_dict[spline]["degree"])
+        smoother = BSplines(splines, df=df_list, degree=degree_list)
+        smoother_cols = smoother.variable_names
+        self.smoother_cols = smoother_cols
+        logger.info(f"created splines for `{smoother_cols}`")
+
+        formula = self.get_formula(X=X, y=y, smoother=smoother)
+
+        model_data = pd.concat([y, X], axis=1)
+        model = GLMGam.from_formula(
+            formula=formula,
+            data=model_data,
+            family=family,
+            freq_weights=weights,
+            smoother=smoother,
+            **kwargs,
+        )
+
+        return model
+
+
 class ModelWrapper:
     """Create a model wrapper to get make retrieving results agnostic."""
 
@@ -558,7 +789,7 @@ class LeeCarter:
         )
         logger.info(
             f"floored {(lc_df['qx_raw'] <= 0).sum()} rates "
-            f"to 0.000001 and capped {len(lc_df[lc_df['qx_raw']>=1])} rates "
+            f"to 0.000001 and capped {len(lc_df[lc_df['qx_raw'] >= 1])} rates "
             f"to 0.999999."
         )
         lc_df["qx_raw"] = lc_df["qx_raw"].clip(lower=0.000001, upper=0.999999)
@@ -937,7 +1168,7 @@ class CBD:
         )
         logger.info(
             f"floored {(cbd_df['qx_raw'] <= 0).sum()} rates "
-            f"to 0.000001 and capped {len(cbd_df[cbd_df['qx_raw']>=1])} rates "
+            f"to 0.000001 and capped {len(cbd_df[cbd_df['qx_raw'] >= 1])} rates "
             f"to 0.999999."
         )
         cbd_df["qx_raw"] = cbd_df["qx_raw"].clip(lower=0.000001, upper=0.999999)

@@ -1,5 +1,6 @@
 """Collection of helpers."""
 
+import gc
 import os
 import sys
 from pathlib import Path
@@ -38,7 +39,7 @@ def clean_df(
     lowercase : bool, optional (default=True)
         Whether to lowercase the column names.
     underscore : bool, optional (default=True)
-        Whether to replace spaces with underscores in the column names.
+        Whether to replace special characters with underscores in the column names.
     update_cat : bool, optional (default=False)
         Whether to remove unused categories.
 
@@ -53,8 +54,8 @@ def clean_df(
         df.columns = df.columns.str.lower()
 
     if underscore:
-        logger.info("replacing spaces with underscores in the column names")
-        df.columns = df.columns.str.replace(" ", "_")
+        logger.info("replacing special characters with underscores in the column names")
+        df.columns = df.columns.str.replace("[^0-9a-zA-Z_]+", "_", regex=True)
 
     if update_cat:
         logger.info("removed unused categories and reorder")
@@ -93,15 +94,9 @@ def memory_usage_df(df: pd.DataFrame) -> None:
     print(f"Memory usage per column:\n{memory_usage_per_column}")
 
 
-def memory_usage_jupyter(globals: dict) -> pd.DataFrame:
+def memory_usage_jupyter() -> pd.DataFrame:
     """
     Calculate the memory usage of objects in the Jupyter notebook.
-
-    Parameters
-    ----------
-    globals : dict
-        The globals() dictionary. This needs to be passed in from the Jupyter notebook
-        using "globals()".
 
     Returns
     -------
@@ -109,6 +104,7 @@ def memory_usage_jupyter(globals: dict) -> pd.DataFrame:
         The DataFrame with the object sizes in MB.
 
     """
+    globals = sys.modules["__main__"].__dict__
     ipython_vars = ["In", "Out", "exit", "quit", "get_ipython", "ipython_vars"]
 
     variables = [
@@ -126,6 +122,23 @@ def memory_usage_jupyter(globals: dict) -> pd.DataFrame:
     )
 
     return object_sizes
+
+
+def delete_jupyter_objects(objects: list) -> None:
+    """
+    Delete objects in the Jupyter notebook.
+
+    Parameters
+    ----------
+    objects : list
+        The objects to delete.
+
+    """
+    globals = sys.modules["__main__"].__dict__
+    for obj in objects:
+        del globals[obj]
+    gc.collect()
+    logger.info(f"deleted `{len(objects)}` objects in the Jupyter notebook")
 
 
 def test_path(path: str) -> Path:

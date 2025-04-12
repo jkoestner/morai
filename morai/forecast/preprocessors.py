@@ -397,6 +397,7 @@ def lazy_groupby(
     -------
     pl.LazyFrame
         The grouped and aggregated LazyFrame.
+
     """
     # check if columns are list or string and build aggregation expressions
     # defaults to sum aggregation
@@ -411,7 +412,7 @@ def lazy_groupby(
                 agg_expr.append(pl.count(col).alias(col))
             else:
                 agg_expr.append(pl.sum(col).alias(col))
-    else:
+    else:  # noqa: PLR5501
         if agg == "sum":
             agg_expr = pl.sum(agg_cols).alias(agg_cols)
         elif agg == "mean":
