@@ -187,7 +187,7 @@ class GLM(BaseEstimator, RegressorMixin):
         else:
             formula = f"{y.name} ~ {' + '.join(X.columns)}"
 
-        logger.info(f"using R-style formula: {formula}")
+        logger.warning(f"Caution - Not thorougly tested. R-style formula: {formula}")
 
         return formula
 
@@ -380,15 +380,20 @@ class GAM(BaseEstimator, RegressorMixin):
 
     The BaseEstimator and RegressorMixin classes are used to interface with
     scikit-learn with certain functions.
+
+    source function:
+    https://www.statsmodels.org/stable/generated/statsmodels.gam.generalized_additive_model.GLMGam.html#
+
     """
 
     def __init__(
         self,
     ) -> None:
         """Initialize the model."""
+        self.r_style = None
         self.mapping = None
         self.model = None
-        self.smoother_cols = None
+        self.smoother = None
         self.is_fitted_ = False
 
     def fit(
@@ -397,6 +402,7 @@ class GAM(BaseEstimator, RegressorMixin):
         y: pd.Series,
         weights: pd.Series = None,
         family: sm.families = None,
+        r_style: bool = False,
         mapping: Optional[dict] = None,
         spline_dict: Optional[dict] = None,
         **kwargs,
@@ -417,6 +423,8 @@ class GAM(BaseEstimator, RegressorMixin):
             The weights
         family : sm.families, optional
             The family to use for the GLM model
+        r_style : bool, optional
+            Whether to use R-style formulas
         mapping : dict, optional
             The mapping of the features to the encoding and only needed
             if r_style is True
@@ -438,10 +446,13 @@ class GAM(BaseEstimator, RegressorMixin):
             The GAM model
 
         """
-        logger.info("fiting the model")
+        if kwargs.get("maxiter") is None:
+            kwargs["maxiter"] = 100
+        self.r_style = r_style
         self.mapping = mapping
         model = self._setup_model(X, y, weights, family, spline_dict, **kwargs)
-        model = model.fit()
+        logger.info("fiting the model")
+        model = model.fit(maxiter=kwargs["maxiter"])
         self.model = model
         self.is_fitted_ = True
 
@@ -468,7 +479,7 @@ class GAM(BaseEstimator, RegressorMixin):
         if self.model is None:
             raise ValueError("please create a model first")
 
-        smoother_cols = self.smoother_cols
+        smoother_cols = self.smoother.variable_names
         non_smoother_cols = [col for col in X.columns if col not in smoother_cols]
         predictions = np.array(
             self.model.predict(exog=X[non_smoother_cols], exog_smooth=X[smoother_cols])
@@ -529,7 +540,7 @@ class GAM(BaseEstimator, RegressorMixin):
             ]
             formula = f"{y.name} ~ {' + '.join(non_smoother_cols)}"
 
-        logger.debug(f"using the following formula: '{formula}'")
+        logger.warning(f"Caution - Not thorougly tested. R-style formula: {formula}")
 
         return formula
 
@@ -562,6 +573,13 @@ class GAM(BaseEstimator, RegressorMixin):
                     "column_1": {"df": 12, "degree": 3},
                     "column_2": {"df": 10, "degree": 3},
                 }
+            defaults:
+              - df: 5
+              - degree: 3
+              - constraints: None
+              - drop: True
+            function:
+              - https://www.statsmodels.org/stable/generated/statsmodels.gam.smooth_basis.BSplines.html
         kwargs : dict, optional
             Additional keyword arguments to apply to the model
 
@@ -573,31 +591,50 @@ class GAM(BaseEstimator, RegressorMixin):
         """
         if family is None:
             family = sm.families.Binomial()
-        logger.info(f"setup GAM model with statsmodels and {family} family...")
+        logger.info(f"setup GAM model with statsmodels and {type(family)} family...")
 
-        # create the splines
-        splines = X[spline_dict.keys()]
-        df_list = []
-        degree_list = []
-        for spline in spline_dict:
-            df_list.append(spline_dict[spline]["df"])
-            degree_list.append(spline_dict[spline]["degree"])
+        # create the splines and get the attributes
+        spline_cols = list(spline_dict.keys())
+        splines = X[spline_cols]
+        attributes = spline_dict[next(iter(spline_dict))].keys()
+        attr_lists = {f"{attr}_list": [] for attr in attributes}
+        for spline in spline_cols:
+            for attr in attributes:
+                attr_lists[f"{attr}_list"].append(spline_dict[spline][attr])
+        df_list = attr_lists.get("df_list", [5] * len(spline_cols))
+        degree_list = attr_lists.get("degree_list", [3] * len(spline_cols))
+        drop_list = attr_lists.get("drop_list", [True] * len(spline_cols))
+        drop_cols = [x for x, keep in zip(spline_cols, drop_list, strict=False) if keep]
+
+        # create the smoother
         smoother = BSplines(splines, df=df_list, degree=degree_list)
         smoother_cols = smoother.variable_names
-        self.smoother_cols = smoother_cols
+        self.smoother = smoother
         logger.info(f"created splines for `{smoother_cols}`")
 
-        formula = self.get_formula(X=X, y=y, smoother=smoother)
-
-        model_data = pd.concat([y, X], axis=1)
-        model = GLMGam.from_formula(
-            formula=formula,
-            data=model_data,
-            family=family,
-            freq_weights=weights,
-            smoother=smoother,
-            **kwargs,
-        )
+        # creating the model
+        # using either r-style or python-style formula
+        if self.r_style:
+            formula = self.get_formula(X=X, y=y, smoother=smoother)
+            model_data = pd.concat([y, X], axis=1)
+            model = GLMGam.from_formula(
+                formula=formula,
+                data=model_data,
+                family=family,
+                freq_weights=weights,
+                smoother=smoother,
+                **kwargs,
+            )
+        else:
+            X = X.drop(columns=drop_cols)
+            model = GLMGam(
+                endog=y,
+                exog=X,
+                family=family,
+                freq_weights=weights,
+                smoother=smoother,
+                **kwargs,
+            )
 
         return model
 

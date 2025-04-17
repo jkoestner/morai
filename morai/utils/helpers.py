@@ -2,6 +2,7 @@
 
 import gc
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
@@ -24,18 +25,19 @@ logger = custom_logger.setup_logging(__name__)
 
 
 def clean_df(
-    df: pd.DataFrame,
+    data: Union[pd.DataFrame, dict],
     lowercase: bool = True,
     underscore: bool = True,
     update_cat: bool = True,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, dict]:
     """
     Clean the DataFrame.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        The DataFrame to clean.
+    data : Union[pd.DataFrame, dict]
+        The DataFrame or dict to clean.
+        The dictionary is set up to be the mapping dictionary.
     lowercase : bool, optional (default=True)
         Whether to lowercase the column names.
     underscore : bool, optional (default=True)
@@ -45,35 +47,64 @@ def clean_df(
 
     Returns
     -------
-    df : pd.DataFrame
-        The cleaned DataFrame.
+    data : Union[pd.DataFrame, dict]
+        The cleaned DataFrame or dict.
 
     """
-    if lowercase:
-        logger.info("lowercasing the column names")
-        df.columns = df.columns.str.lower()
+    # dataframe
+    if isinstance(data, pd.DataFrame):
+        if lowercase:
+            logger.info("lowercasing the column names")
+            data.columns = data.columns.str.lower()
 
-    if underscore:
-        logger.info("replacing special characters with underscores in the column names")
-        df.columns = df.columns.str.replace("[^0-9a-zA-Z_]+", "_", regex=True)
-
-    if update_cat:
-        logger.info("removed unused categories and reorder")
-        for column in df.select_dtypes(include=["category"]).columns:
-            if df[column].isna().any():
-                logger.info(f"{column} has missing values, filling with _NULL_")
-                df[column] = df[column].cat.add_categories("_NULL_").fillna("_NULL_")
-
-            df[column] = df[column].cat.remove_unused_categories()
-            df[column] = df[column].cat.reorder_categories(
-                sorted(df[column].unique()), ordered=True
+        if underscore:
+            logger.info(
+                "replacing special characters with underscores in the column names"
             )
+            data.columns = data.columns.str.replace("[^0-9a-zA-Z_]+", "_", regex=True)
 
-    logger.info("update index to int32")
-    df.index = df.index.astype("int32")
-    logger.info(f"dataFrame shape: {df.shape}")
+        if update_cat:
+            logger.info("removed unused categories and reorder")
+            for column in data.select_dtypes(include=["category"]).columns:
+                if data[column].isna().any():
+                    logger.info(f"{column} has missing values, filling with _NULL_")
+                    data[column] = (
+                        data[column].cat.add_categories("_NULL_").fillna("_NULL_")
+                    )
 
-    return df
+                data[column] = data[column].cat.remove_unused_categories()
+                data[column] = data[column].cat.reorder_categories(
+                    sorted(data[column].unique()), ordered=True
+                )
+
+        logger.info("update index to int32")
+        data.index = data.index.astype("int32")
+        logger.info(f"dataFrame shape: {data.shape}")
+
+    # mapping dictionary
+    elif isinstance(data, dict):
+        for val in data.values():
+            if isinstance(val, dict) and "values" in val:
+                cleaned_values = {}
+                for k, v in val["values"].items():
+                    if not isinstance(v, str):
+                        cleaned_values[k] = v
+                        continue
+                    new_v = v
+                    if lowercase:
+                        new_v = new_v.lower()
+                    if underscore:
+                        new_v = re.sub(r"[^0-9a-zA-Z_]+", "_", new_v)
+                    cleaned_values[k] = new_v
+                val["values"] = cleaned_values
+
+    # type not accepted
+    else:
+        raise TypeError(
+            "Input must be either a pandas DataFrame or a dictionary of lists."
+        )
+
+    return data
 
 
 def memory_usage_df(df: pd.DataFrame) -> None:
