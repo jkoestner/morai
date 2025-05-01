@@ -12,6 +12,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from statsmodels.gam.api import BSplines, GLMGam
 
 from morai.utils import custom_logger
+from morai.utils.custom_logger import suppress_logs
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -359,7 +360,7 @@ class GLM(BaseEstimator, RegressorMixin):
                 formula=formula,
                 data=model_data,
                 family=family,
-                freq_weights=weights,
+                var_weights=weights,
                 **kwargs,
             )
         else:
@@ -367,7 +368,7 @@ class GLM(BaseEstimator, RegressorMixin):
                 endog=y,
                 exog=X,
                 family=family,
-                freq_weights=weights,
+                var_weights=weights,
                 **kwargs,
             )
 
@@ -390,28 +391,30 @@ class GAM(BaseEstimator, RegressorMixin):
         self,
     ) -> None:
         """Initialize the model."""
+        self.X = None
+        self.y = None
+        self.weights = None
+        self.spline_dict = None
         self.r_style = None
         self.mapping = None
+        self.unfit_model = None
         self.model = None
         self.smoother = None
         self.is_fitted_ = False
 
-    def fit(
+    def setup_model(
         self,
         X: pd.DataFrame,
         y: pd.Series,
         weights: pd.Series = None,
         family: sm.families = None,
-        r_style: bool = False,
-        mapping: Optional[dict] = None,
         spline_dict: Optional[dict] = None,
+        alpha: float = 0,
+        save: bool = True,
         **kwargs,
     ) -> Any:
         """
-        Fit the GAM model.
-
-        GAM model will assume only linear variabes if mapping or r_style is not
-        provided.
+        Set up the GAM model.
 
         Parameters
         ----------
@@ -422,12 +425,7 @@ class GAM(BaseEstimator, RegressorMixin):
         weights : pd.Series, optional
             The weights
         family : sm.families, optional
-            The family to use for the GLM model
-        r_style : bool, optional
-            Whether to use R-style formulas
-        mapping : dict, optional
-            The mapping of the features to the encoding and only needed
-            if r_style is True
+            The family to use for the GAM model
         spline_dict : dict, optional
             The dictionary of the splines to use for the GAM model
             example:
@@ -435,8 +433,186 @@ class GAM(BaseEstimator, RegressorMixin):
                     "column_1": {"df": 12, "degree": 3},
                     "column_2": {"df": 10, "degree": 3},
                 }
+            defaults:
+              - df: 10
+              - degree: 3
+              - constraints: None
+              - drop: True
             function:
               - https://www.statsmodels.org/stable/generated/statsmodels.gam.smooth_basis.BSplines.html
+            notes:
+              - having a higher degree of freedom will allow the alpha search to limit
+              how much the model can penalize the features. Too few degrees of freedom
+              and the model may not model the complexity well.
+              - it's better to drop the initial spline column as it would create both a
+              linear and non-linear relationship which may introduce multicollinearity
+        alpha : float, optional (default=0)
+            The alpha value for the GAM model
+        save : bool, optional
+            Save the variables in the class
+        kwargs : dict, optional
+            Additional keyword arguments to apply to the model
+
+        Returns
+        -------
+        unfit_model : GAM
+            The GAM model
+
+        """
+        if family is None:
+            family = sm.families.Binomial()
+        logger.info(f"setup GAM model with statsmodels and {type(family)} family...")
+
+        # create the smoother
+        smoother, X_model = self.create_smoother(X=X, spline_dict=spline_dict)
+
+        # creating the model
+        # using either r-style or python-style formula
+        if self.r_style:
+            formula = self.get_formula(X=X, y=y, smoother=smoother)
+            model_data = pd.concat([y, X], axis=1)
+            unfit_model = GLMGam.from_formula(
+                formula=formula,
+                data=model_data,
+                family=family,
+                var_weights=weights,
+                smoother=smoother,
+                alpha=alpha,
+                **kwargs,
+            )
+        else:
+            unfit_model = GLMGam(
+                endog=y,
+                exog=X_model,
+                family=family,
+                var_weights=weights,
+                smoother=smoother,
+                alpha=alpha,
+                **kwargs,
+            )
+
+        # save the variables
+        if save:
+            self.X = X
+            self.y = y
+            self.weights = weights
+            self.spline_dict = spline_dict
+            self.unfit_model = unfit_model
+            self.smoother = smoother
+
+        return unfit_model
+
+    def create_smoother(
+        self, X: pd.DataFrame, spline_dict: Optional[dict] = None
+    ) -> Any:
+        """
+        Create the smoother for the GAM model.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The features
+        spline_dict : dict, optional
+            The dictionary of the splines to use for the GAM model
+
+        Returns
+        -------
+        smoother : BSplines
+            The smoother for the GAM model
+        X_model : pd.DataFrame
+            The features without the spline columns
+
+        """
+        if spline_dict is None:
+            spline_dict = self.spline_dict
+
+        # create the splines and get the attributes
+        # drop the initial spline column by default
+        spline_cols = list(spline_dict.keys())
+        splines = X[spline_cols]
+        attributes = spline_dict[next(iter(spline_dict))].keys()
+        attr_lists = {f"{attr}_list": [] for attr in attributes}
+        for spline in spline_cols:
+            for attr in attributes:
+                attr_lists[f"{attr}_list"].append(spline_dict[spline][attr])
+        df_list = attr_lists.get("df_list", [10] * len(spline_cols))
+        degree_list = attr_lists.get("degree_list", [3] * len(spline_cols))
+        drop_list = attr_lists.get("drop_list", [True] * len(spline_cols))
+        drop_cols = [spline_cols[i] for i, drop in enumerate(drop_list) if drop]
+
+        # create the smoother
+        smoother = BSplines(splines, df=df_list, degree=degree_list)
+        X_model = X.drop(columns=drop_cols)
+        logger.info(f"created splines for `{smoother.variable_names}`")
+
+        return smoother, X_model
+
+    def search_alpha(self, sample: bool = True, k_folds: int = 5, **kwargs) -> float:
+        """
+        Search for the best alpha value for the GAM model.
+
+        function:
+            - https://www.statsmodels.org/stable/generated/statsmodels.gam.generalized_additive_model.GLMGam.select_penweight_kfold.html#statsmodels.gam.generalized_additive_model.GLMGam.select_penweight_kfold
+
+        Parameters
+        ----------
+        sample : bool
+            Sample dataset to speed up search
+        k_folds : int, optional
+            The number of folds to use for the search
+        kwargs : dict, optional
+            Additional keyword arguments to apply to the search
+
+        Returns
+        -------
+        alpha_best : float
+            The best alpha value
+
+        """
+        if self.unfit_model is None:
+            raise ValueError("please create a model first")
+
+        unfit_model = self.unfit_model
+        k_smooths = unfit_model.k_smooths
+        logger.info(f"searching for best alpha with `{k_folds}` k_folds")
+
+        # sample dataset to 10k rows for faster search
+        if sample and len(self.X) > 10000:
+            logger.info("sampling dataset for faster search")
+            sample_X = self.X.sample(10000, random_state=42)
+            sample_y = self.y.loc[sample_X.index]
+            sample_weights = (
+                self.weights.loc[sample_X.index] if self.weights is not None else None
+            )
+            sample_gam = suppress_logs(self.setup_model)(
+                X=sample_X,
+                y=sample_y,
+                weights=sample_weights,
+                family=unfit_model.family,
+                spline_dict=self.spline_dict,
+                save=False,
+            )
+            unfit_model = sample_gam
+
+        # automate search
+        alpha_grid = [np.logspace(-3, 3, 25) for _ in range(k_smooths)]
+        alpha_best, _ = unfit_model.select_penweight_kfold(
+            alphas=alpha_grid, k_folds=k_folds
+        )
+        logger.info(f"best alpha value: {alpha_best}")
+        self.unfit_model.alpha = np.array(alpha_best).ravel()
+
+        return alpha_best
+
+    def fit(
+        self,
+        **kwargs,
+    ) -> Any:
+        """
+        Fit the GAM model.
+
+        Parameters
+        ----------
         kwargs : dict, optional
             Additional keyword arguments to apply to the model
 
@@ -448,13 +624,29 @@ class GAM(BaseEstimator, RegressorMixin):
         """
         if kwargs.get("maxiter") is None:
             kwargs["maxiter"] = 100
-        self.r_style = r_style
-        self.mapping = mapping
-        model = self._setup_model(X, y, weights, family, spline_dict, **kwargs)
+
+        # fit model
         logger.info("fiting the model")
-        model = model.fit(maxiter=kwargs["maxiter"])
+        model = self.unfit_model.fit(maxiter=kwargs["maxiter"])
+
         self.model = model
         self.is_fitted_ = True
+
+        # effective degrees of freedom from penalty
+        adf = len(self.smoother.col_names)
+        mean_exposure = (
+            np.mean(self.unfit_model.var_weights)
+            if self.unfit_model.var_weights is not None
+            else 1.0
+        )
+        edf = self.model.edf[
+            [col in self.smoother.col_names for col in list(self.model.params.index)]
+        ].sum()
+        edf_normalized = edf / mean_exposure
+        logger.info(
+            f"`{adf}` degrees of freedom for smoother with `{edf_normalized:.2f}` "
+            f"being effective"
+        )
 
         return model
 
@@ -543,100 +735,6 @@ class GAM(BaseEstimator, RegressorMixin):
         logger.warning(f"Caution - Not thorougly tested. R-style formula: {formula}")
 
         return formula
-
-    def _setup_model(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series,
-        weights: pd.Series = None,
-        family: sm.families = None,
-        spline_dict: Optional[dict] = None,
-        **kwargs,
-    ) -> Any:
-        """
-        Set up the GAM model.
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            The features
-        y : pd.Series
-            The target
-        weights : pd.Series, optional
-            The weights
-        family : sm.families, optional
-            The family to use for the GAM model
-        spline_dict : dict, optional
-            The dictionary of the splines to use for the GAM model
-            example:
-                {
-                    "column_1": {"df": 12, "degree": 3},
-                    "column_2": {"df": 10, "degree": 3},
-                }
-            defaults:
-              - df: 5
-              - degree: 3
-              - constraints: None
-              - drop: True
-            function:
-              - https://www.statsmodels.org/stable/generated/statsmodels.gam.smooth_basis.BSplines.html
-        kwargs : dict, optional
-            Additional keyword arguments to apply to the model
-
-        Returns
-        -------
-        model : GAM
-            The GAM model
-
-        """
-        if family is None:
-            family = sm.families.Binomial()
-        logger.info(f"setup GAM model with statsmodels and {type(family)} family...")
-
-        # create the splines and get the attributes
-        spline_cols = list(spline_dict.keys())
-        splines = X[spline_cols]
-        attributes = spline_dict[next(iter(spline_dict))].keys()
-        attr_lists = {f"{attr}_list": [] for attr in attributes}
-        for spline in spline_cols:
-            for attr in attributes:
-                attr_lists[f"{attr}_list"].append(spline_dict[spline][attr])
-        df_list = attr_lists.get("df_list", [5] * len(spline_cols))
-        degree_list = attr_lists.get("degree_list", [3] * len(spline_cols))
-        drop_list = attr_lists.get("drop_list", [True] * len(spline_cols))
-        drop_cols = [x for x, keep in zip(spline_cols, drop_list, strict=False) if keep]
-
-        # create the smoother
-        smoother = BSplines(splines, df=df_list, degree=degree_list)
-        smoother_cols = smoother.variable_names
-        self.smoother = smoother
-        logger.info(f"created splines for `{smoother_cols}`")
-
-        # creating the model
-        # using either r-style or python-style formula
-        if self.r_style:
-            formula = self.get_formula(X=X, y=y, smoother=smoother)
-            model_data = pd.concat([y, X], axis=1)
-            model = GLMGam.from_formula(
-                formula=formula,
-                data=model_data,
-                family=family,
-                freq_weights=weights,
-                smoother=smoother,
-                **kwargs,
-            )
-        else:
-            X = X.drop(columns=drop_cols)
-            model = GLMGam(
-                endog=y,
-                exog=X,
-                family=family,
-                freq_weights=weights,
-                smoother=smoother,
-                **kwargs,
-            )
-
-        return model
 
 
 class ModelWrapper:

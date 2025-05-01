@@ -369,19 +369,6 @@ class MortTable:
                 .to_dict()
             )
 
-        # check that subcategory and category are in the multiplier table
-        # if not set(selected_dict.keys()).issubset(self.mult_table["category"].unique()):
-        #     raise ValueError(
-        #         "selected_dict keys must be in the multiplier table `category` column"
-        #     )
-        # if not set(selected_dict.values()).issubset(
-        #     self.mult_table["subcategory"].unique()
-        # ):
-        #     raise ValueError(
-        #         "selected_dict values must be in the multiplier table "
-        #         "`subcategory` column."
-        #     )
-
         # select the rows in mult_table that match the selected mults
         selected_mults = self.mult_table[
             self.mult_table.apply(
@@ -396,7 +383,7 @@ class MortTable:
         product_of_means = np.prod(mean_category_mult)
         logger.info(f"derived table using multiplier: `{product_of_means:.2f}`")
         logger.info(
-            f"used the following subcategories: " f"`{list(selected_dict.values())}`"
+            f"used the following subcategories: `{list(selected_dict.values())}`"
         )
 
         # apply the multiplier
@@ -500,7 +487,7 @@ def generate_table(
     preprocess_params: Dict[str, Any],
     grid: Optional[pd.DataFrame] = None,
     mult_features: Optional[List[str]] = None,
-    mult_method: str = "mean",
+    mult_method: str = "glm",
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate a 1-d mortality table based on model predictions.
@@ -529,9 +516,17 @@ def generate_table(
         The features to use for the multiplier table. This is based on the method
         of `mult_method`.
     mult_method : str, optional
-        The method to use for the multiplier table. The options are:
+        The method to use for the multiplier table. With a GLM the multiplier is
+        an odds ratio so it is not a constant scalar. The multiplier wears off the
+        closer the prediction is to 1.
+
+        The options are:
+          - "glm": uses the initial log ratio of the glm model. This is the default.
+            When predictions are low there is not much difference between the multiplier
+            however when the predictions are high there will be large differences in
+            glm multiplier.
           - "mean": the mean prediction for the feature
-          - "glm": uses the initial log ratio of the glm model
+
 
 
     Returns
@@ -806,7 +801,7 @@ def map_rates(
             df[rate_name] = df[rate_name] * df[mult_col]
         df = df.drop(columns=mult_cols)
         merge_keys = merge_keys + list(mult_to_df_map.keys())
-    logger.info(f"the mapped rates are based on the following " f"keys: {merge_keys}")
+    logger.info(f"the mapped rates are based on the following keys: {merge_keys}")
 
     # check if there are any missing rates
     missing_rates = df[df[rate_name].isnull()]
@@ -925,7 +920,7 @@ def compare_tables(
     # get the unique keys dict for each table
     unique_keys = {}
     for i, table in enumerate([table_1, table_2]):
-        table_name = f"table_{i+1}"
+        table_name = f"table_{i + 1}"
         unique_keys[table_name] = list(
             set(table.columns) - set(common_keys) - {value_col}
         )

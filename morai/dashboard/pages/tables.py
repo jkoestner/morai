@@ -46,6 +46,8 @@ def layout():
             dcc.Store(id="store-table-compare", storage_type="memory"),
             dcc.Store(id="store-table-1-select", storage_type="memory"),
             dcc.Store(id="store-table-2-select", storage_type="memory"),
+            dcc.Store(id="store-table-1-id", storage_type="memory"),
+            dcc.Store(id="store-table-2-id", storage_type="memory"),
             # Header section with gradient background
             html.Div(
                 [
@@ -117,25 +119,13 @@ def layout():
                         dbc.Button(
                             [
                                 html.I(className="fas fa-sync-alt me-2"),
-                                "Compare",
+                                "Refresh",
                             ],
-                            id="compare-button",
+                            id="refresh-button",
                             color="primary",
                             className="w-100 shadow-sm",
                         ),
-                        width=9,
-                    ),
-                    dbc.Col(
-                        dbc.Button(
-                            [
-                                html.I(className="fas fa-filter me-2"),
-                                "Filter",
-                            ],
-                            id="filter-button",
-                            color="primary",
-                            className="w-100 shadow-sm",
-                        ),
-                        width=3,
+                        width=2,
                     ),
                 ],
                 className="mb-4",
@@ -526,6 +516,8 @@ def set_table_2_input(value):
 
 @callback(
     [
+        Output("store-table-1-id", "data"),
+        Output("store-table-2-id", "data"),
         Output("store-table-1-select", "data"),
         Output("store-table-2-select", "data"),
         Output("table-1-filters", "children"),
@@ -538,10 +530,12 @@ def set_table_2_input(value):
         Output("tables-toast", "is_open", allow_duplicate=True),
         Output("tables-toast", "children", allow_duplicate=True),
     ],
-    [Input("compare-button", "n_clicks"), Input("filter-button", "n_clicks")],
+    [Input("refresh-button", "n_clicks")],
     [
         State("table-1-id", "value"),
         State("table-2-id", "value"),
+        State("store-table-1-id", "data"),
+        State("store-table-2-id", "data"),
         State({"type": "table-1-str-filter", "index": ALL}, "value"),
         State({"type": "table-1-num-filter", "index": ALL}, "value"),
         State({"type": "table-2-str-filter", "index": ALL}, "value"),
@@ -551,9 +545,10 @@ def set_table_2_input(value):
 )
 def initialize_tables(
     n_clicks,
-    filter_button,
     table1_id,
     table2_id,
+    prev_table1_id,
+    prev_table2_id,
     filter_table_1_str,
     filter_table_1_num,
     filter_table_2_str,
@@ -568,24 +563,40 @@ def initialize_tables(
         return (*no_upate_tuple, True, "No table selected.")
 
     # load tables
-    table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple = (
-        load_tables(table1_id, table2_id)
-    )
+    (
+        table_1,
+        table_2,
+        table_1_select_period,
+        table_2_select_period,
+        mults_1,
+        mults_2,
+        warning_tuple,
+    ) = load_tables(table1_id, table2_id)
 
     if True in warning_tuple:
         return (*no_upate_tuple, *warning_tuple)
 
-    # generate filters
-    if callback_context.triggered_id == "compare-button":
+    # Check if tables have changed - handle None values for first run
+    tables_changed = (
+        prev_table1_id is None
+        or prev_table2_id is None
+        or prev_table1_id != table1_id
+        or prev_table2_id != table2_id
+    )
+
+    # generate filters only if tables have changed
+    if tables_changed:
         filters_1 = dh.generate_filters(
             df=table_1,
             prefix="table-1",
             exclude_cols=["vals", "constant"],
+            mult_table=mults_1,
         ).get("filters")
         filters_2 = dh.generate_filters(
             df=table_2,
             prefix="table-2",
             exclude_cols=["vals", "constant"],
+            mult_table=mults_2,
         ).get("filters")
     else:
         filters_1 = dash.no_update
@@ -646,6 +657,8 @@ def initialize_tables(
     )
 
     return (
+        table1_id,
+        table2_id,
         table_1_select_period,
         table_2_select_period,
         filters_1,
@@ -836,6 +849,8 @@ def update_table_tabs(
             table_2,
             table_1_select_period,
             table_2_select_period,
+            mults_1,
+            mults_2,
             warning_tuple,
         ) = load_tables(table1_id, table2_id)
 
@@ -899,6 +914,8 @@ def load_tables(table1_id, table2_id):
     table_2 = pd.DataFrame()
     table_1_select_period = "Unknown"
     table_2_select_period = "Unknown"
+    mults_1 = None
+    mults_2 = None
     warning_tuple = (False, "")
     mt = tables.MortTable()
 
@@ -920,6 +937,7 @@ def load_tables(table1_id, table2_id):
             try:
                 rate_table = tables.MortTable(rate=table1_id)
                 table_1 = rate_table.rate_table
+                mults_1 = rate_table.mult_table
                 table_1_select_period = "Unknown"
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table1_id}")
@@ -953,6 +971,7 @@ def load_tables(table1_id, table2_id):
             try:
                 rate_table = tables.MortTable(rate=table2_id)
                 table_2 = rate_table.rate_table
+                mults_2 = rate_table.mult_table
                 table_2_select_period = "Unknown"
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table1_id}")
@@ -968,7 +987,15 @@ def load_tables(table1_id, table2_id):
             logger.warning(f"Table not found: {table2_id}")
             warning_tuple = (True, f"Table not found: {table2_id}")
 
-    return table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple
+    return (
+        table_1,
+        table_2,
+        table_1_select_period,
+        table_2_select_period,
+        mults_1,
+        mults_2,
+        warning_tuple,
+    )
 
 
 def filter_tables(table_1, table_2, filter_list):
@@ -1103,7 +1130,7 @@ def get_su_graph(df, select_period, title):
         agg="mean",
         title=title,
         hovertemplate=(
-            "issue_age: %{x}<br>" "duration: %{y}<br>" "ratio: %{z}<extra></extra>"
+            "issue_age: %{x}<br>duration: %{y}<br>ratio: %{z}<extra></extra>"
         ),
     )
 

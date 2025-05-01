@@ -144,6 +144,7 @@ def generate_filters(
     num_to_str_count: int = num_to_str_count,
     config: Optional[Dict[str, Any]] = None,
     exclude_cols: Optional[List[str]] = None,
+    mult_table: Optional[Union[pd.DataFrame, pl.LazyFrame]] = None,
 ) -> dict:
     """
     Generate a dictionary of dashboard options from dataframe.
@@ -160,6 +161,8 @@ def generate_filters(
         Configuration dictionary.
     exclude_cols : list
         List of columns to exclude from the dropdown options.
+    mult_table : pd.DataFrame or pl.LazyFrame, optional
+        Options to include from the mult_table.
 
     Returns
     -------
@@ -281,6 +284,48 @@ def generate_filters(
             )
             num_cols.append(col)
         filters.append(filter)
+
+    # create radio options for mult_table
+    if mult_table is not None:
+        categories = mult_table["category"].unique()
+        for category in categories:
+            mult_table_options = mult_table[mult_table["category"] == category][
+                "subcategory"
+            ].unique()
+            options = [
+                {"label": str(i), "value": i} for i in sorted(mult_table_options)
+            ]
+
+            # set default value as the first option
+            default_value = options[0]["value"] if len(options) > 0 else None
+
+            filter = html.Div(
+                [
+                    dbc.Button(
+                        [
+                            html.Span(category, style={"flex-grow": 1}),
+                            html.I(className="fas fa-chevron-down"),
+                        ],
+                        id={"type": f"{prefix}-collapse-button", "index": category},
+                        className="mb-2 w-100 text-start d-flex align-items-center",
+                        color="light",
+                    ),
+                    dbc.Collapse(
+                        dcc.RadioItems(
+                            id={"type": prefix_str_filter, "index": category},
+                            options=options,
+                            value=default_value,
+                            className="ms-2",
+                            labelStyle={"display": "block"},
+                        ),
+                        id={"type": f"{prefix}-collapse", "index": category},
+                        is_open=False,
+                    ),
+                ],
+                className="mb-3",
+            )
+            str_cols.append(category)
+            filters.append(filter)
 
     filter_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
     return filter_dict

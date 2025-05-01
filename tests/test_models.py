@@ -109,7 +109,8 @@ def test_gam():
         "age": {"df": 5, "degree": 3},
     }
     GAM = models.GAM()
-    GAM.fit(X=X, y=y, weights=weights, spline_dict=spline_dict)
+    GAM.setup_model(X=X, y=y, weights=weights, spline_dict=spline_dict)
+    GAM.fit()
     predictions = GAM.predict(X)
 
     assert predictions.mean() == approx(0.2921, abs=1e-4), "gam mean is off"
