@@ -906,7 +906,7 @@ def compare_tables(
         DataFrame of the comparison with the ratio of the table_1/table_2 values.
 
     """
-    if type(table_1) != pd.DataFrame or type(table_2) != pd.DataFrame:
+    if not isinstance(table_1, pd.DataFrame) or not isinstance(table_2, pd.DataFrame):
         raise ValueError("Both tables must be pandas DataFrames.")
     if value_col not in table_1.columns or value_col not in table_2.columns:
         raise ValueError(f"Value column: {value_col} not in both tables.")

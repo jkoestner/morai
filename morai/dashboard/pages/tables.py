@@ -4,6 +4,8 @@ Tables dashboard.
 Issue age, duration, and attained age are needed to compare mortality tables.
 """
 
+import time
+
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
@@ -43,11 +45,14 @@ def layout():
     """Table layout."""
     return html.Div(
         [
-            dcc.Store(id="store-table-compare", storage_type="memory"),
-            dcc.Store(id="store-table-1-select", storage_type="memory"),
-            dcc.Store(id="store-table-2-select", storage_type="memory"),
             dcc.Store(id="store-table-1-id", storage_type="memory"),
             dcc.Store(id="store-table-2-id", storage_type="memory"),
+            dcc.Store(id="store-table-1-raw", storage_type="memory"),
+            dcc.Store(id="store-table-2-raw", storage_type="memory"),
+            dcc.Store(id="store-table-1-select", storage_type="memory"),
+            dcc.Store(id="store-table-2-select", storage_type="memory"),
+            dcc.Store(id="store-table-compare", storage_type="memory"),
+            dcc.Store(id="store-table-filter-trigger", storage_type="memory"),
             # Header section with gradient background
             html.Div(
                 [
@@ -518,17 +523,15 @@ def set_table_2_input(value):
     [
         Output("store-table-1-id", "data"),
         Output("store-table-2-id", "data"),
+        Output("store-table-1-raw", "data"),
+        Output("store-table-2-raw", "data"),
         Output("store-table-1-select", "data"),
         Output("store-table-2-select", "data"),
         Output("table-1-filters", "children"),
         Output("table-2-filters", "children"),
-        Output("store-table-compare", "data"),
-        Output("table-1-desc", "children"),
-        Output("table-2-desc", "children"),
-        Output("graph-su-table-1", "children"),
-        Output("graph-su-table-2", "children"),
         Output("tables-toast", "is_open", allow_duplicate=True),
         Output("tables-toast", "children", allow_duplicate=True),
+        Output("store-table-filter-trigger", "data"),
     ],
     [Input("refresh-button", "n_clicks")],
     [
@@ -536,10 +539,6 @@ def set_table_2_input(value):
         State("table-2-id", "value"),
         State("store-table-1-id", "data"),
         State("store-table-2-id", "data"),
-        State({"type": "table-1-str-filter", "index": ALL}, "value"),
-        State({"type": "table-1-num-filter", "index": ALL}, "value"),
-        State({"type": "table-2-str-filter", "index": ALL}, "value"),
-        State({"type": "table-2-num-filter", "index": ALL}, "value"),
     ],
     prevent_initial_call=True,
 )
@@ -549,34 +548,17 @@ def initialize_tables(
     table2_id,
     prev_table1_id,
     prev_table2_id,
-    filter_table_1_str,
-    filter_table_1_num,
-    filter_table_2_str,
-    filter_table_2_num,
 ):
     """Get the initial table data."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
-    no_upate_tuple = (dash.no_update,) * 9
+    no_upate_tuple = (dash.no_update,) * 8
     warning_tuple = (False, "")
+    trigger_value = time.time()
 
     if table1_id is None or table2_id is None:
-        return (*no_upate_tuple, True, "No table selected.")
+        return (*no_upate_tuple, True, "No table selected.", dash.no_update)
 
-    # load tables
-    (
-        table_1,
-        table_2,
-        table_1_select_period,
-        table_2_select_period,
-        mults_1,
-        mults_2,
-        warning_tuple,
-    ) = load_tables(table1_id, table2_id)
-
-    if True in warning_tuple:
-        return (*no_upate_tuple, *warning_tuple)
-
-    # Check if tables have changed - handle None values for first run
+    # check if tables have changed
     tables_changed = (
         prev_table1_id is None
         or prev_table2_id is None
@@ -586,6 +568,20 @@ def initialize_tables(
 
     # generate filters only if tables have changed
     if tables_changed:
+        # load tables
+        (
+            table_1,
+            table_2,
+            table_1_select_period,
+            table_2_select_period,
+            mults_1,
+            mults_2,
+            warning_tuple,
+        ) = load_tables(table1_id, table2_id)
+
+        if True in warning_tuple:
+            return (*no_upate_tuple, *warning_tuple, dash.no_update)
+
         filters_1 = dh.generate_filters(
             df=table_1,
             prefix="table-1",
@@ -599,10 +595,67 @@ def initialize_tables(
             mult_table=mults_2,
         ).get("filters")
     else:
-        filters_1 = dash.no_update
-        filters_2 = dash.no_update
+        return (*no_upate_tuple, *warning_tuple, trigger_value)
 
-    # Get the filters from the callback context for description
+    return (
+        table1_id,
+        table2_id,
+        table_1.to_dict("records"),
+        table_2.to_dict("records"),
+        table_1_select_period,
+        table_2_select_period,
+        filters_1,
+        filters_2,
+        False,
+        False,
+        trigger_value,
+    )
+
+
+@callback(
+    [
+        Output("store-table-compare", "data"),
+        Output("table-1-desc", "children"),
+        Output("table-2-desc", "children"),
+        Output("graph-su-table-1", "children"),
+        Output("graph-su-table-2", "children"),
+    ],
+    [
+        Input("store-table-filter-trigger", "data"),
+    ],
+    [
+        State("store-table-1-id", "data"),
+        State("store-table-2-id", "data"),
+        State("store-table-1-raw", "data"),
+        State("store-table-2-raw", "data"),
+        State("store-table-1-select", "data"),
+        State("store-table-2-select", "data"),
+        State({"type": "table-1-str-filter", "index": ALL}, "value"),
+        State({"type": "table-1-num-filter", "index": ALL}, "value"),
+        State({"type": "table-2-str-filter", "index": ALL}, "value"),
+        State({"type": "table-2-num-filter", "index": ALL}, "value"),
+    ],
+    prevent_initial_call=True,
+)
+def filter_tables_callback(
+    filter_trigger,
+    table1_id,
+    table2_id,
+    table_1_raw,
+    table_2_raw,
+    table_1_select_period,
+    table_2_select_period,
+    filter_table_1_str,
+    filter_table_1_num,
+    filter_table_2_str,
+    filter_table_2_num,
+):
+    """Filter the tables."""
+    # load tables
+    table_1 = pd.DataFrame(table_1_raw)
+    table_2 = pd.DataFrame(table_2_raw)
+
+    # get filters from the callback context for description
     states_info = dh._inputs_flatten_list(callback_context.states_list)
     filters_table_1 = dh._inputs_parse_type(
         states_info, "table-1-num-filter"
@@ -644,7 +697,7 @@ def initialize_tables(
         filtered_table_2,
         table_1_select_period,
         table_2_select_period,
-        filters_table_1,  # Pass the filter info directly from states
+        filters_table_1,
         filters_table_2,
     )
 
@@ -657,19 +710,11 @@ def initialize_tables(
     )
 
     return (
-        table1_id,
-        table2_id,
-        table_1_select_period,
-        table_2_select_period,
-        filters_1,
-        filters_2,
         compare_df.to_dict("records"),
         desc_1,
         desc_2,
         graph_su_table_1,
         graph_su_table_2,
-        False,
-        False,
     )
 
 
@@ -699,17 +744,24 @@ def create_contour(
         issue_age_value = round((issue_age_max + issue_age_min) / 2, 0)
     issue_age_marks = {i: str(i) for i in range(issue_age_min, issue_age_max, 10)}
 
-    # adding attained_age to additional hover data
-    grouped_data = (
-        compare_df.groupby(["issue_age", "duration"], observed=True)["ratio"]
-        .agg("sum")
-        .reset_index()
-    )
-    grouped_data = grouped_data.pivot(
+    # creating the hover data
+    grouped_data = compare_df.pivot(
         index="duration", columns="issue_age", values="ratio"
     )
-    issue_age, duration = np.meshgrid(grouped_data.columns, grouped_data.index)
-    attained_age = issue_age + duration - 1
+    z_values = grouped_data.values
+    issue_ages = grouped_data.columns.to_numpy()
+    durations = grouped_data.index.to_numpy()
+    issue_age_grid, duration_grid = np.meshgrid(issue_ages, durations)
+    attained_age = issue_age_grid + duration_grid - 1
+    text = np.empty(z_values.shape, dtype=object)
+    for i in range(z_values.shape[0]):
+        for j in range(z_values.shape[1]):
+            text[i, j] = (
+                f"issue_age: {issue_ages[j]}<br>"
+                f"duration: {durations[i]}<br>"
+                f"attained_age: {attained_age[i, j]}<br>"
+                f"ratio: {z_values[i, j]:.2f}"
+            )
 
     # custom colorscale
     zmin = 0.5
@@ -736,13 +788,8 @@ def create_contour(
         type="contour",
         agg="mean",
         # add custom hover data
-        customdata=attained_age,
-        hovertemplate=(
-            "issue_age: %{x}<br>"
-            "duration: %{y}<br>"
-            "attained_age: %{customdata}<br>"
-            "ratio: %{z}<extra></extra>"
-        ),
+        text=text,
+        hoverinfo="text",
         # custom colorscale and contours
         colorscale=custom_colorscale,
         zmin=zmin,
