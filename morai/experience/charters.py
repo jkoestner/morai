@@ -13,8 +13,9 @@ from joblib import Parallel, cpu_count, delayed
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 
+from morai import models
 from morai.experience import experience
-from morai.forecast import models, preprocessors
+from morai.forecast import preprocessors
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
@@ -637,7 +638,7 @@ def pdp(
     """
     df = df.copy()
     # make sure model has prediction function
-    models.ModelWrapper(model).check_predict()
+    models.base.ModelWrapper(model).check_predict()
     logger.info(f"Model: [{type(model).__name__}] for partial dependence plot.")
 
     # initialize variables
@@ -653,7 +654,7 @@ def pdp(
 
     # get the feature names from the model to create X
     model_features = None
-    model_features = models.ModelWrapper(model).get_features()
+    model_features = models.base.ModelWrapper(model).get_features()
     logger.debug(f"Model features for pdp: {model_features}")
 
     # check df is not empty

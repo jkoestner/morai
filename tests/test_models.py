@@ -14,7 +14,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 from xgboost import XGBRegressor
 
-from morai.forecast import models, preprocessors
+from morai import models
+from morai.forecast import preprocessors
 from morai.utils import helpers
 
 test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast" / "models"
@@ -64,7 +65,7 @@ def test_glm():
     X = preprocess_dict["X"]
     y = preprocess_dict["y"]
     weights = preprocess_dict["weights"]
-    GLM = models.GLM()
+    GLM = models.base.GLM()
     GLM.fit(X, y, weights)
     predictions = GLM.predict(X)
 
@@ -108,13 +109,13 @@ def test_gam():
     spline_dict = {
         "age": {"df": 5, "degree": 3},
     }
-    GAM = models.GAM()
+    GAM = models.gam.GAMStats()
     GAM.setup_model(X=X, y=y, weights=weights, spline_dict=spline_dict)
     GAM.fit()
     predictions = GAM.predict(X)
 
-    assert predictions.mean() == approx(0.2921, abs=1e-4), "gam mean is off"
-    assert predictions[0] == approx(1.2355e-05, abs=1e-4), "gam first value is off"
+    assert predictions.mean() == approx(0.4381, abs=1e-4), "gam mean is off"
+    assert predictions[0] == approx(2.9221e-04, abs=1e-4), "gam first value is off"
 
 
 def test_lr():
@@ -219,7 +220,7 @@ def test_lee_carter():
     """Test the Lee-Carter model."""
     lc_df = hmd_usa_df.copy()
     # creating the model
-    lc = models.LeeCarter()
+    lc = models.base.LeeCarter()
     # qx values for historical
     lc_df = lc.fit(lc_df)
     # qx values for projected
@@ -237,7 +238,7 @@ def test_cbd():
     """Test the CBD model."""
     cbd_df = hmd_usa_df.copy()
     # creating the model
-    cbd = models.CBD()
+    cbd = models.base.CBD()
     # qx values for historical
     cbd_df = cbd.fit(cbd_df)
     # qx values for projected

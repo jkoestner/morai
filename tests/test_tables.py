@@ -4,8 +4,9 @@ import numpy as np
 import numpy.testing as npt
 import pandas as pd
 
+from morai import models
 from morai.experience import tables
-from morai.forecast import models, preprocessors
+from morai.forecast import preprocessors
 from morai.utils import helpers
 
 test_experience_path = helpers.ROOT_PATH / "tests" / "files" / "experience"
@@ -29,7 +30,7 @@ preprocess_dict = preprocessors.preprocess_data(
     standardize=False,
     add_constant=True,
 )
-GLM = models.GLM()
+GLM = models.base.GLM()
 GLM.fit(X=preprocess_dict["X"], y=preprocess_dict["y"], r_style=False)
 
 
@@ -61,6 +62,7 @@ def test_generate_table_mult():
         mult_features=[
             "smoker_status",
         ],
+        mult_method="mean",
     )
 
     rate_table_vals = np.array([0.071788, 0.108212])
