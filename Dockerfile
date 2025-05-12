@@ -9,9 +9,19 @@
 # slim was used instead of alpine because of the need of numpy
 FROM python:3.12-slim
 
-# Install dependencies, git
+# Install dependencies, git and R
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends \
+        git \
+        # for R
+        build-essential \
+        libpcre2-dev \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libxml2-dev \
+        locales \
+        gfortran \
+        r-base && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

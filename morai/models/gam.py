@@ -263,8 +263,9 @@ class GAMR(BaseEstimator, RegressorMixin):
         self.spline_dict = None
         self.family = None
         self.link = None
-        self.unfit_model = None
+        self.formula = None
         self.model = None
+        self.coefs = None
         self.is_fitted_ = False
 
     def setup_model(
@@ -312,11 +313,6 @@ class GAMR(BaseEstimator, RegressorMixin):
         save : bool, optional
             Save the variables in the class
 
-        Returns
-        -------
-        unfit_model : GAM
-            The GAM model
-
         """
         logger.info(
             f"setup GAM model with mgcv and `{distribution}` distribution "
@@ -362,6 +358,9 @@ class GAMR(BaseEstimator, RegressorMixin):
         self.is_fitted_ = True
 
         model = ro.globalenv["model"]
+        coefs = pandas2ri.rpy2py_dataframe(
+            ro.r("as.data.frame(summary(model)$p.table)")
+        )["Estimate"]
 
         # save the variables
         if save:
@@ -369,6 +368,8 @@ class GAMR(BaseEstimator, RegressorMixin):
             self.y = y
             self.weights = weights
             self.model = model
+            self.coefs = coefs
+            self.formula = formula
 
         return None
 
@@ -458,14 +459,11 @@ class GAMR(BaseEstimator, RegressorMixin):
             raise ValueError("please create a model first")
 
         # initialize variables
-        coefs = None
+        coefs = self.coefs
         smooth = None
         expand_smooth = None
 
         # get coefficients
-        coefs = pandas2ri.rpy2py_dataframe(
-            self.ro("as.data.frame(summary(model)$p.table)")
-        )
         smooth = pandas2ri.rpy2py_dataframe(
             self.ro("as.data.frame(summary(model)$s.table)")
         )
@@ -516,6 +514,9 @@ class GAMR(BaseEstimator, RegressorMixin):
                 f"Deviance Explained    : {summary_stats['deviance_explained']:.1%}",
                 f"Scale Estimate        : {summary_stats['scale_estimate']:.4g}",
                 f"fREML                 : {summary_stats['fREML']:.4g}",
+                "",
+                "Formula:",
+                self.formula,
                 "",
                 "Parametric Coefficients:",
                 coefs.to_string(),

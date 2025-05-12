@@ -1,6 +1,7 @@
 """Collection of helpers."""
 
 import gc
+import json
 import os
 import re
 import sys
@@ -153,6 +154,56 @@ def memory_usage_jupyter() -> pd.DataFrame:
     )
 
     return object_sizes
+
+
+def memory_usage_jupyter_cells(notebook: str, top_n: int = 10) -> pd.DataFrame:
+    """
+    Calculate the memory usage of cells in Jupyter notebook.
+
+    Parameters
+    ----------
+    notebook : str
+        The path to the Jupyter notebook.
+    top_n : int, optional (default=10)
+        The number of top cells to return.
+
+    Returns
+    -------
+    top_cells : pd.DataFrame
+        The DataFrame with the top cells in MB.
+
+    """
+    # get the notebook path
+    nb_path = Path(notebook)
+    if not nb_path.exists():
+        matches = list(Path(ROOT_PATH / "notebooks").rglob(str(notebook)))
+        if len(matches) == 1:
+            nb_path = matches[0]
+        else:
+            raise FileNotFoundError(f"Notebook {notebook} not found.")
+
+    logger.info(f"getting largest cells for {nb_path}")
+
+    # read the notebook and get the cell memory usage
+    with open(nb_path, encoding="utf-8") as f:
+        nb = json.load(f)
+
+    rows = []
+    for i, cell in enumerate(nb["cells"]):
+        raw = json.dumps(cell, ensure_ascii=False)
+        size_kb = len(raw.encode("utf-8")) / 1024
+        rows.append(
+            {
+                "cell_idx": i,
+                "cell_type": cell.get("cell_type", "unknown"),
+                "size_kb": round(size_kb, 1),
+                "preview": "".join(cell.get("source", []))[:120].replace("\n", " "),
+            }
+        )
+
+    top_cells = pd.DataFrame(rows).sort_values("size_kb", ascending=False)
+
+    return top_cells.head(top_n)
 
 
 def delete_jupyter_objects(objects: list) -> None:
