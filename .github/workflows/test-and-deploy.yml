@@ -21,18 +21,15 @@ jobs:
       - name: Set environment variables
         run: |
           echo "R_HOME=$(R RHOME)" >> $GITHUB_ENV
-      - name: Set  up R ENV
-        run: |
-          pip install rpy2
-          R_LIB_PATH=$(python -m rpy2.situation LD_LIBRARY_PATH | tail -n 1 | xargs)
-          echo "LD_LIBRARY_PATH from rpy2: $R_LIB_PATH"
-          echo "LD_LIBRARY_PATH=$R_LIB_PATH" >> $GITHUB_ENV
       - name: Install dependencies
         env:
           R_HOME: ${{ env.R_HOME }}
         run: |
           pip install .
           pip install .[dev]
+          R_LIB_PATH=$(python -m rpy2.situation LD_LIBRARY_PATH | tail -n 1 | xargs)
+          echo "LD_LIBRARY_PATH from rpy2: $R_LIB_PATH"
+          echo "LD_LIBRARY_PATH=$R_LIB_PATH" >> $GITHUB_ENV
       - name: test imports
         run: |
           python -c "
