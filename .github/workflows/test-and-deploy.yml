@@ -22,16 +22,17 @@ jobs:
         run: |
           pip install --upgrade pip
           python -m pip install .[dev]
-      # - name: Set R environment variables
-      #   run: |
+      - name: Set R environment variables
+        run: |
+          echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
       #     R_LIB_PATH=$(python -m rpy2.situation LD_LIBRARY_PATH | tail -n 1 | xargs)
       #     echo "LD_LIBRARY_PATH=$R_LIB_PATH:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-      #     echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
       - name: test imports
         run: |
           python -c "
           from morai.experience import experience, tables
           from morai.utils import helpers
+          from morai.models import r
           "
       - name: Run tests with pytest and upload coverage
         run: pytest --cov=morai --cov-report=xml
