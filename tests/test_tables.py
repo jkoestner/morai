@@ -30,7 +30,7 @@ preprocess_dict = preprocessors.preprocess_data(
     standardize=False,
     add_constant=True,
 )
-GLM = models.base.GLM()
+GLM = models.core.GLM()
 GLM.fit(X=preprocess_dict["X"], y=preprocess_dict["y"], r_style=False)
 
 

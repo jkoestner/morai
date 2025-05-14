@@ -10,8 +10,8 @@ import polars as pl
 import pymort
 import yaml
 
-from morai import models
 from morai.forecast import preprocessors
+from morai.models import core
 from morai.utils import custom_logger, helpers
 from morai.utils.custom_logger import suppress_logs
 
@@ -541,7 +541,7 @@ def generate_table(
     """
     # initialize the variables
     logger.info(f"generating table for model {type(model).__name__}")
-    models.base.ModelWrapper(model).check_predict()
+    core.ModelWrapper(model).check_predict()
     rate_mapping = mapping
     rate_feature_dict = {
         k: v
@@ -585,7 +585,7 @@ def generate_table(
         )
 
     # prediction needs to be in same order as model
-    model_features = models.base.ModelWrapper(model).get_features()
+    model_features = core.ModelWrapper(model).get_features()
     rate_table = rate_table.loc[:, model_features]
 
     # make predictions

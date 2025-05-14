@@ -638,7 +638,7 @@ def pdp(
     """
     df = df.copy()
     # make sure model has prediction function
-    models.base.ModelWrapper(model).check_predict()
+    models.core.ModelWrapper(model).check_predict()
     logger.info(f"Model: [{type(model).__name__}] for partial dependence plot.")
 
     # initialize variables
@@ -654,7 +654,7 @@ def pdp(
 
     # get the feature names from the model to create X
     model_features = None
-    model_features = models.base.ModelWrapper(model).get_features()
+    model_features = models.core.ModelWrapper(model).get_features()
     logger.debug(f"Model features for pdp: {model_features}")
 
     # check df is not empty

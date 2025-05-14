@@ -22,14 +22,11 @@ jobs:
         run: |
           echo "R_HOME=$(R RHOME)" >> $GITHUB_ENV
       - name: Install dependencies
-        env:
-          R_HOME: ${{ env.R_HOME }}
         run: |
-          pip install .
-          pip install .[dev]
-          R_LIB_PATH=$(python -m rpy2.situation LD_LIBRARY_PATH | tail -n 1 | xargs)
-          echo "LD_LIBRARY_PATH=$R_LIB_PATH"
-          echo "LD_LIBRARY_PATH=$R_LIB_PATH:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          pip install --upgrade pip
+          pip install uv
+          uv pip install .
+          uv pip install .[dev]
       - name: test imports
         run: |
           python -c "

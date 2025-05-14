@@ -65,7 +65,7 @@ def test_glm():
     X = preprocess_dict["X"]
     y = preprocess_dict["y"]
     weights = preprocess_dict["weights"]
-    GLM = models.base.GLM()
+    GLM = models.core.GLM()
     GLM.fit(X, y, weights)
     predictions = GLM.predict(X)
 
@@ -220,7 +220,7 @@ def test_lee_carter():
     """Test the Lee-Carter model."""
     lc_df = hmd_usa_df.copy()
     # creating the model
-    lc = models.base.LeeCarter()
+    lc = models.core.LeeCarter()
     # qx values for historical
     lc_df = lc.fit(lc_df)
     # qx values for projected
@@ -238,7 +238,7 @@ def test_cbd():
     """Test the CBD model."""
     cbd_df = hmd_usa_df.copy()
     # creating the model
-    cbd = models.base.CBD()
+    cbd = models.core.CBD()
     # qx values for historical
     cbd_df = cbd.fit(cbd_df)
     # qx values for projected
