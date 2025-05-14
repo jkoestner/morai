@@ -29,11 +29,9 @@ jobs:
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$R_LIB_PATH" >> $GITHUB_ENV
       - name: test imports
         run: |
-          echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
           python -c "
           from morai.experience import experience, tables
           from morai.utils import helpers
-          from morai.models import r
           "
       - name: Run tests with pytest and upload coverage
         run: pytest --cov=morai --cov-report=xml

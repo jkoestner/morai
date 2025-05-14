@@ -31,11 +31,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 # Set work directory
 WORKDIR /code
 
-# Define a build-time argument for the branch name
-ARG BRANCH_NAME=main
-
 # Install the package from a specific branch
-RUN uv pip install --no-cache-dir --system "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
+ARG BRANCH_NAME=main
+ARG BRANCH_NAME
+RUN echo "Installing from branch: $BRANCH_NAME" && \
+    uv pip install --system "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
 
 # Create new user
 RUN adduser --disabled-password --gecos '' morai && \
