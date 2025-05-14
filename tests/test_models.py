@@ -15,7 +15,7 @@ from sklearn.tree import DecisionTreeRegressor
 from xgboost import XGBRegressor
 
 from morai.forecast import preprocessors
-from morai.models import core, gam
+from morai.models import core
 from morai.utils import helpers
 
 test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast" / "models"
@@ -109,7 +109,7 @@ def test_gam():
     spline_dict = {
         "age": {"df": 5, "degree": 3},
     }
-    GAM = gam.GAMStats()
+    GAM = core.GAMStats()
     GAM.setup_model(X=X, y=y, weights=weights, spline_dict=spline_dict)
     GAM.fit()
     predictions = GAM.predict(X)
