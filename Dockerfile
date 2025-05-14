@@ -14,6 +14,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         git \
         # for R
+        # adds about 1GB to image size
         build-essential \
         libpcre2-dev \
         libcurl4-openssl-dev \
@@ -21,7 +22,11 @@ RUN apt-get update && \
         libxml2-dev \
         locales \
         gfortran \
-        r-base && \
+        r-base \
+        libbz2-dev \
+        liblzma-dev \
+        libblas-dev \
+        zlib1g-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -33,7 +38,6 @@ WORKDIR /code
 
 # Install the package from a specific branch
 ARG BRANCH_NAME=main
-ARG BRANCH_NAME
 RUN echo "Installing from branch: $BRANCH_NAME" && \
     uv pip install --system "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
 
