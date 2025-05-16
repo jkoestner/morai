@@ -1,0 +1,8 @@
+# checks for the data using sections as queries
+# the checks need to use polars syntax
+
+limit_id: |
+  ((pl.col('id') < 1) | (pl.col('id') >= 3))
+
+logic_circle: |
+  ((pl.col('shape') == 'circle') & (pl.col('sides') != 0))

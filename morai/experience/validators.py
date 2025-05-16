@@ -39,7 +39,8 @@ def get_checks(checks_path: Optional[str] = None) -> Dict[str, Any]:
             check_dict = yaml.safe_load(file)
             check_dict = _replace_newlines_in_dict(check_dict, "\n", " ")
     except FileNotFoundError:
-        (f"Config file not found at any of the following paths: {checks_path}")
+        logger.error(f"Config file not found at: {checks_path}")
+        raise
 
     total_checks = len(check_dict)
     logger.info(f"Loaded {total_checks} checks.")
@@ -49,7 +50,7 @@ def get_checks(checks_path: Optional[str] = None) -> Dict[str, Any]:
 
 def run_checks(
     lzdf: pl.LazyFrame, check_dict: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+) -> pd.DataFrame:
     """
     Run checks defined in check_dict on the dataframe df.
 
@@ -67,7 +68,7 @@ def run_checks(
 
     Returns
     -------
-    check_output : dict
+    check_output : pd.DataFrame
         The results of the checks.
 
     """

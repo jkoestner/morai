@@ -42,7 +42,6 @@ dependencies = [
     "graphviz>=0.20.3",                 # only for lightgbm
     "lightgbm>=4.6.0",                  # only for lightgbm
     "pygam>=0.9.1",                     # only for pygam (gam)
-    "rpy2>=3.5.17",                     # only for mgcv (gam)
     "xgboost>=3.0.0",                   # only for xgboost
 ]
 
@@ -62,6 +61,10 @@ dev = [
 ai_adv = [
     "h2o>=3.46.0",                      # only for h2o
     "pytorch>=2.0.1",                   # only for neural network class
+]
+
+r = [
+    "rpy2>=3.5.17",                     # only for mgcv (gam)
 ]
 
 [project.scripts]

@@ -39,7 +39,7 @@ WORKDIR /code
 # Install the package from a specific branch
 ARG BRANCH_NAME=main
 RUN echo "Installing from branch: $BRANCH_NAME" && \
-    uv pip install --system "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
+    uv pip install --system "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}#egg=morai[r]"
 
 # Create new user
 RUN adduser --disabled-password --gecos '' morai && \
