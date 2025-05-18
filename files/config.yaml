@@ -1,0 +1,15 @@
+# initialization morai config
+
+#    _____             __ _       
+#   / ____|           / _(_)      
+#  | |     ___  _ __ | |_ _  __ _ 
+#  | |    / _ \| '_ \|  _| |/ _` |
+#  | |___| (_) | | | | | | | (_| |
+#   \_____\___/|_| |_|_| |_|\__, |
+#                            __/ |
+#                           |___/ 
+
+config:
+  integrations:
+    hmd_email: None
+    hmd_password: None

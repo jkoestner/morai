@@ -20,7 +20,7 @@ FILES_PATH = (
     if os.getenv("MORAI_FILES_PATH")
     else ROOT_PATH / "files"
 )
-CONFIG_PATH = FILES_PATH / "dashboard_config.yaml"
+DASH_CONFIG_PATH = FILES_PATH / "dashboard_config.yaml"
 
 logger = custom_logger.setup_logging(__name__)
 

@@ -846,13 +846,13 @@ def generate_selectors(
     return selectors
 
 
-def load_config(config_path: str = helpers.CONFIG_PATH) -> Dict[str, Any]:
+def load_config(dash_config_path: str = helpers.DASH_CONFIG_PATH) -> Dict[str, Any]:
     """
     Load the yaml configuration file.
 
     Parameters
     ----------
-    config_path : str
+    dash_config_path : str
         Path to the yaml configuration file.
 
     Returns
@@ -861,13 +861,13 @@ def load_config(config_path: str = helpers.CONFIG_PATH) -> Dict[str, Any]:
         Configuration dictionary.
 
     """
-    with open(config_path, "r") as file:
+    with open(dash_config_path, "r") as file:
         config = yaml.safe_load(file)
     return config
 
 
 def write_config(
-    config: Dict[str, Any], config_path: str = helpers.CONFIG_PATH
+    config: Dict[str, Any], dash_config_path: str = helpers.DASH_CONFIG_PATH
 ) -> None:
     """
     Write the yaml configuration file.
@@ -876,12 +876,12 @@ def write_config(
     ----------
     config : dict
         Configuration dictionary.
-    config_path : str
+    dash_config_path : str
         Path to the yaml configuration file.
 
 
     """
-    with open(config_path, "w") as file:
+    with open(dash_config_path, "w") as file:
         yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
 
