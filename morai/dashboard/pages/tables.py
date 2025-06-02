@@ -53,6 +53,7 @@ def layout():
             dcc.Store(id="store-table-2-select", storage_type="memory"),
             dcc.Store(id="store-table-compare", storage_type="memory"),
             dcc.Store(id="store-table-filter-trigger", storage_type="memory"),
+            dcc.Download(id="download-dataframe-csv"),
             # Header section with gradient background
             html.Div(
                 [
@@ -937,12 +938,23 @@ def update_table_tabs(
 
     # deserialize the table
     columnDefs = dash_formats.get_column_defs(table)
-    tab_content = dag.AgGrid(
+
+    # create button & table
+    export_button = html.Button(
+        "Export to CSV",
+        id={"type": "export-button", "tab": active_tab, "page": "tables"},
+        className="btn btn-primary mt-2 mb-2",
+    )
+
+    grid = dag.AgGrid(
+        id={"type": "data-table", "tab": active_tab, "page": "tables"},
         rowData=table.to_dict("records"),
         columnDefs=columnDefs,
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
         dashGridOptions={"pagination": True},
     )
+
+    tab_content = html.Div([export_button, grid])
 
     return tab_content
 

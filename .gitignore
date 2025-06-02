@@ -3,6 +3,7 @@
 *.ipynb_checkpoints
 .DS_Store
 .env
+files/config.yaml
 files/dataset/*
 files/integrations/cdc/cdc.sql
 files/integrations/cdc/txt/*

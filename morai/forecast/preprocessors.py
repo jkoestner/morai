@@ -113,6 +113,20 @@ def preprocess_data(
         passthrough_cols + cat_pass_cols + ordinal_cols + nominal_cols + ohe_cols
     )
 
+    # check for nans
+    used_columns = model_target + model_weight + model_features
+    if model_data[used_columns].isnull().values.any():
+        nan_columns = (
+            model_data[used_columns]
+            .columns[model_data[used_columns].isnull().any()]
+            .tolist()
+        )
+        logger.warning(
+            f"the following columns have NaN values and could "
+            f"cause issues: {nan_columns}"
+        )
+
+    # handle presets
     if preset == "tree":
         logger.info(
             "using 'tree' preset which doesn't need to use 'nominal' "

@@ -1027,3 +1027,90 @@ def _inputs_parse_type(input_list: List[Any], type_value: str) -> List[Any]:
             if input_id.get("type") == type_value:
                 type_list.append(input)
     return type_list
+
+
+def register_export_callback(app) -> None:  # noqa: ANN001
+    """
+    Register a universal callback for exporting table data to CSV.
+
+    This function should be called once in the app initialization to register
+    the export functionality for all data tables across the application.
+
+    Parameters
+    ----------
+    app : dash.Dash
+        The Dash application instance.
+
+    Notes
+    -----
+    For this callback to work, the following components must be present:
+    1. A Download component with id="download-dataframe-csv" in each page's layout
+    2. Export buttons with pattern-matching ID:
+       {"type": "export-button", "tab": <tab_name>, "page": <page_name>}
+    3. Data tables with pattern-matching ID:
+       {"type": "data-table", "tab": <tab_name>, "page": <page_name>}
+
+    The tab and page values must match between the button and table for proper pairing.
+
+    """
+    import dash
+    import pandas as pd
+    from dash_extensions.enrich import (
+        ALL,
+        Input,
+        Output,
+        State,
+        callback,
+        callback_context,
+        dcc,
+    )
+
+    @callback(
+        Output("download-dataframe-csv", "data"),
+        Input({"type": "export-button", "tab": ALL, "page": ALL}, "n_clicks"),
+        State({"type": "data-table", "tab": ALL, "page": ALL}, "rowData"),
+        prevent_initial_call=True,
+    )
+    def export_table(
+        n_clicks_list: List[Optional[int]], table_data_list: List[List[Any]]
+    ) -> None:
+        """
+        Export table data to CSV.
+
+        This generic function handles exporting data from any
+        table with an export button.
+
+        The button and table must use pattern-matching IDs
+        with the following structure:
+        - Button:
+          {"type": "export-button", "tab": <tab_name>, "page": <page_name>}
+        - Table:
+          {"type": "data-table", "tab": <tab_name>, "page": <page_name>}
+
+        Where <tab_name> identifies the specific tab
+        and <page_name> identifies the page.
+        """
+        ctx = callback_context
+        if not ctx.triggered or not ctx.triggered[0]["value"]:
+            return dash.no_update
+
+        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        button_id = eval(triggered_id)
+        tab = button_id["tab"]
+        page = button_id["page"]
+
+        # Find the matching table data by comparing both tab and page values
+        for i, table_data in enumerate(table_data_list):
+            if not table_data:
+                continue
+
+            # Get the corresponding table ID
+            table_id = ctx.states_list[0][i]["id"]
+
+            # Check if this table matches the clicked button's tab and page
+            if table_id["tab"] == tab and table_id["page"] == page:
+                df = pd.DataFrame(table_data)
+                filename = f"{page}_{tab}.csv"
+                return dcc.send_data_frame(df.to_csv, filename, index=False)
+
+        return dash.no_update
