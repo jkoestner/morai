@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/jkoestner/morai/tree/v0.2.0)
+
+[Full Changelog](https://github.com/jkoestner/morai/compare/v0.1.0...v0.2.0)
+
+**Enhancements**
+- add GAM models to forecast (mcgv, pygam, statsmodels)
+- add HMD integration (login needed)
+- add in exports for tables
+
+**Documentation**
+- update notebooks to have images retained
+- split out models into it's own folder
+- update README
+
 ## [0.1.0](https://github.com/jkoestner/morai/tree/v0.1.0)
 
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.0.2...v0.1.0)

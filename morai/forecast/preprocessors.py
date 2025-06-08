@@ -8,6 +8,7 @@ import polars as pl
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 
 from morai.utils import custom_logger, helpers
+from morai.utils.custom_logger import suppress_logs
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -17,6 +18,7 @@ def preprocess_data(
     feature_dict: dict,
     add_constant: bool = False,
     standardize: bool = False,
+    clean: bool = False,
     preset: Optional[str] = None,
 ) -> dict:
     """
@@ -33,6 +35,10 @@ def preprocess_data(
         Whether to add a constant column to the data.
     standardize : bool, optional (default=False)
         Whether to standardize the data, which uses the StandardScaler.
+    clean : bool, optional (default=False)
+        Patsy requires the columns to not have special characters. Clean
+        will lowercase and remove special characters and replace with "_" both the
+        X and mapping objects.
     preset : str, optional (default=None)
         There are some preset options that will process the data for features
         considering the model type so the feature_dict doesn't have to be changed
@@ -107,6 +113,20 @@ def preprocess_data(
         passthrough_cols + cat_pass_cols + ordinal_cols + nominal_cols + ohe_cols
     )
 
+    # check for nans
+    used_columns = model_target + model_weight + model_features
+    if model_data[used_columns].isnull().values.any():
+        nan_columns = (
+            model_data[used_columns]
+            .columns[model_data[used_columns].isnull().any()]
+            .tolist()
+        )
+        logger.warning(
+            f"the following columns have NaN values and could "
+            f"cause issues: {nan_columns}"
+        )
+
+    # handle presets
     if preset == "tree":
         logger.info(
             "using 'tree' preset which doesn't need to use 'nominal' "
@@ -235,6 +255,12 @@ def preprocess_data(
         for col in ohe_cols:
             first_col = next(iter(mapping[col]["values"].items()))[1]
             X = X.drop(columns=[first_col])
+
+    # clean the data
+    if clean:
+        logger.info("clean data: lowercase and underscore special characters")
+        X = suppress_logs(helpers.clean_df)(data=X, update_cat=False)
+        mapping = suppress_logs(helpers.clean_df)(data=mapping, update_cat=False)
 
     # sort the mapping dict
     sorted_keys = sorted(mapping.keys())
@@ -397,6 +423,7 @@ def lazy_groupby(
     -------
     pl.LazyFrame
         The grouped and aggregated LazyFrame.
+
     """
     # check if columns are list or string and build aggregation expressions
     # defaults to sum aggregation
@@ -411,7 +438,7 @@ def lazy_groupby(
                 agg_expr.append(pl.count(col).alias(col))
             else:
                 agg_expr.append(pl.sum(col).alias(col))
-    else:
+    else:  # noqa: PLR5501
         if agg == "sum":
             agg_expr = pl.sum(agg_cols).alias(agg_cols)
         elif agg == "mean":

@@ -4,6 +4,8 @@ Tables dashboard.
 Issue age, duration, and attained age are needed to compare mortality tables.
 """
 
+import time
+
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
@@ -43,9 +45,15 @@ def layout():
     """Table layout."""
     return html.Div(
         [
-            dcc.Store(id="store-table-compare", storage_type="memory"),
+            dcc.Store(id="store-table-1-id", storage_type="memory"),
+            dcc.Store(id="store-table-2-id", storage_type="memory"),
+            dcc.Store(id="store-table-1-raw", storage_type="memory"),
+            dcc.Store(id="store-table-2-raw", storage_type="memory"),
             dcc.Store(id="store-table-1-select", storage_type="memory"),
             dcc.Store(id="store-table-2-select", storage_type="memory"),
+            dcc.Store(id="store-table-compare", storage_type="memory"),
+            dcc.Store(id="store-table-filter-trigger", storage_type="memory"),
+            dcc.Download(id="download-dataframe-csv"),
             # Header section with gradient background
             html.Div(
                 [
@@ -117,25 +125,13 @@ def layout():
                         dbc.Button(
                             [
                                 html.I(className="fas fa-sync-alt me-2"),
-                                "Compare",
+                                "Refresh",
                             ],
-                            id="compare-button",
+                            id="refresh-button",
                             color="primary",
                             className="w-100 shadow-sm",
                         ),
-                        width=9,
-                    ),
-                    dbc.Col(
-                        dbc.Button(
-                            [
-                                html.I(className="fas fa-filter me-2"),
-                                "Filter",
-                            ],
-                            id="filter-button",
-                            color="primary",
-                            className="w-100 shadow-sm",
-                        ),
-                        width=3,
+                        width=2,
                     ),
                 ],
                 className="mb-4",
@@ -526,22 +522,115 @@ def set_table_2_input(value):
 
 @callback(
     [
+        Output("store-table-1-id", "data"),
+        Output("store-table-2-id", "data"),
+        Output("store-table-1-raw", "data"),
+        Output("store-table-2-raw", "data"),
         Output("store-table-1-select", "data"),
         Output("store-table-2-select", "data"),
         Output("table-1-filters", "children"),
         Output("table-2-filters", "children"),
+        Output("tables-toast", "is_open", allow_duplicate=True),
+        Output("tables-toast", "children", allow_duplicate=True),
+        Output("store-table-filter-trigger", "data"),
+    ],
+    [Input("refresh-button", "n_clicks")],
+    [
+        State("table-1-id", "value"),
+        State("table-2-id", "value"),
+        State("store-table-1-id", "data"),
+        State("store-table-2-id", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def initialize_tables(
+    n_clicks,
+    table1_id,
+    table2_id,
+    prev_table1_id,
+    prev_table2_id,
+):
+    """Get the initial table data."""
+    logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
+    no_upate_tuple = (dash.no_update,) * 8
+    warning_tuple = (False, "")
+    trigger_value = time.time()
+
+    if table1_id is None or table2_id is None:
+        return (*no_upate_tuple, True, "No table selected.", dash.no_update)
+
+    # check if tables have changed
+    tables_changed = (
+        prev_table1_id is None
+        or prev_table2_id is None
+        or prev_table1_id != table1_id
+        or prev_table2_id != table2_id
+    )
+
+    # generate filters only if tables have changed
+    if tables_changed:
+        # load tables
+        (
+            table_1,
+            table_2,
+            table_1_select_period,
+            table_2_select_period,
+            mults_1,
+            mults_2,
+            warning_tuple,
+        ) = load_tables(table1_id, table2_id)
+
+        if True in warning_tuple:
+            return (*no_upate_tuple, *warning_tuple, dash.no_update)
+
+        filters_1 = dh.generate_filters(
+            df=table_1,
+            prefix="table-1",
+            exclude_cols=["vals", "constant"],
+            mult_table=mults_1,
+        ).get("filters")
+        filters_2 = dh.generate_filters(
+            df=table_2,
+            prefix="table-2",
+            exclude_cols=["vals", "constant"],
+            mult_table=mults_2,
+        ).get("filters")
+    else:
+        return (*no_upate_tuple, *warning_tuple, trigger_value)
+
+    return (
+        table1_id,
+        table2_id,
+        table_1.to_dict("records"),
+        table_2.to_dict("records"),
+        table_1_select_period,
+        table_2_select_period,
+        filters_1,
+        filters_2,
+        False,
+        False,
+        trigger_value,
+    )
+
+
+@callback(
+    [
         Output("store-table-compare", "data"),
         Output("table-1-desc", "children"),
         Output("table-2-desc", "children"),
         Output("graph-su-table-1", "children"),
         Output("graph-su-table-2", "children"),
-        Output("tables-toast", "is_open", allow_duplicate=True),
-        Output("tables-toast", "children", allow_duplicate=True),
     ],
-    [Input("compare-button", "n_clicks"), Input("filter-button", "n_clicks")],
     [
-        State("table-1-id", "value"),
-        State("table-2-id", "value"),
+        Input("store-table-filter-trigger", "data"),
+    ],
+    [
+        State("store-table-1-id", "data"),
+        State("store-table-2-id", "data"),
+        State("store-table-1-raw", "data"),
+        State("store-table-2-raw", "data"),
+        State("store-table-1-select", "data"),
+        State("store-table-2-select", "data"),
         State({"type": "table-1-str-filter", "index": ALL}, "value"),
         State({"type": "table-1-num-filter", "index": ALL}, "value"),
         State({"type": "table-2-str-filter", "index": ALL}, "value"),
@@ -549,49 +638,25 @@ def set_table_2_input(value):
     ],
     prevent_initial_call=True,
 )
-def initialize_tables(
-    n_clicks,
-    filter_button,
+def filter_tables_callback(
+    filter_trigger,
     table1_id,
     table2_id,
+    table_1_raw,
+    table_2_raw,
+    table_1_select_period,
+    table_2_select_period,
     filter_table_1_str,
     filter_table_1_num,
     filter_table_2_str,
     filter_table_2_num,
 ):
-    """Get the initial table data."""
-    logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
-    no_upate_tuple = (dash.no_update,) * 9
-    warning_tuple = (False, "")
-
-    if table1_id is None or table2_id is None:
-        return (*no_upate_tuple, True, "No table selected.")
-
+    """Filter the tables."""
     # load tables
-    table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple = (
-        load_tables(table1_id, table2_id)
-    )
+    table_1 = pd.DataFrame(table_1_raw)
+    table_2 = pd.DataFrame(table_2_raw)
 
-    if True in warning_tuple:
-        return (*no_upate_tuple, *warning_tuple)
-
-    # generate filters
-    if callback_context.triggered_id == "compare-button":
-        filters_1 = dh.generate_filters(
-            df=table_1,
-            prefix="table-1",
-            exclude_cols=["vals", "constant"],
-        ).get("filters")
-        filters_2 = dh.generate_filters(
-            df=table_2,
-            prefix="table-2",
-            exclude_cols=["vals", "constant"],
-        ).get("filters")
-    else:
-        filters_1 = dash.no_update
-        filters_2 = dash.no_update
-
-    # Get the filters from the callback context for description
+    # get filters from the callback context for description
     states_info = dh._inputs_flatten_list(callback_context.states_list)
     filters_table_1 = dh._inputs_parse_type(
         states_info, "table-1-num-filter"
@@ -633,7 +698,7 @@ def initialize_tables(
         filtered_table_2,
         table_1_select_period,
         table_2_select_period,
-        filters_table_1,  # Pass the filter info directly from states
+        filters_table_1,
         filters_table_2,
     )
 
@@ -646,17 +711,11 @@ def initialize_tables(
     )
 
     return (
-        table_1_select_period,
-        table_2_select_period,
-        filters_1,
-        filters_2,
         compare_df.to_dict("records"),
         desc_1,
         desc_2,
         graph_su_table_1,
         graph_su_table_2,
-        False,
-        False,
     )
 
 
@@ -686,17 +745,24 @@ def create_contour(
         issue_age_value = round((issue_age_max + issue_age_min) / 2, 0)
     issue_age_marks = {i: str(i) for i in range(issue_age_min, issue_age_max, 10)}
 
-    # adding attained_age to additional hover data
-    grouped_data = (
-        compare_df.groupby(["issue_age", "duration"], observed=True)["ratio"]
-        .agg("sum")
-        .reset_index()
-    )
-    grouped_data = grouped_data.pivot(
+    # creating the hover data
+    grouped_data = compare_df.pivot(
         index="duration", columns="issue_age", values="ratio"
     )
-    issue_age, duration = np.meshgrid(grouped_data.columns, grouped_data.index)
-    attained_age = issue_age + duration - 1
+    z_values = grouped_data.values
+    issue_ages = grouped_data.columns.to_numpy()
+    durations = grouped_data.index.to_numpy()
+    issue_age_grid, duration_grid = np.meshgrid(issue_ages, durations)
+    attained_age = issue_age_grid + duration_grid - 1
+    text = np.empty(z_values.shape, dtype=object)
+    for i in range(z_values.shape[0]):
+        for j in range(z_values.shape[1]):
+            text[i, j] = (
+                f"issue_age: {issue_ages[j]}<br>"
+                f"duration: {durations[i]}<br>"
+                f"attained_age: {attained_age[i, j]}<br>"
+                f"ratio: {z_values[i, j]:.2f}"
+            )
 
     # custom colorscale
     zmin = 0.5
@@ -723,13 +789,8 @@ def create_contour(
         type="contour",
         agg="mean",
         # add custom hover data
-        customdata=attained_age,
-        hovertemplate=(
-            "issue_age: %{x}<br>"
-            "duration: %{y}<br>"
-            "attained_age: %{customdata}<br>"
-            "ratio: %{z}<extra></extra>"
-        ),
+        text=text,
+        hoverinfo="text",
         # custom colorscale and contours
         colorscale=custom_colorscale,
         zmin=zmin,
@@ -836,6 +897,8 @@ def update_table_tabs(
             table_2,
             table_1_select_period,
             table_2_select_period,
+            mults_1,
+            mults_2,
             warning_tuple,
         ) = load_tables(table1_id, table2_id)
 
@@ -875,12 +938,23 @@ def update_table_tabs(
 
     # deserialize the table
     columnDefs = dash_formats.get_column_defs(table)
-    tab_content = dag.AgGrid(
+
+    # create button & table
+    export_button = html.Button(
+        "Export to CSV",
+        id={"type": "export-button", "tab": active_tab, "page": "tables"},
+        className="btn btn-primary mt-2 mb-2",
+    )
+
+    grid = dag.AgGrid(
+        id={"type": "data-table", "tab": active_tab, "page": "tables"},
         rowData=table.to_dict("records"),
         columnDefs=columnDefs,
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
         dashGridOptions={"pagination": True},
     )
+
+    tab_content = html.Div([export_button, grid])
 
     return tab_content
 
@@ -899,6 +973,8 @@ def load_tables(table1_id, table2_id):
     table_2 = pd.DataFrame()
     table_1_select_period = "Unknown"
     table_2_select_period = "Unknown"
+    mults_1 = None
+    mults_2 = None
     warning_tuple = (False, "")
     mt = tables.MortTable()
 
@@ -920,6 +996,7 @@ def load_tables(table1_id, table2_id):
             try:
                 rate_table = tables.MortTable(rate=table1_id)
                 table_1 = rate_table.rate_table
+                mults_1 = rate_table.mult_table
                 table_1_select_period = "Unknown"
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table1_id}")
@@ -953,6 +1030,7 @@ def load_tables(table1_id, table2_id):
             try:
                 rate_table = tables.MortTable(rate=table2_id)
                 table_2 = rate_table.rate_table
+                mults_2 = rate_table.mult_table
                 table_2_select_period = "Unknown"
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table1_id}")
@@ -968,7 +1046,15 @@ def load_tables(table1_id, table2_id):
             logger.warning(f"Table not found: {table2_id}")
             warning_tuple = (True, f"Table not found: {table2_id}")
 
-    return table_1, table_2, table_1_select_period, table_2_select_period, warning_tuple
+    return (
+        table_1,
+        table_2,
+        table_1_select_period,
+        table_2_select_period,
+        mults_1,
+        mults_2,
+        warning_tuple,
+    )
 
 
 def filter_tables(table_1, table_2, filter_list):
@@ -1103,7 +1189,7 @@ def get_su_graph(df, select_period, title):
         agg="mean",
         title=title,
         hovertemplate=(
-            "issue_age: %{x}<br>" "duration: %{y}<br>" "ratio: %{z}<extra></extra>"
+            "issue_age: %{x}<br>duration: %{y}<br>ratio: %{z}<extra></extra>"
         ),
     )
 

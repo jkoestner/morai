@@ -15,6 +15,9 @@ logic_exposure_less_than_claim: |
   ((pl.col('Amount_Exposed') < pl.col('Death_Claim_Amount')) | 
   (pl.col('Policies_Exposed') < pl.col('Death_Count')))
   
+limit_exposure: |
+  (pl.col('Amount_Exposed') <= 0)
+  
 limit_attained_age: |
   ((pl.col('Attained_Age') < 0) | (pl.col('Attained_Age') > 120))
 

@@ -18,6 +18,7 @@ import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
 from dash_extensions.enrich import DashProxy, ServersideOutputTransform, dcc, html
 
+from morai.dashboard.utils import dashboard_helper as dh
 from morai.utils import custom_logger
 
 #      _    ____  ____
@@ -128,6 +129,7 @@ app.layout = html.Div(
     ]
 )
 
+dh.register_export_callback(app)
 
 if __name__ == "__main__":
     custom_logger.set_log_level("DEBUG", module_prefix="pages")

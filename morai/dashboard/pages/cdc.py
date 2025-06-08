@@ -50,6 +50,7 @@ def layout():
     return html.Div(
         [
             dcc.Store(id="store-cdc-results", storage_type="session"),
+            dcc.Download(id="download-dataframe-csv"),
             # Header section with gradient background
             html.Div(
                 [
@@ -660,7 +661,7 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
     cod_all = cdc.map_reference(
         df=cod_all,
         col=CATEGORY_COL,
-        on_dict={"icd_-_sub-chapter": "wonder_sub_chapter"},
+        on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
     cod_all = dh.filter_data(df=cod_all, callback_context=states_info)
 
@@ -688,7 +689,7 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         cod_all[
             (cod_all[CATEGORY_COL] != "total") & (cod_all["year"] == most_recent_year)
         ],
-        path=[px.Constant("all"), CATEGORY_COL, "icd_-_sub-chapter"],
+        path=[px.Constant("all"), CATEGORY_COL, "icd_sub_chapter"],
         values="deaths",
         # skip first color to match the first chart
         color_discrete_sequence=px.colors.qualitative.Plotly[1:],
@@ -710,7 +711,7 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
                 "population",
                 "crude_rate",
                 "added_at",
-                "icd_-_sub-chapter",
+                "icd_sub_chapter",
             ],
         )["filters"]
 
@@ -806,7 +807,7 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     cod_all = cdc.map_reference(
         df=cod_all,
         col=CATEGORY_COL,
-        on_dict={"icd_-_sub-chapter": "wonder_sub_chapter"},
+        on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
 
     # create totals column
@@ -976,7 +977,11 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
 
     # remap the age groups
     mi = cdc.map_reference(
-        df=mi, col="value", on_dict={"age_groups": "key"}, sheet_name="mapping"
+        df=mi,
+        col="value",
+        on_dict={"age_groups": "key"},
+        sheet_name="mapping",
+        category="bin_age",
     )
     mi = mi.drop("age_groups", axis=1)
     mi = mi.rename(columns={"value": "age_groups"})
@@ -995,11 +1000,18 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
 
     # mortality improvement table
     columnDefs = dash_formats.get_column_defs(mi_df)
-    mi_table = dag.AgGrid(
+    export_button = html.Button(
+        "Export to CSV",
+        id={"type": "export-button", "tab": "mi", "page": "cdc"},
+        className="btn btn-primary mt-2 mb-2",
+    )
+    grid = dag.AgGrid(
+        id={"type": "data-table", "tab": "mi", "page": "cdc"},
         rowData=mi_df.sort_values(by="year", ascending=False).to_dict("records"),
         columnDefs=columnDefs,
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
     )
+    mi_table = html.Div([export_button, grid])
 
     # create the filters
     cdc_mi_filters = dash.no_update

@@ -1,6 +1,9 @@
 """Collection of helpers."""
 
+import gc
+import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
@@ -17,62 +20,92 @@ FILES_PATH = (
     if os.getenv("MORAI_FILES_PATH")
     else ROOT_PATH / "files"
 )
-CONFIG_PATH = FILES_PATH / "dashboard_config.yaml"
+DASH_CONFIG_PATH = FILES_PATH / "dashboard_config.yaml"
 
 logger = custom_logger.setup_logging(__name__)
 
 
 def clean_df(
-    df: pd.DataFrame,
+    data: Union[pd.DataFrame, dict],
     lowercase: bool = True,
     underscore: bool = True,
     update_cat: bool = True,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, dict]:
     """
     Clean the DataFrame.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        The DataFrame to clean.
+    data : Union[pd.DataFrame, dict]
+        The DataFrame or dict to clean.
+        The dictionary is set up to be the mapping dictionary.
     lowercase : bool, optional (default=True)
         Whether to lowercase the column names.
     underscore : bool, optional (default=True)
-        Whether to replace spaces with underscores in the column names.
+        Whether to replace special characters with underscores in the column names.
     update_cat : bool, optional (default=False)
         Whether to remove unused categories.
 
     Returns
     -------
-    df : pd.DataFrame
-        The cleaned DataFrame.
+    data : Union[pd.DataFrame, dict]
+        The cleaned DataFrame or dict.
 
     """
-    if lowercase:
-        logger.info("lowercasing the column names")
-        df.columns = df.columns.str.lower()
+    # dataframe
+    if isinstance(data, pd.DataFrame):
+        if lowercase:
+            logger.info("lowercasing the column names")
+            data.columns = data.columns.str.lower()
 
-    if underscore:
-        logger.info("replacing spaces with underscores in the column names")
-        df.columns = df.columns.str.replace(" ", "_")
-
-    if update_cat:
-        logger.info("removed unused categories and reorder")
-        for column in df.select_dtypes(include=["category"]).columns:
-            if df[column].isna().any():
-                logger.info(f"{column} has missing values, filling with _NULL_")
-                df[column] = df[column].cat.add_categories("_NULL_").fillna("_NULL_")
-
-            df[column] = df[column].cat.remove_unused_categories()
-            df[column] = df[column].cat.reorder_categories(
-                sorted(df[column].unique()), ordered=True
+        if underscore:
+            logger.info(
+                "replacing special characters with underscores in the column names"
             )
+            data.columns = data.columns.str.replace("[^0-9a-zA-Z_]+", "_", regex=True)
 
-    logger.info("update index to int32")
-    df.index = df.index.astype("int32")
-    logger.info(f"dataFrame shape: {df.shape}")
+        if update_cat:
+            logger.info("removed unused categories and reorder")
+            for column in data.select_dtypes(include=["category"]).columns:
+                if data[column].isna().any():
+                    logger.info(f"{column} has missing values, filling with _NULL_")
+                    data[column] = (
+                        data[column].cat.add_categories("_NULL_").fillna("_NULL_")
+                    )
 
-    return df
+                data[column] = data[column].cat.remove_unused_categories()
+                data[column] = data[column].cat.reorder_categories(
+                    sorted(data[column].unique()), ordered=True
+                )
+
+        logger.info("update index to int32")
+        data.index = data.index.astype("int32")
+        logger.info(f"dataFrame shape: {data.shape}")
+
+    # mapping dictionary
+    elif isinstance(data, dict):
+        for val in data.values():
+            if isinstance(val, dict) and "values" in val:
+                cleaned_values = {}
+                for k, v in val["values"].items():
+                    if not isinstance(v, str):
+                        cleaned_values[k] = v
+                        continue
+                    new_v = v
+                    if lowercase:
+                        new_v = new_v.lower()
+                    if underscore:
+                        new_v = re.sub(r"[^0-9a-zA-Z_]+", "_", new_v)
+                    cleaned_values[k] = new_v
+                val["values"] = cleaned_values
+
+    # type not accepted
+    else:
+        raise TypeError(
+            "Input must be either a pandas DataFrame or a dictionary of lists."
+        )
+
+    return data
 
 
 def memory_usage_df(df: pd.DataFrame) -> None:
@@ -93,15 +126,9 @@ def memory_usage_df(df: pd.DataFrame) -> None:
     print(f"Memory usage per column:\n{memory_usage_per_column}")
 
 
-def memory_usage_jupyter(globals: dict) -> pd.DataFrame:
+def memory_usage_jupyter() -> pd.DataFrame:
     """
     Calculate the memory usage of objects in the Jupyter notebook.
-
-    Parameters
-    ----------
-    globals : dict
-        The globals() dictionary. This needs to be passed in from the Jupyter notebook
-        using "globals()".
 
     Returns
     -------
@@ -109,6 +136,7 @@ def memory_usage_jupyter(globals: dict) -> pd.DataFrame:
         The DataFrame with the object sizes in MB.
 
     """
+    globals = sys.modules["__main__"].__dict__
     ipython_vars = ["In", "Out", "exit", "quit", "get_ipython", "ipython_vars"]
 
     variables = [
@@ -126,6 +154,73 @@ def memory_usage_jupyter(globals: dict) -> pd.DataFrame:
     )
 
     return object_sizes
+
+
+def memory_usage_jupyter_cells(notebook: str, top_n: int = 10) -> pd.DataFrame:
+    """
+    Calculate the memory usage of cells in Jupyter notebook.
+
+    Parameters
+    ----------
+    notebook : str
+        The path to the Jupyter notebook.
+    top_n : int, optional (default=10)
+        The number of top cells to return.
+
+    Returns
+    -------
+    top_cells : pd.DataFrame
+        The DataFrame with the top cells in MB.
+
+    """
+    # get the notebook path
+    nb_path = Path(notebook)
+    if not nb_path.exists():
+        matches = list(Path(ROOT_PATH / "notebooks").rglob(str(notebook)))
+        if len(matches) == 1:
+            nb_path = matches[0]
+        else:
+            raise FileNotFoundError(f"Notebook {notebook} not found.")
+
+    logger.info(f"getting largest cells for {nb_path}")
+
+    # read the notebook and get the cell memory usage
+    with open(nb_path, encoding="utf-8") as f:
+        nb = json.load(f)
+
+    rows = []
+    for i, cell in enumerate(nb["cells"]):
+        raw = json.dumps(cell, ensure_ascii=False)
+        size_kb = len(raw.encode("utf-8")) / 1024
+        rows.append(
+            {
+                "cell_idx": i,
+                "cell_type": cell.get("cell_type", "unknown"),
+                "size_kb": round(size_kb, 1),
+                "preview": "".join(cell.get("source", []))[:120].replace("\n", " "),
+            }
+        )
+
+    top_cells = pd.DataFrame(rows).sort_values("size_kb", ascending=False)
+
+    return top_cells.head(top_n)
+
+
+def delete_jupyter_objects(objects: list) -> None:
+    """
+    Delete objects in the Jupyter notebook.
+
+    Parameters
+    ----------
+    objects : list
+        The objects to delete.
+
+    """
+    globals = sys.modules["__main__"].__dict__
+    for obj in objects:
+        del globals[obj]
+    gc.collect()
+    logger.info(f"deleted `{len(objects)}` objects in the Jupyter notebook")
 
 
 def test_path(path: str) -> Path:

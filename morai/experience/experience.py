@@ -55,9 +55,9 @@ def normalize(
         List of columns to group by.
     numerator : str
         Column to normalize.
-    denominator : str, optional
+    denominator : str, optional default=None
         Weighting column.
-    add_norm_col : bool, optional
+    add_norm_col : bool, optional default=False
         Add the normalized column instead of overwriting.
 
     Returns

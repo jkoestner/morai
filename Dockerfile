@@ -9,9 +9,24 @@
 # slim was used instead of alpine because of the need of numpy
 FROM python:3.12-slim
 
-# Install dependencies, git
+# Install dependencies, git and R
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends \
+        git \
+        # for R
+        # adds about 1GB to image size
+        build-essential \
+        libpcre2-dev \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libxml2-dev \
+        locales \
+        gfortran \
+        r-base \
+        libbz2-dev \
+        liblzma-dev \
+        libblas-dev \
+        zlib1g-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -21,11 +36,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 # Set work directory
 WORKDIR /code
 
-# Define a build-time argument for the branch name
-ARG BRANCH_NAME=main
-
 # Install the package from a specific branch
-RUN uv pip install --no-cache-dir --system "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}"
+ARG BRANCH_NAME=main
+RUN echo "Installing from branch: $BRANCH_NAME" && \
+    uv pip install --system "git+https://github.com/jkoestner/morai.git@${BRANCH_NAME}#egg=morai[r]"
 
 # Create new user
 RUN adduser --disabled-password --gecos '' morai && \

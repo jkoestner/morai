@@ -4,33 +4,24 @@
 #  | |_| |___) | |___|  _ < 
 #   \___/|____/|_____|_| \_\
 
-glm:
-  rate: glm
-  description: glm output
+simple_glm:
+  rate: simple_glm
+  description: glm output from glm notebook
   keys:
-    - attained_age
-    - smoker_status
+    - face
     - sex
-    - duration
-    - capped_duration
   type:
     csv: 
-      filename: glm.csv
-glm_mults:
-  rate: glm_mults
-  description: glm output with mults
+      filename: simple_glm.csv
+simple_glm_mults:
+  rate: simple_glm_mults
+  description: glm output with mults from glm notebook
   keys:
-    - attained_age
-    - smoker_status
+    - face
     - sex
-    - duration
-    - binned_face
-    - class_enh
-    - insurance_plan
-    - observation_year
   type:
     workbook: 
-      filename: glm.xlsx
+      filename: simple_glm_mults.xlsx
       mult_table: True
 
 #  __     ______ _____ _ ____  

@@ -10,7 +10,8 @@ import polars as pl
 import pymort
 import yaml
 
-from morai.forecast import models, preprocessors
+from morai.forecast import preprocessors
+from morai.models import core
 from morai.utils import custom_logger, helpers
 from morai.utils.custom_logger import suppress_logs
 
@@ -369,19 +370,6 @@ class MortTable:
                 .to_dict()
             )
 
-        # check that subcategory and category are in the multiplier table
-        # if not set(selected_dict.keys()).issubset(self.mult_table["category"].unique()):
-        #     raise ValueError(
-        #         "selected_dict keys must be in the multiplier table `category` column"
-        #     )
-        # if not set(selected_dict.values()).issubset(
-        #     self.mult_table["subcategory"].unique()
-        # ):
-        #     raise ValueError(
-        #         "selected_dict values must be in the multiplier table "
-        #         "`subcategory` column."
-        #     )
-
         # select the rows in mult_table that match the selected mults
         selected_mults = self.mult_table[
             self.mult_table.apply(
@@ -396,7 +384,7 @@ class MortTable:
         product_of_means = np.prod(mean_category_mult)
         logger.info(f"derived table using multiplier: `{product_of_means:.2f}`")
         logger.info(
-            f"used the following subcategories: " f"`{list(selected_dict.values())}`"
+            f"used the following subcategories: `{list(selected_dict.values())}`"
         )
 
         # apply the multiplier
@@ -500,7 +488,7 @@ def generate_table(
     preprocess_params: Dict[str, Any],
     grid: Optional[pd.DataFrame] = None,
     mult_features: Optional[List[str]] = None,
-    mult_method: str = "mean",
+    mult_method: str = "glm",
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate a 1-d mortality table based on model predictions.
@@ -529,9 +517,17 @@ def generate_table(
         The features to use for the multiplier table. This is based on the method
         of `mult_method`.
     mult_method : str, optional
-        The method to use for the multiplier table. The options are:
+        The method to use for the multiplier table. With a GLM the multiplier is
+        an odds ratio so it is not a constant scalar. The multiplier wears off the
+        closer the prediction is to 1.
+
+        The options are:
+          - "glm": uses the initial log ratio of the glm model. This is the default.
+            When predictions are low there is not much difference between the multiplier
+            however when the predictions are high there will be large differences in
+            glm multiplier.
           - "mean": the mean prediction for the feature
-          - "glm": uses the initial log ratio of the glm model
+
 
 
     Returns
@@ -545,7 +541,7 @@ def generate_table(
     """
     # initialize the variables
     logger.info(f"generating table for model {type(model).__name__}")
-    models.ModelWrapper(model).check_predict()
+    core.ModelWrapper(model).check_predict()
     rate_mapping = mapping
     rate_feature_dict = {
         k: v
@@ -589,7 +585,7 @@ def generate_table(
         )
 
     # prediction needs to be in same order as model
-    model_features = models.ModelWrapper(model).get_features()
+    model_features = core.ModelWrapper(model).get_features()
     rate_table = rate_table.loc[:, model_features]
 
     # make predictions
@@ -806,7 +802,7 @@ def map_rates(
             df[rate_name] = df[rate_name] * df[mult_col]
         df = df.drop(columns=mult_cols)
         merge_keys = merge_keys + list(mult_to_df_map.keys())
-    logger.info(f"the mapped rates are based on the following " f"keys: {merge_keys}")
+    logger.info(f"the mapped rates are based on the following keys: {merge_keys}")
 
     # check if there are any missing rates
     missing_rates = df[df[rate_name].isnull()]
@@ -911,7 +907,7 @@ def compare_tables(
         DataFrame of the comparison with the ratio of the table_1/table_2 values.
 
     """
-    if type(table_1) != pd.DataFrame or type(table_2) != pd.DataFrame:
+    if not isinstance(table_1, pd.DataFrame) or not isinstance(table_2, pd.DataFrame):
         raise ValueError("Both tables must be pandas DataFrames.")
     if value_col not in table_1.columns or value_col not in table_2.columns:
         raise ValueError(f"Value column: {value_col} not in both tables.")
@@ -925,7 +921,7 @@ def compare_tables(
     # get the unique keys dict for each table
     unique_keys = {}
     for i, table in enumerate([table_1, table_2]):
-        table_name = f"table_{i+1}"
+        table_name = f"table_{i + 1}"
         unique_keys[table_name] = list(
             set(table.columns) - set(common_keys) - {value_col}
         )
@@ -980,39 +976,59 @@ def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
 
     """
     initial_rows = len(df)
+    invalid_mask = None
+    cap_mask = None
 
     # check for invalid attained age / duration / issue age combos
     if all(col in df.columns for col in ["attained_age", "issue_age", "duration"]):
-        df = df[df["attained_age"] >= df["duration"] - 1]
-        df = df[df["attained_age"] >= df["issue_age"]]
+        invalid_mask = df["attained_age"] < df["duration"] - 1
+        invalid_mask = invalid_mask | (df["attained_age"] < df["issue_age"])
     elif all(col in df.columns for col in ["attained_age", "duration"]):
-        df = df[df["attained_age"] >= df["duration"] - 1]
+        invalid_mask = df["attained_age"] < df["duration"] - 1
     elif all(col in df.columns for col in ["attained_age", "issue_age"]):
-        df = df[df["attained_age"] >= df["issue_age"]]
+        invalid_mask = df["attained_age"] < df["issue_age"]
+
+    if invalid_mask is not None:
+        removed_invalid = df[invalid_mask]
+        if len(removed_invalid) > 0:
+            example_invalid = removed_invalid.head(1).to_dict(orient="records")[0]
+            logger.info(
+                f"Removed '{len(removed_invalid)}' rows where attained_age, issue_age, "
+                f"or duration was invalid. \n"
+                f"Example: {example_invalid}"
+            )
+            df = df[~invalid_mask]
 
     # cap the max attained age
     if "attained_age" in df.columns:
-        df = df[df["attained_age"] <= max_age]
+        cap_mask = df["attained_age"] > max_age
     elif all(col in df.columns for col in ["issue_age", "duration"]):
-        df = df[(df["issue_age"] + df["duration"] - 1) <= max_age]
+        cap_mask = (df["issue_age"] + df["duration"] - 1) > max_age
+
+    if cap_mask is not None:
+        removed_cap = df[cap_mask]
+        if len(removed_cap) > 0:
+            example_cap = removed_cap.head(1).to_dict(orient="records")[0]
+            logger.info(
+                f"Removed '{len(removed_cap)}' rows where attained_age, issue_age, "
+                f"or duration was invalid. \n"
+                f"Example: {example_cap}"
+            )
+            df = df[~cap_mask]
 
     removed_rows = initial_rows - len(df)
     if removed_rows:
-        logger.info(
-            f"Removed '{removed_rows}' rows where attained_age, issue_age, "
-            f"or duration was invalid."
-        )
         df = df.reset_index(drop=True)
 
     return df
 
 
-def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
+def add_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     """
     Add attained age, issue age, and duration columns.
 
-    Removes invalid rows for attained age, duration, and issue age. Will also
-    capp the attained age at the max_age.
+    Adds the columns if they are not present. Will also cap the attained age at
+    the max_age.
 
     attained_age = issue_age + duration - 1
 
@@ -1020,11 +1036,13 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
     ----------
     df : pd.DataFrame
         The DataFrame.
+    max_age : int, optional (default=121)
+        The maximum age.
 
     Returns
     -------
     df : pd.DataFrame
-        The DataFrame with the columns checked.
+        The DataFrame with the columns added.
 
     """
     initial_rows = len(df)
@@ -1040,7 +1058,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
         df["attained_age"] = df["issue_age"] + df["duration"] - 1
     elif all(col in df.columns for col in ["issue_age"]):
         df_list = [df]
-        for attained_age in range(122):
+        for attained_age in range(max_age + 1):
             df_temp = df.copy()
             df_temp["attained_age"] = attained_age
             df_temp["duration"] = df_temp["attained_age"] - df_temp["issue_age"] + 1
@@ -1048,7 +1066,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
         df = pd.concat(df_list, ignore_index=True)
     elif all(col in df.columns for col in ["attained_age"]):
         df_list = [df]
-        for issue_age in range(122):
+        for issue_age in range(max_age + 1):
             df_temp = df.copy()
             df_temp["issue_age"] = issue_age
             df_temp["duration"] = df_temp["attained_age"] - df_temp["issue_age"] + 1
@@ -1056,7 +1074,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
         df = pd.concat(df_list, ignore_index=True)
     elif all(col in df.columns for col in ["duration"]):
         df_list = [df]
-        for issue_age in range(122):
+        for issue_age in range(max_age + 1):
             df_temp = df.copy()
             df_temp["issue_age"] = issue_age
             df_temp["attained_age"] = df_temp["issue_age"] + df_temp["duration"] - 1
@@ -1070,7 +1088,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
     df = check_aa_ia_dur_cols(df)
 
     added_rows = len(df) - initial_rows
-    if added_rows:
+    if added_rows > 0:
         logger.info(
             f"Added '{added_rows}' rows for attained_age, issue_age, or duration."
         )

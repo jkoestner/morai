@@ -14,7 +14,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 from xgboost import XGBRegressor
 
-from morai.forecast import models, preprocessors
+from morai.forecast import preprocessors
+from morai.models import core
 from morai.utils import helpers
 
 test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast" / "models"
@@ -64,12 +65,57 @@ def test_glm():
     X = preprocess_dict["X"]
     y = preprocess_dict["y"]
     weights = preprocess_dict["weights"]
-    GLM = models.GLM()
+    GLM = core.GLM()
     GLM.fit(X, y, weights)
-    predictions = GLM.model.predict(X)
+    predictions = GLM.predict(X)
 
     assert predictions.mean() == approx(0.0525, abs=1e-4), "glm mean is off"
     assert predictions[0] == approx(0.0815, abs=1e-4), "glm first value is off"
+
+
+def test_gam():
+    """
+    Test the Generalized Additive Model.
+
+    Another check is to review a separate package to obtain the same result.
+    When using pygam and setting lam to 0 the same result can be achieved.
+
+    import pygam
+    from pygam import l, s
+    gam = pygam.GAM(
+        s(0, n_splines=5) + l(1) + l(2),
+        distribution="binomial",
+        link="logit",
+        fit_intercept=False,
+        lam=0.0,
+    ).fit(X, y)
+
+    """
+    sigmoid_data = pd.read_csv(test_forecast_path / "sigmoid_data.csv")
+    feature_dict = {
+        "target": ["rate"],
+        "weight": [],
+        "passthrough": ["age", "gender"],
+    }
+    preprocess_dict = preprocessors.preprocess_data(
+        sigmoid_data,
+        feature_dict=feature_dict,
+        standardize=False,
+        add_constant=True,
+    )
+    X = preprocess_dict["X"]
+    y = preprocess_dict["y"]
+    weights = preprocess_dict["weights"]
+    spline_dict = {
+        "age": {"df": 5, "degree": 3},
+    }
+    GAM = core.GAMStats()
+    GAM.setup_model(X=X, y=y, weights=weights, spline_dict=spline_dict)
+    GAM.fit()
+    predictions = GAM.predict(X)
+
+    assert predictions.mean() == approx(0.4381, abs=1e-4), "gam mean is off"
+    assert predictions[0] == approx(2.9221e-04, abs=1e-4), "gam first value is off"
 
 
 def test_lr():
@@ -78,12 +124,12 @@ def test_lr():
     clf.fit(X, y, sample_weight=weights)
     predictions = clf.predict(X)
 
-    assert predictions.mean() == approx(
-        0.0525, abs=1e-4
-    ), "linear regression mean is off"
-    assert predictions[0] == approx(
-        0.0775, abs=1e-4
-    ), "linear regression first value is off"
+    assert predictions.mean() == approx(0.0525, abs=1e-4), (
+        "linear regression mean is off"
+    )
+    assert predictions[0] == approx(0.0775, abs=1e-4), (
+        "linear regression first value is off"
+    )
 
 
 def test_tree():
@@ -93,9 +139,9 @@ def test_tree():
     predictions = clf.predict(X)
 
     assert predictions.mean() == approx(0.0525, abs=1e-4), "decision tree mean is off"
-    assert predictions[0] == approx(
-        0.1000, abs=1e-4
-    ), "decision tree first value is off"
+    assert predictions[0] == approx(0.1000, abs=1e-4), (
+        "decision tree first value is off"
+    )
 
 
 def test_rf():
@@ -117,9 +163,9 @@ def test_rf():
     predictions = rf_fit.predict(X)
 
     assert predictions.mean() == approx(0.0523, abs=1e-4), "random forest mean is off"
-    assert predictions[0] == approx(
-        0.0645, abs=1e-4
-    ), "random forest first value is off"
+    assert predictions[0] == approx(0.0645, abs=1e-4), (
+        "random forest first value is off"
+    )
 
 
 def test_lgb():
@@ -174,33 +220,33 @@ def test_lee_carter():
     """Test the Lee-Carter model."""
     lc_df = hmd_usa_df.copy()
     # creating the model
-    lc = models.LeeCarter()
+    lc = core.LeeCarter()
     # qx values for historical
     lc_df = lc.fit(lc_df)
     # qx values for projected
     lcf_df = lc.forecast(years=5, seed=seed)
 
-    assert lc_df["qx_lc"].mean() == approx(
-        0.0526, abs=1e-4
-    ), "lee-carter historical mean is off"
-    assert lcf_df["qx_lc"].mean() == approx(
-        0.0464, abs=1e-4
-    ), "lee-carter forecasted mean is off"
+    assert lc_df["qx_lc"].mean() == approx(0.0526, abs=1e-4), (
+        "lee-carter historical mean is off"
+    )
+    assert lcf_df["qx_lc"].mean() == approx(0.0464, abs=1e-4), (
+        "lee-carter forecasted mean is off"
+    )
 
 
 def test_cbd():
     """Test the CBD model."""
     cbd_df = hmd_usa_df.copy()
     # creating the model
-    cbd = models.CBD()
+    cbd = core.CBD()
     # qx values for historical
     cbd_df = cbd.fit(cbd_df)
     # qx values for projected
     cbdf_df = cbd.forecast(years=5, seed=seed)
 
-    assert cbd_df["qx_cbd"].mean() == approx(
-        0.0423, abs=1e-4
-    ), "cbd historical mean is off"
-    assert cbdf_df["qx_cbd"].mean() == approx(
-        0.0370, abs=1e-4
-    ), "cbd forecasted mean is off"
+    assert cbd_df["qx_cbd"].mean() == approx(0.0423, abs=1e-4), (
+        "cbd historical mean is off"
+    )
+    assert cbdf_df["qx_cbd"].mean() == approx(0.0370, abs=1e-4), (
+        "cbd forecasted mean is off"
+    )

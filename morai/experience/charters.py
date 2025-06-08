@@ -10,11 +10,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
 from joblib import Parallel, cpu_count, delayed
+from pandas import CategoricalDtype
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 
+from morai import models
 from morai.experience import experience
-from morai.forecast import models, preprocessors
+from morai.forecast import preprocessors
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
@@ -167,7 +169,7 @@ def chart(
         )
     grouped_data = grouped_data.sort_values(
         groupby_cols,
-        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
     )
 
     # calculate ratios if needed
@@ -417,7 +419,7 @@ def compare_rates(
         )
     grouped_data = grouped_data.sort_values(
         groupby_features,
-        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
     )
 
     # return data if not display
@@ -545,7 +547,7 @@ def frequency(
                 by=col,
                 ascending=True,
                 key=lambda x: x.astype(str)
-                if pd.api.types.is_categorical_dtype(x)
+                if isinstance(x.dtype, CategoricalDtype)
                 else x,
             )
 
@@ -575,6 +577,7 @@ def pdp(
     secondary: Optional[str] = None,
     mapping: Optional[Dict[str, Dict[str, Union[str, Dict[str, str]]]]] = None,
     x_bins: Optional[int] = None,
+    center: str = "global",
     quick: bool = False,
     n_jobs: Optional[int] = None,
     display: bool = True,
@@ -582,7 +585,7 @@ def pdp(
     """
     Create a partial dependence plot (PDP) for the DataFrame.
 
-    The 1-dimension partial dependency plot assumes will loop through the values of
+    The 1-dimension partial dependency plot will loop through the values of
     the feature and average the predictions.
     This then develops a relative risk as the only difference in prediction is
     the analyzed feature.
@@ -614,6 +617,11 @@ def pdp(
         values.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
+    center : str, optional (default='global')
+        The centering method to use for the PDP.
+        - 'global': the mean of the predictions is used as the center.
+        - 'per_x': the mean of the predictions for each x value is used as the center.
+        - 'raw': the predictions are used as is.
     quick : bool, optional (default=False)
         Whether to use a quicker method for pdp, however the results may not be as
         accurate.
@@ -631,7 +639,7 @@ def pdp(
     """
     df = df.copy()
     # make sure model has prediction function
-    models.ModelWrapper(model).check_predict()
+    models.core.ModelWrapper(model).check_predict()
     logger.info(f"Model: [{type(model).__name__}] for partial dependence plot.")
 
     # initialize variables
@@ -647,7 +655,7 @@ def pdp(
 
     # get the feature names from the model to create X
     model_features = None
-    model_features = models.ModelWrapper(model).get_features()
+    model_features = models.core.ModelWrapper(model).get_features()
     logger.debug(f"Model features for pdp: {model_features}")
 
     # check df is not empty
@@ -669,7 +677,7 @@ def pdp(
         if pd.api.types.is_integer_dtype(df[x_axis].dtype):
             df[x_axis] = df[x_axis].astype(float)
         x_axis_values = np.linspace(df[x_axis].min(), df[x_axis].max(), 100)
-    logger.info(f"x_axis: [{x_axis}] type: [{x_axis_type}]")
+    logger.info(f"x_axis: [{x_axis}] type: [{x_axis_type}] center: [{center}]")
     X = df[model_features]
 
     # line_color processing
@@ -694,7 +702,7 @@ def pdp(
             .sort_values(
                 by=grouped_features,
                 key=lambda x: x.astype(str)
-                if pd.api.types.is_categorical_dtype(x)
+                if isinstance(x.dtype, CategoricalDtype)
                 else x,
             )
         )
@@ -773,8 +781,19 @@ def pdp(
 
     # the mean prediction should be average and not weighted so that the values
     # are relative to eachother and not to the weights.
-    mean_pred = np.mean(pdp_df["pred"])
-    pdp_df["%_diff"] = (pdp_df["pred"] - mean_pred) / mean_pred + 1
+    if center == "global":
+        mean_pred = pdp_df["pred"].mean()
+        pdp_df["%_diff"] = (pdp_df["pred"] - mean_pred) / mean_pred + 1
+    elif center == "per_x":
+        grouped = pdp_df.groupby(x_axis)["pred"].transform("mean")
+        pdp_df["%_diff"] = (pdp_df["pred"] - grouped) / grouped + 1
+    elif center == "raw":
+        pdp_df["%_diff"] = pdp_df["pred"]
+    else:
+        raise ValueError(
+            f"Invalid center value: {center}, must be 'global', 'per_x', or 'raw'"
+        )
+
     if secondary:
         pdp_df = pdp_df.merge(secondary_df, on=grouped_features, how="left")
 
@@ -786,7 +805,7 @@ def pdp(
 
     pdp_df = pdp_df.sort_values(
         by=grouped_features,
-        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
     )
 
     # bin the feature if x_bins is provided
@@ -829,7 +848,7 @@ def pdp(
         )
     fig.update_layout(
         title="Partial Dependency Plot",
-        yaxis_title="%_diff",
+        yaxis_title=f"%_diff ({center})",
         yaxis_tickformat=".1%",
         legend_title=line_color if line_color else "overall",
         height=400 * rows,
@@ -1270,7 +1289,7 @@ def target(
             grouped_data = grouped_data.sort_values(
                 by=plot_feature,
                 key=lambda x: x.astype(str)
-                if pd.api.types.is_categorical_dtype(x)
+                if isinstance(x.dtype, CategoricalDtype)
                 else x,
             )
 

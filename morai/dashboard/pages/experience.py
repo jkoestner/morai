@@ -3,7 +3,6 @@
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
-import pandas as pd
 import polars as pl
 from dash_extensions.enrich import (
     ALL,
@@ -507,12 +506,12 @@ def update_tab_content(
         columnDefs = dash_formats.get_column_defs(table)
         export_button = html.Button(
             "Export to CSV",
-            id={"type": "export-button", "tab": "table"},
+            id={"type": "export-button", "tab": "table", "page": "experience"},
             className="btn btn-primary mt-2 mb-2",
         )
 
         grid = dag.AgGrid(
-            id={"type": "data-table", "tab": "table"},
+            id={"type": "data-table", "tab": "table", "page": "experience"},
             rowData=table.to_dict("records"),
             columnDefs=columnDefs,
             dashGridOptions={
@@ -543,12 +542,12 @@ def update_tab_content(
         columnDefs = dash_formats.get_column_defs(rank)
         export_button = html.Button(
             "Export to CSV",
-            id={"type": "export-button", "tab": "rank"},
+            id={"type": "export-button", "tab": "rank", "page": "experience"},
             className="btn btn-primary mt-2 mb-2",
         )
 
         grid = dag.AgGrid(
-            id={"type": "data-table", "tab": "rank"},
+            id={"type": "data-table", "tab": "rank", "page": "experience"},
             rowData=rank.to_dict("records"),
             columnDefs=columnDefs,
             dashGridOptions={
@@ -649,34 +648,6 @@ def reset_filters(n_clicks, dataset, filter_dict):
         for col in filter_dict["num_cols"]
     ]
     return str_reset_values, num_reset_values
-
-
-@callback(
-    Output("download-dataframe-csv", "data"),
-    Input({"type": "export-button", "tab": ALL}, "n_clicks"),
-    State({"type": "data-table", "tab": ALL}, "rowData"),
-    prevent_initial_call=True,
-)
-def export_table(n_clicks_list, table_data_list):
-    """Export table data to CSV."""
-    ctx = callback_context
-    if not ctx.triggered:
-        return dash.no_update
-
-    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    button_id = eval(button_id)
-    tab = button_id["tab"]
-
-    # Find the matching table data
-    for i, table_data in enumerate(table_data_list):
-        if table_data and i == next(
-            (idx for idx, btn in enumerate(n_clicks_list) if btn), None
-        ):
-            df = pd.DataFrame(table_data)
-            filename = f"experience_{tab}.csv"
-            return dcc.send_data_frame(df.to_csv, filename, index=False)
-
-    return dash.no_update
 
 
 @callback(
