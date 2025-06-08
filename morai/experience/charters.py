@@ -10,6 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
 from joblib import Parallel, cpu_count, delayed
+from pandas import CategoricalDtype
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 
@@ -168,7 +169,7 @@ def chart(
         )
     grouped_data = grouped_data.sort_values(
         groupby_cols,
-        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
     )
 
     # calculate ratios if needed
@@ -418,7 +419,7 @@ def compare_rates(
         )
     grouped_data = grouped_data.sort_values(
         groupby_features,
-        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
     )
 
     # return data if not display
@@ -546,7 +547,7 @@ def frequency(
                 by=col,
                 ascending=True,
                 key=lambda x: x.astype(str)
-                if pd.api.types.is_categorical_dtype(x)
+                if isinstance(x.dtype, CategoricalDtype)
                 else x,
             )
 
@@ -701,7 +702,7 @@ def pdp(
             .sort_values(
                 by=grouped_features,
                 key=lambda x: x.astype(str)
-                if pd.api.types.is_categorical_dtype(x)
+                if isinstance(x.dtype, CategoricalDtype)
                 else x,
             )
         )
@@ -804,7 +805,7 @@ def pdp(
 
     pdp_df = pdp_df.sort_values(
         by=grouped_features,
-        key=lambda x: x.astype(str) if pd.api.types.is_categorical_dtype(x) else x,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
     )
 
     # bin the feature if x_bins is provided
@@ -1288,7 +1289,7 @@ def target(
             grouped_data = grouped_data.sort_values(
                 by=plot_feature,
                 key=lambda x: x.astype(str)
-                if pd.api.types.is_categorical_dtype(x)
+                if isinstance(x.dtype, CategoricalDtype)
                 else x,
             )
 

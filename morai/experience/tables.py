@@ -977,6 +977,7 @@ def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     """
     initial_rows = len(df)
     invalid_mask = None
+    cap_mask = None
 
     # check for invalid attained age / duration / issue age combos
     if all(col in df.columns for col in ["attained_age", "issue_age", "duration"]):
@@ -987,15 +988,16 @@ def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     elif all(col in df.columns for col in ["attained_age", "issue_age"]):
         invalid_mask = df["attained_age"] < df["issue_age"]
 
-    removed_invalid = df[invalid_mask]
-    if len(removed_invalid) > 0:
-        example_invalid = removed_invalid.head(1).to_dict(orient="records")[0]
-        logger.info(
-            f"Removed '{len(removed_invalid)}' rows where attained_age, issue_age, "
-            f"or duration was invalid. \n"
-            f"Example: {example_invalid}"
-        )
-        df = df[~invalid_mask]
+    if invalid_mask is not None:
+        removed_invalid = df[invalid_mask]
+        if len(removed_invalid) > 0:
+            example_invalid = removed_invalid.head(1).to_dict(orient="records")[0]
+            logger.info(
+                f"Removed '{len(removed_invalid)}' rows where attained_age, issue_age, "
+                f"or duration was invalid. \n"
+                f"Example: {example_invalid}"
+            )
+            df = df[~invalid_mask]
 
     # cap the max attained age
     if "attained_age" in df.columns:
@@ -1003,15 +1005,16 @@ def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     elif all(col in df.columns for col in ["issue_age", "duration"]):
         cap_mask = (df["issue_age"] + df["duration"] - 1) > max_age
 
-    removed_cap = df[cap_mask]
-    if len(removed_cap) > 0:
-        example_cap = removed_cap.head(1).to_dict(orient="records")[0]
-        logger.info(
-            f"Removed '{len(removed_cap)}' rows where attained_age, issue_age, "
-            f"or duration was invalid. \n"
-            f"Example: {example_cap}"
-        )
-        df = df[~cap_mask]
+    if cap_mask is not None:
+        removed_cap = df[cap_mask]
+        if len(removed_cap) > 0:
+            example_cap = removed_cap.head(1).to_dict(orient="records")[0]
+            logger.info(
+                f"Removed '{len(removed_cap)}' rows where attained_age, issue_age, "
+                f"or duration was invalid. \n"
+                f"Example: {example_cap}"
+            )
+            df = df[~cap_mask]
 
     removed_rows = initial_rows - len(df)
     if removed_rows:

@@ -33,20 +33,11 @@ The name Morai was chosen as the package is designed to help actuaries review
 mortality and experience data.
 
 **🔬 Jupyter Notebook:**
-<!--
-these links were created by using the raw file link and then using tinyurl
-to create a shortened link.
-e.g.
-https://github.com/jkoestner/morai/blob/main/notebooks/data_process.ipynb
-https://github.com/jkoestner/morai/raw/main/notebooks/data_process.ipynb
-https://tinyurl.com/
--->
 
-
-- [Data Process](https://nbviewer.org/urls/tinyurl.com/morai-data)
-- [Exploratory](https://nbviewer.org/urls/tinyurl.com/morai-explore)
-- [Predictive Models](https://nbviewer.org/urls/tinyurl.com/morai-predict)
-- [GLM Experiments](https://nbviewer.org/urls/tinyurl.com/morai-experiment-glm)
+- [Data Process](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/01.data_process.ipynb)
+- [Exploratory](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/02.exploratory.ipynb)
+- [Predictive Models](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/06.predictive_model.ipynb)
+- And Others
 
 **📊 Dashboard:**
 

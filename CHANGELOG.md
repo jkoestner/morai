@@ -12,6 +12,7 @@
 **Documentation**
 - update notebooks to have images retained
 - split out models into it's own folder
+- update README
 
 ## [0.1.0](https://github.com/jkoestner/morai/tree/v0.1.0)
 
