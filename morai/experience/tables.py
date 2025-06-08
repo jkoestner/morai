@@ -976,39 +976,56 @@ def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
 
     """
     initial_rows = len(df)
+    invalid_mask = None
 
     # check for invalid attained age / duration / issue age combos
     if all(col in df.columns for col in ["attained_age", "issue_age", "duration"]):
-        df = df[df["attained_age"] >= df["duration"] - 1]
-        df = df[df["attained_age"] >= df["issue_age"]]
+        invalid_mask = df["attained_age"] < df["duration"] - 1
+        invalid_mask = invalid_mask | (df["attained_age"] < df["issue_age"])
     elif all(col in df.columns for col in ["attained_age", "duration"]):
-        df = df[df["attained_age"] >= df["duration"] - 1]
+        invalid_mask = df["attained_age"] < df["duration"] - 1
     elif all(col in df.columns for col in ["attained_age", "issue_age"]):
-        df = df[df["attained_age"] >= df["issue_age"]]
+        invalid_mask = df["attained_age"] < df["issue_age"]
+
+    removed_invalid = df[invalid_mask]
+    if len(removed_invalid) > 0:
+        example_invalid = removed_invalid.head(1).to_dict(orient="records")[0]
+        logger.info(
+            f"Removed '{len(removed_invalid)}' rows where attained_age, issue_age, "
+            f"or duration was invalid. \n"
+            f"Example: {example_invalid}"
+        )
+        df = df[~invalid_mask]
 
     # cap the max attained age
     if "attained_age" in df.columns:
-        df = df[df["attained_age"] <= max_age]
+        cap_mask = df["attained_age"] > max_age
     elif all(col in df.columns for col in ["issue_age", "duration"]):
-        df = df[(df["issue_age"] + df["duration"] - 1) <= max_age]
+        cap_mask = (df["issue_age"] + df["duration"] - 1) > max_age
+
+    removed_cap = df[cap_mask]
+    if len(removed_cap) > 0:
+        example_cap = removed_cap.head(1).to_dict(orient="records")[0]
+        logger.info(
+            f"Removed '{len(removed_cap)}' rows where attained_age, issue_age, "
+            f"or duration was invalid. \n"
+            f"Example: {example_cap}"
+        )
+        df = df[~cap_mask]
 
     removed_rows = initial_rows - len(df)
     if removed_rows:
-        logger.info(
-            f"Removed '{removed_rows}' rows where attained_age, issue_age, "
-            f"or duration was invalid."
-        )
         df = df.reset_index(drop=True)
 
     return df
 
 
-def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
+def add_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     """
     Add attained age, issue age, and duration columns.
 
-    Removes invalid rows for attained age, duration, and issue age. Will also
-    capp the attained age at the max_age.
+    Adds the columns if they are not present. Will also cap the attained age at
+    the max_age.
 
     attained_age = issue_age + duration - 1
 
@@ -1016,11 +1033,13 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
     ----------
     df : pd.DataFrame
         The DataFrame.
+    max_age : int, optional (default=121)
+        The maximum age.
 
     Returns
     -------
     df : pd.DataFrame
-        The DataFrame with the columns checked.
+        The DataFrame with the columns added.
 
     """
     initial_rows = len(df)
@@ -1036,7 +1055,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
         df["attained_age"] = df["issue_age"] + df["duration"] - 1
     elif all(col in df.columns for col in ["issue_age"]):
         df_list = [df]
-        for attained_age in range(122):
+        for attained_age in range(max_age + 1):
             df_temp = df.copy()
             df_temp["attained_age"] = attained_age
             df_temp["duration"] = df_temp["attained_age"] - df_temp["issue_age"] + 1
@@ -1044,7 +1063,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
         df = pd.concat(df_list, ignore_index=True)
     elif all(col in df.columns for col in ["attained_age"]):
         df_list = [df]
-        for issue_age in range(122):
+        for issue_age in range(max_age + 1):
             df_temp = df.copy()
             df_temp["issue_age"] = issue_age
             df_temp["duration"] = df_temp["attained_age"] - df_temp["issue_age"] + 1
@@ -1052,7 +1071,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
         df = pd.concat(df_list, ignore_index=True)
     elif all(col in df.columns for col in ["duration"]):
         df_list = [df]
-        for issue_age in range(122):
+        for issue_age in range(max_age + 1):
             df_temp = df.copy()
             df_temp["issue_age"] = issue_age
             df_temp["attained_age"] = df_temp["issue_age"] + df_temp["duration"] - 1
@@ -1066,7 +1085,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame) -> pd.DataFrame:
     df = check_aa_ia_dur_cols(df)
 
     added_rows = len(df) - initial_rows
-    if added_rows:
+    if added_rows > 0:
         logger.info(
             f"Added '{added_rows}' rows for attained_age, issue_age, or duration."
         )

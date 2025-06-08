@@ -471,13 +471,13 @@ def get_top_deaths_by_age_group(
     # drop column if exists and filter out look up column
     if cod_col in df_year.columns:
         df_year = df_year.drop(columns=[cod_col])
-    df_year = df_year[df_year["icd_-_sub-chapter"].notna()]
+    df_year = df_year[df_year["icd_sub_chapter"].notna()]
 
     # map the cod column
     df_year = map_reference(
         df=df_year,
         col=cod_col,
-        on_dict={"icd_-_sub-chapter": "wonder_sub_chapter"},
+        on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
 
     # group the data for top 10 deaths in each age_group

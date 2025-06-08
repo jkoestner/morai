@@ -21,7 +21,7 @@ class TableConstrainer:
     Parameters
     ----------
     col_to_fix : str
-        The column to fix
+        The column to fix. This is the rate.
     issue_age_col : str
         The column to use for issue age
     duration_col : str
@@ -30,6 +30,8 @@ class TableConstrainer:
         The column to use for attained age
     other_feature_cols : Optional[list], optional
         The columns to use for other features, by default None
+        This should be the columns in the rate_table that are not used for the
+        constraints.
     min_increase : float, optional
         The minimum increase to apply to the column to fix, by default 0.001
     iteration_limit : int, optional
@@ -188,6 +190,8 @@ class TableConstrainer:
             The fixed dataframe
 
         """
+        if "col_to_fix" not in kwargs:
+            kwargs["col_to_fix"] = self.col_to_fix
         for constraint in constraints_list:
             df = run_constraint(
                 df=df,
