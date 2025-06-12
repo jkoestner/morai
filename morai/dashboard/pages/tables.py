@@ -51,6 +51,8 @@ def layout():
             dcc.Store(id="store-table-2-raw", storage_type="memory"),
             dcc.Store(id="store-table-1-select", storage_type="memory"),
             dcc.Store(id="store-table-2-select", storage_type="memory"),
+            dcc.Store(id="store-table-1-mi-years", storage_type="memory"),
+            dcc.Store(id="store-table-2-mi-years", storage_type="memory"),
             dcc.Store(id="store-table-compare", storage_type="memory"),
             dcc.Store(id="store-table-filter-trigger", storage_type="memory"),
             dcc.Download(id="download-dataframe-csv"),
@@ -176,6 +178,25 @@ def layout():
                                             ],
                                             className="mb-3",
                                         ),
+                                        html.Div(
+                                            id="table-1-mi",
+                                            children=[
+                                                dbc.InputGroup(
+                                                    [
+                                                        dbc.InputGroupText("MI years"),
+                                                        dbc.Input(
+                                                            id="table-1-mi-years",
+                                                            type="number",
+                                                            min=1,
+                                                            step=1,
+                                                            value=0,
+                                                        ),
+                                                    ],
+                                                    className="mb-3",
+                                                )
+                                            ],
+                                            style={"display": "none"},
+                                        ),
                                         html.Div(id="table-1-desc"),
                                         html.Div(id="table-1-filters"),
                                     ]
@@ -221,6 +242,25 @@ def layout():
                                                 ),
                                             ],
                                             className="mb-3",
+                                        ),
+                                        html.Div(
+                                            id="table-2-mi",
+                                            children=[
+                                                dbc.InputGroup(
+                                                    [
+                                                        dbc.InputGroupText("MI years"),
+                                                        dbc.Input(
+                                                            id="table-2-mi-years",
+                                                            type="number",
+                                                            min=1,
+                                                            step=1,
+                                                            value=0,
+                                                        ),
+                                                    ],
+                                                    className="mb-3",
+                                                )
+                                            ],
+                                            style={"display": "none"},
                                         ),
                                         html.Div(id="table-2-desc"),
                                         html.Div(id="table-2-filters"),
@@ -530,6 +570,8 @@ def set_table_2_input(value):
         Output("store-table-2-select", "data"),
         Output("table-1-filters", "children"),
         Output("table-2-filters", "children"),
+        Output("table-1-mi", "style"),
+        Output("table-2-mi", "style"),
         Output("tables-toast", "is_open", allow_duplicate=True),
         Output("tables-toast", "children", allow_duplicate=True),
         Output("store-table-filter-trigger", "data"),
@@ -540,6 +582,10 @@ def set_table_2_input(value):
         State("table-2-id", "value"),
         State("store-table-1-id", "data"),
         State("store-table-2-id", "data"),
+        State("table-1-mi-years", "value"),
+        State("table-2-mi-years", "value"),
+        State("store-table-1-mi-years", "data"),
+        State("store-table-2-mi-years", "data"),
     ],
     prevent_initial_call=True,
 )
@@ -549,10 +595,14 @@ def initialize_tables(
     table2_id,
     prev_table1_id,
     prev_table2_id,
+    table1_mi_years,
+    table2_mi_years,
+    prev_table1_mi_years,
+    prev_table2_mi_years,
 ):
     """Get the initial table data."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
-    no_upate_tuple = (dash.no_update,) * 8
+    no_upate_tuple = (dash.no_update,) * 10
     warning_tuple = (False, "")
     trigger_value = time.time()
 
@@ -565,6 +615,8 @@ def initialize_tables(
         or prev_table2_id is None
         or prev_table1_id != table1_id
         or prev_table2_id != table2_id
+        or prev_table1_mi_years != table1_mi_years
+        or prev_table2_mi_years != table2_mi_years
     )
 
     # generate filters only if tables have changed
@@ -577,12 +629,19 @@ def initialize_tables(
             table_2_select_period,
             mults_1,
             mults_2,
+            mi_table_1,
+            mi_table_2,
             warning_tuple,
-        ) = load_tables(table1_id, table2_id)
+        ) = load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years)
 
         if True in warning_tuple:
             return (*no_upate_tuple, *warning_tuple, dash.no_update)
 
+        # mi
+        mi_1_style = {"display": "none" if mi_table_1 is None else "block"}
+        mi_2_style = {"display": "none" if mi_table_2 is None else "block"}
+
+        # filters
         filters_1 = dh.generate_filters(
             df=table_1,
             prefix="table-1",
@@ -607,6 +666,8 @@ def initialize_tables(
         table_2_select_period,
         filters_1,
         filters_2,
+        mi_1_style,
+        mi_2_style,
         False,
         False,
         trigger_value,
@@ -631,6 +692,8 @@ def initialize_tables(
         State("store-table-2-raw", "data"),
         State("store-table-1-select", "data"),
         State("store-table-2-select", "data"),
+        State("table-1-mi-years", "value"),
+        State("table-2-mi-years", "value"),
         State({"type": "table-1-str-filter", "index": ALL}, "value"),
         State({"type": "table-1-num-filter", "index": ALL}, "value"),
         State({"type": "table-2-str-filter", "index": ALL}, "value"),
@@ -646,6 +709,8 @@ def filter_tables_callback(
     table_2_raw,
     table_1_select_period,
     table_2_select_period,
+    mi_table_1_years,
+    mi_table_2_years,
     filter_table_1_str,
     filter_table_1_num,
     filter_table_2_str,
@@ -872,6 +937,8 @@ def update_graphs_from_slider(issue_age_value, compare_df):
     [
         State("table-1-id", "value"),
         State("table-2-id", "value"),
+        State("table-1-mi-years", "value"),
+        State("table-2-mi-years", "value"),
         State({"type": "table-1-str-filter", "index": ALL}, "value"),
         State({"type": "table-1-num-filter", "index": ALL}, "value"),
         State({"type": "table-2-str-filter", "index": ALL}, "value"),
@@ -884,6 +951,8 @@ def update_table_tabs(
     compare_df,
     table1_id,
     table2_id,
+    table1_mi_years,
+    table2_mi_years,
     table_1_filter_str,
     table_1_filter_num,
     table_2_filter_str,
@@ -899,8 +968,10 @@ def update_table_tabs(
             table_2_select_period,
             mults_1,
             mults_2,
+            mi_table_1,
+            mi_table_2,
             warning_tuple,
-        ) = load_tables(table1_id, table2_id)
+        ) = load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years)
 
         # filter the datasets
         filtered_table_1, filtered_table_2 = filter_tables(
@@ -966,7 +1037,7 @@ def update_table_tabs(
 #  |_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
 
 
-def load_tables(table1_id, table2_id):
+def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
     """Get the table data and create a compare dataframe."""
     # process tables
     table_1 = pd.DataFrame()
@@ -975,6 +1046,8 @@ def load_tables(table1_id, table2_id):
     table_2_select_period = "Unknown"
     mults_1 = None
     mults_2 = None
+    mi_table_1 = None
+    mi_table_2 = None
     warning_tuple = (False, "")
     mt = tables.MortTable()
 
@@ -994,9 +1067,10 @@ def load_tables(table1_id, table2_id):
         # rate table
         else:
             try:
-                rate_table = tables.MortTable(rate=table1_id)
-                table_1 = rate_table.rate_table
-                mults_1 = rate_table.mult_table
+                mt = tables.MortTable(rate=table1_id)
+                table_1 = mt.calc_mi_rates(years=table1_mi_years)
+                mults_1 = mt.mult_table
+                mi_table_1 = mt.mi_table
                 table_1_select_period = "Unknown"
             except FileNotFoundError:
                 logger.warning(f"Table not found: {table1_id}")
@@ -1028,12 +1102,13 @@ def load_tables(table1_id, table2_id):
         # rate table
         else:
             try:
-                rate_table = tables.MortTable(rate=table2_id)
-                table_2 = rate_table.rate_table
-                mults_2 = rate_table.mult_table
+                mt = tables.MortTable(rate=table2_id)
+                table_2 = mt.calc_mi_rates(years=table2_mi_years)
+                mults_2 = mt.mult_table
+                mi_table_2 = mt.mi_table
                 table_2_select_period = "Unknown"
             except FileNotFoundError:
-                logger.warning(f"Table not found: {table1_id}")
+                logger.warning(f"Table not found: {table2_id}")
                 warning_tuple = (True, f"Table not found: {table2_id}")
         # add age and duration columns if not present
         table_2 = tables.add_aa_ia_dur_cols(table_2)
@@ -1053,6 +1128,8 @@ def load_tables(table1_id, table2_id):
         table_2_select_period,
         mults_1,
         mults_2,
+        mi_table_1,
+        mi_table_2,
         warning_tuple,
     )
 
@@ -1113,8 +1190,16 @@ def get_table_desc(
             active_filters_2 = ", ".join(active_filters)
 
     # table description 1
+    table_1_asof = "Unknown"
     if isinstance(table1_id, str):
-        table_1_desc = table1_id
+        try:
+            table_1_desc = tables.get_rate_dict(table1_id)["description"]
+        except KeyError:
+            table_1_desc = table1_id
+        try:
+            table_1_asof = tables.get_rate_dict(table1_id)["as_of"]
+        except KeyError:
+            table_1_asof = "Unknown"
     else:
         soa_xml = mt.get_soa_xml(table1_id)
         table_1_desc = soa_xml.ContentClassification.TableDescription
@@ -1127,6 +1212,9 @@ def get_table_desc(
         [
             html.B("Table Description:"),
             html.Span(f" {table_1_desc}"),
+            html.Br(),
+            html.B("As of:"),
+            html.Span(f" {table_1_asof}"),
             html.Br(),
             html.B("Table Shape:"),
             html.Span(f" {filtered_table_1.shape}"),
@@ -1143,8 +1231,16 @@ def get_table_desc(
     )
 
     # table description 2
+    table_2_asof = "Unknown"
     if isinstance(table2_id, str):
-        table_2_desc = table2_id
+        try:
+            table_2_desc = tables.get_rate_dict(table2_id)["description"]
+        except KeyError:
+            table_2_desc = table2_id
+        try:
+            table_2_asof = tables.get_rate_dict(table2_id)["as_of"]
+        except KeyError:
+            table_2_asof = "Unknown"
     else:
         soa_xml = mt.get_soa_xml(table2_id)
         table_2_desc = soa_xml.ContentClassification.TableDescription
@@ -1157,6 +1253,9 @@ def get_table_desc(
         [
             html.B("Table Description:"),
             html.Span(f" {table_2_desc}"),
+            html.Br(),
+            html.B("As of:"),
+            html.Span(f" {table_2_asof}"),
             html.Br(),
             html.B("Table Shape:"),
             html.Span(f" {filtered_table_2.shape}"),

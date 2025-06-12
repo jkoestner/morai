@@ -49,6 +49,7 @@ class MortTable:
         """
         self.rate_table = None
         self.mult_table = None
+        self.mi_table = None
         self.rate_dict = None
         self.rate_name = None
         self.select_period = None
@@ -85,6 +86,11 @@ class MortTable:
                     file_location=workbook_location,
                     has_mults=self.rate_dict["type"]["workbook"]["mult_table"],
                 )
+
+            # get mi_table
+            mi_filename = self.rate_dict.get("mi_table", {}).get("filename")
+            if mi_filename:
+                self.mi_table = self.get_mi_table(mi_filename)
 
     def build_table_workbook(
         self, file_location: Union[str, "Path"], has_mults: bool = False
@@ -202,7 +208,7 @@ class MortTable:
             "issue_age": range(max_age + 1),
             "duration": range(1, max_age + 2),
         } | extra_dims
-        mort_table = suppress_logs(create_grid)(dims=dims, max_age=max_age)
+        mort_table = suppress_logs(_create_grid)(dims=dims, max_age=max_age)
         mort_table["vals"] = np.nan
         if "attained_age" not in mort_table.columns:
             mort_table["attained_age"] = (
@@ -331,6 +337,96 @@ class MortTable:
         """
         soa_xml = pymort.MortXML.from_id(table_id)
         return soa_xml
+
+    def get_mi_table(self, filename: str) -> Any:
+        """
+        Get the MI table from a file.
+
+        Parameters
+        ----------
+        filename : str
+            The name of the file to read the MI table from.
+
+        Returns
+        -------
+        mi_table : pd.DataFrame
+            The MI table.
+
+        """
+        logger.info(f"loading mi_table from file: {filename}")
+        file_location = get_filepath(filename)
+        try:
+            self.mi_table = pd.read_csv(file_location)
+        except ValueError as ve:
+            raise ValueError(f"Error reading file: {file_location}.") from ve
+
+        # ensure the mi_table has an mi column
+        if "mi" not in self.mi_table.columns:
+            raise ValueError(
+                f"The mi_table `{file_location}` does not have a `mi` column, "
+                f"which is needed to calculate the MI rates."
+            )
+
+        return self.mi_table
+
+    def calc_mi_rates(self, years: int = 0, keep_mi: bool = False) -> pd.DataFrame:
+        """
+        Calculate MI rates from the MI table.
+
+        Parameters
+        ----------
+        years : int, optional (default=0)
+            The number of years to apply MI for to calculate the rate.
+        keep_mi : bool, optional (default=False)
+            Whether to keep the mi column in the rate table.
+
+        Returns
+        -------
+        rate_table : pd.DataFrame
+            The rate table with mi applied.
+
+        """
+        rate_table = self.rate_table
+        mi_table = self.mi_table
+        # check variables
+        if mi_table is None:
+            logger.warning("there is no mi_table set currently.")
+            return rate_table
+        if years is None:
+            logger.warning("years is None, returning rate_table.")
+            return rate_table
+
+        if years > 0:
+            logger.info(f"calculating mi rates for {years} years.")
+
+            # merge data
+            merge_cols = [
+                col
+                for col in mi_table.columns
+                if col in rate_table.columns and col != "mi"
+            ]
+            rate_table = rate_table.merge(
+                mi_table[[*merge_cols, "mi"]],
+                on=merge_cols,
+                how="left",
+                suffixes=("", "_mi"),
+            )
+
+            # check na's
+            mi_nans = rate_table["mi"].isnull().sum()
+            if mi_nans > 0:
+                logger.warning(
+                    f"there are `{mi_nans}` missing rates in the mi column, "
+                    f"defaulting to 0."
+                )
+                rate_table["mi"] = rate_table["mi"].fillna(0)
+
+            # calculate new rates
+            rate_table["vals"] = rate_table["vals"] * (1 - rate_table["mi"]) ** years
+            if not keep_mi:
+                rate_table = rate_table.drop(columns=["mi"])
+
+        return rate_table
 
     def calc_derived_table_from_mults(
         self,
@@ -567,8 +663,8 @@ def generate_table(
 
     # create the grid from the mapping
     if grid is None:
-        grid = suppress_logs(create_grid)(mapping=rate_mapping)
-        grid = suppress_logs(remove_duplicates)(df=grid)
+        grid = suppress_logs(_create_grid)(mapping=rate_mapping)
+        grid = suppress_logs(_remove_duplicates)(df=grid)
 
     # preprocess the data
     preprocess_dict = suppress_logs(preprocessors.preprocess_data)(
@@ -732,6 +828,7 @@ def map_rates(
     logger.info(f"mapping rate: '{rate_name}' with format: '{rate_type}'")
 
     # create rate_to_df_map if not provided
+    # based on the rate_dict "keys"
     if rate_to_df_map is None:
         logger.debug(
             "create 'rate_to_df_map' which assumes the keys are the same "
@@ -744,6 +841,8 @@ def map_rates(
         if df_col not in df.columns:
             raise ValueError(f"column: '{df_col}' not in the DataFrame.")
     # update the mapping if there is a mult_table
+    # the rate table mapping will be based on what is in the rate_table and not
+    # what is in the mult_table
     if mult_table is not None:
         mult_to_df_map = {
             mult_col: df_col
@@ -812,76 +911,6 @@ def map_rates(
         )
 
     return df
-
-
-def create_grid(
-    dims: Optional[Dict[str, Union[List[Any], np.ndarray]]] = None,
-    mapping: Optional[Dict[str, Dict[str, Union[List[Any], np.ndarray]]]] = None,
-    max_age: int = 121,
-    max_grid_size: int = 5_000_000,
-    mult_features: Optional[List[str]] = None,
-) -> pd.DataFrame:
-    """
-    Create an empty grid from the dimensions.
-
-    Parameters
-    ----------
-    dims : dict
-        The dimensions where it is structured as {dim_name: dim_values}.
-    mapping : dict
-        The mapping where it is structured as {dim_name: {"values": dim_values}}.
-    max_age : int, optional (default=121)
-        The maximum age.
-    max_grid_size : int, optional (default=5,000,000)
-        The maximum grid size.
-    mult_features : list, optional
-        The features to use for the multiplier table.
-
-    Returns
-    -------
-    mort_grid : pd.DataFrame
-        The grid.
-
-    """
-    if (not dims and not mapping) or (dims and mapping):
-        raise ValueError("Either dims or mapping must be provided.")
-    if mapping:
-        if mult_features:
-            mapping = _remove_mult_from_rate_mapping(mapping, mult_features)
-        dims = {col: list(val["values"].keys()) for col, val in mapping.items()}
-    dimensions = list(dims.values())
-
-    # check the grid size before creating it
-    grid_size = 1
-    for dimension in dimensions:
-        grid_size *= len(dimension)
-    logger.info(f"Grid size: {grid_size} combinations.")
-    if grid_size > max_grid_size:
-        raise ValueError(
-            f"Grid size too large: {grid_size} combinations. "
-            f"Maximum allowed is {max_grid_size}."
-        )
-
-    grid = list(itertools.product(*dimensions))
-    column_names = list(dims.keys())
-    logger.info(f"Creating grid with dimensions: {column_names}")
-
-    # create mort grid (polars is much quicker)
-    mort_grid = pl.DataFrame(grid, schema=column_names, orient="row")
-    mort_grid = mort_grid.sort(by=mort_grid.columns)
-
-    # convert objects to categorical
-    mort_grid = mort_grid.with_columns(
-        [
-            pl.col(name).cast(pl.Categorical)
-            for name in mort_grid.columns
-            if mort_grid[name].dtype == pl.Utf8
-        ]
-    )
-    mort_grid = mort_grid.to_pandas()
-    mort_grid = check_aa_ia_dur_cols(mort_grid, max_age=max_age)
-
-    return mort_grid
 
 
 def compare_tables(
@@ -1092,29 +1121,6 @@ def add_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
         logger.info(
             f"Added '{added_rows}' rows for attained_age, issue_age, or duration."
         )
-
-    return df
-
-
-def remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Remove duplicates from the DataFrame.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame.
-
-    Returns
-    -------
-    df : pd.DataFrame
-        The DataFrame without duplicates.
-
-    """
-    initial_rows = len(df)
-    df = df.drop_duplicates().reset_index(drop=True)
-    removed_rows = initial_rows - len(df)
-    logger.info(f"Removed '{removed_rows}' duplicates.")
 
     return df
 
@@ -1332,3 +1338,96 @@ def _remove_mult_from_rate_mapping(
             first_key = next(iter(sub_dict["values"]))
             sub_dict["values"] = {first_key: sub_dict["values"][first_key]}
     return mapping
+
+
+def _remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove duplicates from the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        The DataFrame without duplicates.
+
+    """
+    initial_rows = len(df)
+    df = df.drop_duplicates().reset_index(drop=True)
+    removed_rows = initial_rows - len(df)
+    logger.info(f"Removed '{removed_rows}' duplicates.")
+
+    return df
+
+
+def _create_grid(
+    dims: Optional[Dict[str, Union[List[Any], np.ndarray]]] = None,
+    mapping: Optional[Dict[str, Dict[str, Union[List[Any], np.ndarray]]]] = None,
+    max_age: int = 121,
+    max_grid_size: int = 5_000_000,
+    mult_features: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """
+    Create an empty grid from the dimensions.
+
+    Parameters
+    ----------
+    dims : dict
+        The dimensions where it is structured as {dim_name: dim_values}.
+    mapping : dict
+        The mapping where it is structured as {dim_name: {"values": dim_values}}.
+    max_age : int, optional (default=121)
+        The maximum age.
+    max_grid_size : int, optional (default=5,000,000)
+        The maximum grid size.
+    mult_features : list, optional
+        The features to use for the multiplier table.
+
+    Returns
+    -------
+    mort_grid : pd.DataFrame
+        The grid.
+
+    """
+    if (not dims and not mapping) or (dims and mapping):
+        raise ValueError("Either dims or mapping must be provided.")
+    if mapping:
+        if mult_features:
+            mapping = _remove_mult_from_rate_mapping(mapping, mult_features)
+        dims = {col: list(val["values"].keys()) for col, val in mapping.items()}
+    dimensions = list(dims.values())
+
+    # check the grid size before creating it
+    grid_size = 1
+    for dimension in dimensions:
+        grid_size *= len(dimension)
+    logger.info(f"Grid size: {grid_size} combinations.")
+    if grid_size > max_grid_size:
+        raise ValueError(
+            f"Grid size too large: {grid_size} combinations. "
+            f"Maximum allowed is {max_grid_size}."
+        )
+
+    grid = list(itertools.product(*dimensions))
+    column_names = list(dims.keys())
+    logger.info(f"Creating grid with dimensions: {column_names}")
+
+    # create mort grid (polars is much quicker)
+    mort_grid = pl.DataFrame(grid, schema=column_names, orient="row")
+    mort_grid = mort_grid.sort(by=mort_grid.columns)
+
+    # convert objects to categorical
+    mort_grid = mort_grid.with_columns(
+        [
+            pl.col(name).cast(pl.Categorical)
+            for name in mort_grid.columns
+            if mort_grid[name].dtype == pl.Utf8
+        ]
+    )
+    mort_grid = mort_grid.to_pandas()
+    mort_grid = check_aa_ia_dur_cols(mort_grid, max_age=max_age)
+
+    return mort_grid
