@@ -187,8 +187,8 @@ def layout():
                                                         dbc.Input(
                                                             id="table-1-mi-years",
                                                             type="number",
-                                                            min=1,
-                                                            step=1,
+                                                            min=0,
+                                                            step="any",
                                                             value=0,
                                                         ),
                                                     ],
@@ -252,8 +252,8 @@ def layout():
                                                         dbc.Input(
                                                             id="table-2-mi-years",
                                                             type="number",
-                                                            min=1,
-                                                            step=1,
+                                                            min=0,
+                                                            step="any",
                                                             value=0,
                                                         ),
                                                     ],
@@ -568,6 +568,8 @@ def set_table_2_input(value):
         Output("store-table-2-raw", "data"),
         Output("store-table-1-select", "data"),
         Output("store-table-2-select", "data"),
+        Output("store-table-1-mi-years", "data"),
+        Output("store-table-2-mi-years", "data"),
         Output("table-1-filters", "children"),
         Output("table-2-filters", "children"),
         Output("table-1-mi", "style"),
@@ -602,7 +604,7 @@ def initialize_tables(
 ):
     """Get the initial table data."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
-    no_upate_tuple = (dash.no_update,) * 10
+    no_upate_tuple = (dash.no_update,) * 12
     warning_tuple = (False, "")
     trigger_value = time.time()
 
@@ -664,6 +666,8 @@ def initialize_tables(
         table_2.to_dict("records"),
         table_1_select_period,
         table_2_select_period,
+        table1_mi_years,
+        table2_mi_years,
         filters_1,
         filters_2,
         mi_1_style,
@@ -709,8 +713,8 @@ def filter_tables_callback(
     table_2_raw,
     table_1_select_period,
     table_2_select_period,
-    mi_table_1_years,
-    mi_table_2_years,
+    table1_mi_years,
+    table2_mi_years,
     filter_table_1_str,
     filter_table_1_num,
     filter_table_2_str,
@@ -763,6 +767,8 @@ def filter_tables_callback(
         filtered_table_2,
         table_1_select_period,
         table_2_select_period,
+        table1_mi_years,
+        table2_mi_years,
         filters_table_1,
         filters_table_2,
     )
@@ -1159,6 +1165,8 @@ def get_table_desc(
     filtered_table_2,
     table_1_select_period,
     table_2_select_period,
+    table_1_mi_years,
+    table_2_mi_years,
     filters_table_1=None,
     filters_table_2=None,
 ):
@@ -1225,6 +1233,9 @@ def get_table_desc(
             html.B("Select Period:"),
             html.Span(f" {table_1_select_period}"),
             html.Br(),
+            html.B("MI years:"),
+            html.Span(f" {table_1_mi_years}"),
+            html.Br(),
             html.B("Active Filters:"),
             html.Span(f" {active_filters_1}"),
         ]
@@ -1265,6 +1276,9 @@ def get_table_desc(
             html.Br(),
             html.B("Select Period:"),
             html.Span(f" {table_2_select_period}"),
+            html.Br(),
+            html.B("MI years:"),
+            html.Span(f" {table_2_mi_years}"),
             html.Br(),
             html.B("Active Filters:"),
             html.Span(f" {active_filters_2}"),
