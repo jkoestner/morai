@@ -13,6 +13,7 @@ import polars as pl
 import yaml
 from dash import dcc, html
 
+from morai.experience import tables
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
@@ -77,6 +78,7 @@ def read_table(filepath: str) -> pl.LazyFrame:
 
 def filter_data(
     df: Union[pd.DataFrame, pl.LazyFrame],
+    mult_df: pd.DataFrame,
     callback_context: list[dict],
     num_to_str_count: int = num_to_str_count,
 ) -> Union[pd.DataFrame, pl.LazyFrame]:
@@ -87,6 +89,8 @@ def filter_data(
     ----------
     df : pd.DataFrame or pl.LazyFrame
         Lazy dataframe to filter.
+    mult_df : pd.DataFrame
+        Multiplier dataframe to adjust rates.
     callback_context : list
         List of callback context.
     num_to_str_count : int
@@ -134,6 +138,19 @@ def filter_data(
     # convert back to pandas
     if not is_lazy:
         filtered_df = filtered_df.collect().to_pandas()
+
+    # apply the multiplier table if exists
+    if not mult_df.empty:
+        mult_df_cols = mult_df["category"].tolist()
+        selected_dict = {}
+        for mult in mult_df_cols:
+            mult_values = _inputs_parse_id(callback_context, mult)
+            if mult_values:
+                selected_dict[mult] = [str(mult_values)]
+        mt = tables.MortTable()
+        filtered_df = mt.calc_derived_table_from_mults(
+            selected_dict=selected_dict, rate_table=filtered_df, mult_table=mult_df
+        )
 
     return filtered_df
 
@@ -286,7 +303,7 @@ def generate_filters(
         filters.append(filter)
 
     # create radio options for mult_table
-    if mult_table is not None:
+    if not mult_table.empty:
         categories = mult_table["category"].unique()
         for category in categories:
             mult_table_options = mult_table[mult_table["category"] == category][

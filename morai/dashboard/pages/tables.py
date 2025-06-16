@@ -27,6 +27,7 @@ from morai.dashboard.components import dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters, tables
 from morai.utils import custom_logger, helpers
+from morai.utils.custom_logger import suppress_logs
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -49,6 +50,8 @@ def layout():
             dcc.Store(id="store-table-2-id", storage_type="memory"),
             dcc.Store(id="store-table-1-raw", storage_type="memory"),
             dcc.Store(id="store-table-2-raw", storage_type="memory"),
+            dcc.Store(id="store-table-1-mult", storage_type="memory"),
+            dcc.Store(id="store-table-2-mult", storage_type="memory"),
             dcc.Store(id="store-table-1-select", storage_type="memory"),
             dcc.Store(id="store-table-2-select", storage_type="memory"),
             dcc.Store(id="store-table-1-mi-years", storage_type="memory"),
@@ -566,6 +569,8 @@ def set_table_2_input(value):
         Output("store-table-2-id", "data"),
         Output("store-table-1-raw", "data"),
         Output("store-table-2-raw", "data"),
+        Output("store-table-1-mult", "data"),
+        Output("store-table-2-mult", "data"),
         Output("store-table-1-select", "data"),
         Output("store-table-2-select", "data"),
         Output("store-table-1-mi-years", "data"),
@@ -604,7 +609,7 @@ def initialize_tables(
 ):
     """Get the initial table data."""
     logger.debug(f"Retrieving tables {table1_id} and {table2_id}")
-    no_upate_tuple = (dash.no_update,) * 12
+    no_upate_tuple = (dash.no_update,) * 14
     warning_tuple = (False, "")
     trigger_value = time.time()
 
@@ -664,6 +669,8 @@ def initialize_tables(
         table2_id,
         table_1.to_dict("records"),
         table_2.to_dict("records"),
+        mults_1.to_dict("records"),
+        mults_2.to_dict("records"),
         table_1_select_period,
         table_2_select_period,
         table1_mi_years,
@@ -694,6 +701,8 @@ def initialize_tables(
         State("store-table-2-id", "data"),
         State("store-table-1-raw", "data"),
         State("store-table-2-raw", "data"),
+        State("store-table-1-mult", "data"),
+        State("store-table-2-mult", "data"),
         State("store-table-1-select", "data"),
         State("store-table-2-select", "data"),
         State("table-1-mi-years", "value"),
@@ -711,6 +720,8 @@ def filter_tables_callback(
     table2_id,
     table_1_raw,
     table_2_raw,
+    table_1_mult,
+    table_2_mult,
     table_1_select_period,
     table_2_select_period,
     table1_mi_years,
@@ -724,6 +735,8 @@ def filter_tables_callback(
     # load tables
     table_1 = pd.DataFrame(table_1_raw)
     table_2 = pd.DataFrame(table_2_raw)
+    mults_1 = pd.DataFrame(table_1_mult)
+    mults_2 = pd.DataFrame(table_2_mult)
 
     # get filters from the callback context for description
     states_info = dh._inputs_flatten_list(callback_context.states_list)
@@ -736,7 +749,7 @@ def filter_tables_callback(
 
     # filter the datasets
     filtered_table_1, filtered_table_2 = filter_tables(
-        table_1, table_2, filter_list=callback_context.states_list
+        table_1, table_2, mults_1, mults_2, filter_list=callback_context.states_list
     )
 
     # group the datasets
@@ -981,7 +994,7 @@ def update_table_tabs(
 
         # filter the datasets
         filtered_table_1, filtered_table_2 = filter_tables(
-            table_1, table_2, filter_list=callback_context.states_list
+            table_1, table_2, mults_1, mults_2, filter_list=callback_context.states_list
         )
 
         # group the datasets
@@ -1050,8 +1063,8 @@ def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
     table_2 = pd.DataFrame()
     table_1_select_period = "Unknown"
     table_2_select_period = "Unknown"
-    mults_1 = None
-    mults_2 = None
+    mults_1 = pd.DataFrame()
+    mults_2 = pd.DataFrame()
     mi_table_1 = None
     mi_table_2 = None
     warning_tuple = (False, "")
@@ -1140,7 +1153,7 @@ def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
     )
 
 
-def filter_tables(table_1, table_2, filter_list):
+def filter_tables(table_1, table_2, mults_1, mults_2, filter_list):
     """Load and filter the tables."""
     # callback context
     inputs_info = dh._inputs_flatten_list(filter_list)
@@ -1152,8 +1165,12 @@ def filter_tables(table_1, table_2, filter_list):
     ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
 
     # filter the datasets
-    filtered_table_1 = dh.filter_data(df=table_1, callback_context=filters_table_1)
-    filtered_table_2 = dh.filter_data(df=table_2, callback_context=filters_table_2)
+    filtered_table_1 = dh.filter_data(
+        df=table_1, mult_df=mults_1, callback_context=filters_table_1
+    )
+    filtered_table_2 = dh.filter_data(
+        df=table_2, mult_df=mults_2, callback_context=filters_table_2
+    )
 
     return filtered_table_1, filtered_table_2
 
@@ -1201,11 +1218,11 @@ def get_table_desc(
     table_1_asof = "Unknown"
     if isinstance(table1_id, str):
         try:
-            table_1_desc = tables.get_rate_dict(table1_id)["description"]
+            table_1_desc = suppress_logs(tables.get_rate_dict)(table1_id)["description"]
         except KeyError:
             table_1_desc = table1_id
         try:
-            table_1_asof = tables.get_rate_dict(table1_id)["as_of"]
+            table_1_asof = suppress_logs(tables.get_rate_dict)(table1_id)["as_of"]
         except KeyError:
             table_1_asof = "Unknown"
     else:
@@ -1245,11 +1262,11 @@ def get_table_desc(
     table_2_asof = "Unknown"
     if isinstance(table2_id, str):
         try:
-            table_2_desc = tables.get_rate_dict(table2_id)["description"]
+            table_2_desc = suppress_logs(tables.get_rate_dict)(table2_id)["description"]
         except KeyError:
             table_2_desc = table2_id
         try:
-            table_2_asof = tables.get_rate_dict(table2_id)["as_of"]
+            table_2_asof = suppress_logs(tables.get_rate_dict)(table2_id)["as_of"]
         except KeyError:
             table_2_asof = "Unknown"
     else:

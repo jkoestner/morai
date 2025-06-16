@@ -514,16 +514,17 @@ class MortTable:
         derived_table = rate_table.copy()
         derived_table["_mult"] = 1
         for _, row in selected_mults.iterrows():
-            if pd.isna(row["grade"]):
-                derived_table["_mult"] *= row["multiple"]
-                selected_mults_mult.append(row["subcategory"])
-            else:
+            if "grade" in row and not pd.isna(row["grade"]):
                 derived_table["_mult"] *= self._formula_grade(
                     df=derived_table,
                     multiple=row["multiple"],
                     formula=row["grade"],
                 )
                 selected_mults_grade.append(row["subcategory"])
+            else:
+                derived_table["_mult"] *= row["multiple"]
+                selected_mults_mult.append(row["subcategory"])
+
         logger.info(
             f"derived table average multiplier: `{derived_table['_mult'].mean():.2f}`"
         )
