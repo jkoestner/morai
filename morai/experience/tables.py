@@ -2,6 +2,7 @@
 
 import copy
 import itertools
+import re
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -356,20 +357,28 @@ class MortTable:
         logger.info(f"loading mi_table from file: {filename}")
         file_location = get_filepath(filename)
         try:
-            self.mi_table = pd.read_csv(file_location)
+            mi_table = pd.read_csv(file_location)
         except ValueError as ve:
             raise ValueError(f"Error reading file: {file_location}.") from ve
 
         # ensure the mi_table has an mi column
-        if "mi" not in self.mi_table.columns:
+        if "mi" not in mi_table.columns:
             raise ValueError(
                 f"The mi_table `{file_location}` does not have a `mi` column, "
                 f"which is needed to calculate the MI rates."
             )
 
-        return self.mi_table
+        self.mi_table = mi_table
 
-    def calc_mi_rates(self, years: int = 0, keep_mi: bool = False) -> pd.DataFrame:
+        return mi_table
+
+    def calc_mi_rates(
+        self,
+        years: int = 0,
+        keep_mi: bool = False,
+        rate_table: pd.DataFrame = None,
+        mi_table: pd.DataFrame = None,
+    ) -> pd.DataFrame:
         """
         Calculate MI rates from the MI table.
 
@@ -379,6 +388,10 @@ class MortTable:
             The number of years to apply MI for to calculate the rate.
         keep_mi : bool, optional (default=False)
             Whether to keep the mi column in the rate table.
+        rate_table : pd.DataFrame, optional (default=None)
+            The rate table to use for calculating the MI rates.
+        mi_table : pd.DataFrame, optional (default=None)
+            The MI table to use for calculating the MI rates.
 
         Returns
         -------
@@ -386,8 +399,10 @@ class MortTable:
             The rate table with mi applied.
 
         """
-        rate_table = self.rate_table
-        mi_table = self.mi_table
+        if rate_table is None:
+            rate_table = self.rate_table
+        if mi_table is None:
+            mi_table = self.mi_table
         # check variables
         if mi_table is None:
             logger.warning("there is no mi_table set currently.")
@@ -431,6 +446,9 @@ class MortTable:
     def calc_derived_table_from_mults(
         self,
         selected_dict: Optional[dict[str, list]] = None,
+        rate_table: Optional[pd.DataFrame] = None,
+        mult_table: Optional[pd.DataFrame] = None,
+        keep_mult: bool = False,
     ) -> pd.DataFrame:
         """
         Calculate a derived rate table from the rate table and multiplier table.
@@ -444,6 +462,17 @@ class MortTable:
             The selected multiplier columns.
             If None, then the first subcategory multiplier of each category
             will be used.
+            e.g.
+                {
+                    "category": ["subcategory"],
+                    "category2": ["subcategory2"],
+                }
+        rate_table : pd.DataFrame, optional (default=None)
+            The rate table to use for calculating the derived table.
+        mult_table : pd.DataFrame, optional (default=None)
+            The multiplier table to use for calculating the derived table.
+        keep_mult : bool, optional (default=False)
+            Whether to keep the mult column in the derived table.
 
         Returns
         -------
@@ -451,7 +480,11 @@ class MortTable:
             The derived table.
 
         """
-        if self.rate_table is None or self.mult_table is None:
+        if rate_table is None:
+            rate_table = self.rate_table
+        if mult_table is None:
+            mult_table = self.mult_table
+        if rate_table is None or mult_table is None:
             raise ValueError(
                 "calc_derived_table_from_mults requires the rate table and "
                 "multiplier table to be set."
@@ -459,7 +492,7 @@ class MortTable:
 
         # get subcategory multipliers if not provided
         if selected_dict is None:
-            first_mults = self.mult_table.groupby("category").first().reset_index()
+            first_mults = mult_table.groupby("category").first().reset_index()
             selected_dict = (
                 first_mults.set_index("category")["subcategory"]
                 .apply(lambda x: [x])
@@ -467,27 +500,95 @@ class MortTable:
             )
 
         # select the rows in mult_table that match the selected mults
-        selected_mults = self.mult_table[
-            self.mult_table.apply(
+        selected_mults = mult_table[
+            mult_table.apply(
                 lambda row: row["subcategory"]
                 in selected_dict.get(row["category"], []),
                 axis=1,
             )
         ]
+        selected_mults_grade = []
+        selected_mults_mult = []
 
         # calculate the multiplier
-        mean_category_mult = selected_mults.groupby("category")["multiple"].mean()
-        product_of_means = np.prod(mean_category_mult)
-        logger.info(f"derived table using multiplier: `{product_of_means:.2f}`")
+        derived_table = rate_table.copy()
+        derived_table["_mult"] = 1
+        for _, row in selected_mults.iterrows():
+            if pd.isna(row["grade"]):
+                derived_table["_mult"] *= row["multiple"]
+                selected_mults_mult.append(row["subcategory"])
+            else:
+                derived_table["_mult"] *= self._formula_grade(
+                    df=derived_table,
+                    multiple=row["multiple"],
+                    formula=row["grade"],
+                )
+                selected_mults_grade.append(row["subcategory"])
         logger.info(
-            f"used the following subcategories: `{list(selected_dict.values())}`"
+            f"derived table average multiplier: `{derived_table['_mult'].mean():.2f}`"
         )
+        if selected_mults_mult:
+            logger.info(
+                f"used the following subcategories with mult: `{selected_mults_mult}`"
+            )
+        if selected_mults_grade:
+            logger.info(
+                f"used the following subcategories with grade: `{selected_mults_grade}`"
+            )
 
         # apply the multiplier
-        derived_table = self.rate_table.copy()
-        derived_table["vals"] = derived_table["vals"] * product_of_means
+        derived_table["vals"] = derived_table["vals"] * derived_table["_mult"]
+        if not keep_mult:
+            derived_table = derived_table.drop(columns=["_mult"])
 
         return derived_table
+
+    def _formula_grade(
+        self, df: pd.DataFrame, multiple: int, formula: str
+    ) -> pd.DataFrame:
+        """
+        Calculate individual grade from a formula string and multiple.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            The dataframe to calculate the grade on.
+        multiple : int
+            The multiple to use in the formula.
+        formula : str
+            The formula to use to calculate the grade.
+
+        Returns
+        -------
+        graded_df : pd.DataFrame
+            The graded dataframe.
+
+        """
+        # adjust string to be evaluatable
+        # there needs to be a consistent variable name for the dataframe
+        # replace multiple with the value
+        # replace ['variable'] with df['variable']
+        logger.debug(f"calculating grade for multiple: {multiple}")
+        df_name = "df"
+        formula = re.sub(r"\bmultiple\b", str(multiple), formula)
+        formula = re.sub(
+            r"\[\s*['\"](\w+)['\"]\s*\]",
+            lambda m: f"{df_name}['{m.group(1)}']",
+            formula,
+        )
+
+        # evaluate the formula
+        try:
+            graded_df = eval(formula, {"np": np, df_name: df})
+        except Exception as e:
+            logger.error(
+                f"was not able to calculate multiple {multiple} using "
+                f"formula {formula}, most likely due to a syntax error in the formula."
+            )
+            logger.error(e)
+            return df
+
+        return graded_df
 
     def _merge_tables(
         self,
