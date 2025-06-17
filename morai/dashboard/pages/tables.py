@@ -1087,7 +1087,10 @@ def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
         else:
             try:
                 mt = tables.MortTable(rate=table1_id)
-                table_1 = mt.calc_mi_rates(years=table1_mi_years)
+                if table1_mi_years != 0:
+                    table_1 = mt.calc_mi_rates(years=table1_mi_years)
+                else:
+                    table_1 = mt.rate_table
                 mults_1 = mt.mult_table
                 mi_table_1 = mt.mi_table
                 table_1_select_period = "Unknown"
@@ -1122,7 +1125,10 @@ def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
         else:
             try:
                 mt = tables.MortTable(rate=table2_id)
-                table_2 = mt.calc_mi_rates(years=table2_mi_years)
+                if table2_mi_years != 0:
+                    table_2 = mt.calc_mi_rates(years=table2_mi_years)
+                else:
+                    table_2 = mt.rate_table
                 mults_2 = mt.mult_table
                 mi_table_2 = mt.mi_table
                 table_2_select_period = "Unknown"
