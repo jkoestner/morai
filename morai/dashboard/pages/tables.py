@@ -1091,7 +1091,7 @@ def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
                     table_1 = mt.calc_mi_rates(years=table1_mi_years)
                 else:
                     table_1 = mt.rate_table
-                mults_1 = mt.mult_table
+                mults_1 = mt.mult_table if mt.mult_table is not None else pd.DataFrame()
                 mi_table_1 = mt.mi_table
                 table_1_select_period = "Unknown"
             except FileNotFoundError:
@@ -1129,7 +1129,7 @@ def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
                     table_2 = mt.calc_mi_rates(years=table2_mi_years)
                 else:
                     table_2 = mt.rate_table
-                mults_2 = mt.mult_table
+                mults_2 = mt.mult_table if mt.mult_table is not None else pd.DataFrame()
                 mi_table_2 = mt.mi_table
                 table_2_select_period = "Unknown"
             except FileNotFoundError:
