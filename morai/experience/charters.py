@@ -413,7 +413,8 @@ def compare_rates(
                         },
                         **({secondary: x[secondary].sum()} if secondary else {}),
                     }
-                )
+                ),
+                include_groups=False,
             )
             .reset_index()
         )

@@ -386,7 +386,7 @@ def lazy_bin_feature(
     binned_vals = pd.cut(
         pd.Series(unique_vals),
         bins=bin_edges,
-        labels=labels,
+        labels=pd.Categorical(labels, ordered=True),
         include_lowest=True,
         right=True,
     )

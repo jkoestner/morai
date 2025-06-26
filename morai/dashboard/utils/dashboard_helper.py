@@ -78,9 +78,9 @@ def read_table(filepath: str) -> pl.LazyFrame:
 
 def filter_data(
     df: Union[pd.DataFrame, pl.LazyFrame],
-    mult_table: pd.DataFrame,
     callback_context: list[dict],
     num_to_str_count: int = num_to_str_count,
+    mult_table: Optional[pd.DataFrame] = None,
 ) -> Union[pd.DataFrame, pl.LazyFrame]:
     """
     Filter data based on the number of unique values.
@@ -89,12 +89,12 @@ def filter_data(
     ----------
     df : pd.DataFrame or pl.LazyFrame
         Lazy dataframe to filter.
-    mult_table : pd.DataFrame
-        Multiplier dataframe to adjust rates.
     callback_context : list
         List of callback context.
     num_to_str_count : int
         Number of unique values to convert to string.
+    mult_table : pd.DataFrame
+        Multiplier dataframe to adjust a rate_table.
 
     Returns
     -------
@@ -140,6 +140,7 @@ def filter_data(
         filtered_df = filtered_df.collect().to_pandas()
 
     # apply the multiplier table if exists
+    # this is for a rate_table
     if mult_table is not None and not mult_table.empty:
         mult_table_cols = mult_table["category"].tolist()
         selected_dict = {}

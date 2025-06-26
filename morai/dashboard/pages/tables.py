@@ -1087,10 +1087,7 @@ def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
         else:
             try:
                 mt = tables.MortTable(rate=table1_id)
-                if table1_mi_years != 0:
-                    table_1 = mt.calc_mi_rates(years=table1_mi_years)
-                else:
-                    table_1 = mt.rate_table
+                table_1 = mt.calc_mi_rates(years=table1_mi_years)
                 mults_1 = mt.mult_table if mt.mult_table is not None else pd.DataFrame()
                 mi_table_1 = mt.mi_table
                 table_1_select_period = "Unknown"
@@ -1125,10 +1122,7 @@ def load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years):
         else:
             try:
                 mt = tables.MortTable(rate=table2_id)
-                if table2_mi_years != 0:
-                    table_2 = mt.calc_mi_rates(years=table2_mi_years)
-                else:
-                    table_2 = mt.rate_table
+                table_2 = mt.calc_mi_rates(years=table2_mi_years)
                 mults_2 = mt.mult_table if mt.mult_table is not None else pd.DataFrame()
                 mi_table_2 = mt.mi_table
                 table_2_select_period = "Unknown"
@@ -1172,10 +1166,12 @@ def filter_tables(table_1, table_2, mults_1, mults_2, filter_list):
 
     # filter the datasets
     filtered_table_1 = dh.filter_data(
-        df=table_1, mult_df=mults_1, callback_context=filters_table_1
+        df=table_1,
+        callback_context=filters_table_1,
+        mult_table=mults_1,
     )
     filtered_table_2 = dh.filter_data(
-        df=table_2, mult_df=mults_2, callback_context=filters_table_2
+        df=table_2, callback_context=filters_table_2, mult_table=mults_2
     )
 
     return filtered_table_1, filtered_table_2
@@ -1228,7 +1224,9 @@ def get_table_desc(
         except KeyError:
             table_1_desc = table1_id
         try:
-            table_1_asof = suppress_logs(tables.get_rate_dict)(table1_id)["as_of"]
+            table_1_asof = suppress_logs(tables.get_rate_dict)(table1_id)["notes"][
+                "effective_dt"
+            ]
         except KeyError:
             table_1_asof = "Unknown"
     else:
@@ -1272,7 +1270,9 @@ def get_table_desc(
         except KeyError:
             table_2_desc = table2_id
         try:
-            table_2_asof = suppress_logs(tables.get_rate_dict)(table2_id)["as_of"]
+            table_2_asof = suppress_logs(tables.get_rate_dict)(table2_id)["notes"][
+                "effective_dt"
+            ]
         except KeyError:
             table_2_asof = "Unknown"
     else:
