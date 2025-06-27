@@ -15,3 +15,26 @@ simple_glm:
     workbook: 
       filename: simple_glm.xlsx
       mult_table: True
+graded_glm:
+  rate: graded_glm
+  description: graded glm output
+  keys:
+    - smoker_status
+    - sex
+  type:
+    workbook: 
+      filename: graded_glm.xlsx
+      mult_table: True
+simple_glm_mi:
+  rate: simple_glm_mi
+  description: simple_glm output with mi
+  keys:
+    - smoker_status
+    - sex
+  type:
+    workbook: 
+      filename: simple_glm.xlsx
+      mult_table: True
+  mi_table:
+    filename: simple_mi.csv
+    years: 10

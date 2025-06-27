@@ -377,6 +377,7 @@ class MortTable:
         years: int = 0,
         keep_mi: bool = False,
         rate_table: pd.DataFrame = None,
+        rate_name: str = "vals",
         mi_table: pd.DataFrame = None,
     ) -> pd.DataFrame:
         """
@@ -390,6 +391,8 @@ class MortTable:
             Whether to keep the mi column in the rate table.
         rate_table : pd.DataFrame, optional (default=None)
             The rate table to use for calculating the MI rates.
+        rate_name : str, optional (default="vals")
+            The name of the rate column in the rate table.
         mi_table : pd.DataFrame, optional (default=None)
             The MI table to use for calculating the MI rates.
 
@@ -403,10 +406,6 @@ class MortTable:
             rate_table = self.rate_table
         if mi_table is None:
             mi_table = self.mi_table
-        # check variables
-        if years is None:
-            logger.warning("years is None, returning rate_table.")
-            return rate_table
 
         # calculate mi rates
         if years != 0:
@@ -439,7 +438,9 @@ class MortTable:
                 rate_table["mi"] = rate_table["mi"].fillna(0)
 
             # calculate new rates
-            rate_table["vals"] = rate_table["vals"] * (1 - rate_table["mi"]) ** years
+            rate_table[rate_name] = (
+                rate_table[rate_name] * (1 - rate_table["mi"]) ** years
+            )
             if not keep_mi:
                 rate_table = rate_table.drop(columns=["mi"])
 
@@ -512,12 +513,12 @@ class MortTable:
         selected_mults_grade = []
         selected_mults_mult = []
 
-        # calculate the multiplier
+        # calculate the multiplier and grade if exists
         derived_table = rate_table.copy()
         derived_table["_mult"] = 1
         for _, row in selected_mults.iterrows():
             if "grade" in row and not pd.isna(row["grade"]):
-                derived_table["_mult"] *= self._formula_grade(
+                derived_table["_mult"] *= _formula_grade(
                     df=derived_table,
                     multiple=row["multiple"],
                     formula=row["grade"],
@@ -545,53 +546,6 @@ class MortTable:
             derived_table = derived_table.drop(columns=["_mult"])
 
         return derived_table
-
-    def _formula_grade(
-        self, df: pd.DataFrame, multiple: int, formula: str
-    ) -> pd.DataFrame:
-        """
-        Calculate individual grade from a formula string and multiple.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            The dataframe to calculate the grade on.
-        multiple : int
-            The multiple to use in the formula.
-        formula : str
-            The formula to use to calculate the grade.
-
-        Returns
-        -------
-        graded_df : pd.DataFrame
-            The graded dataframe.
-
-        """
-        # adjust string to be evaluatable
-        # there needs to be a consistent variable name for the dataframe
-        # replace multiple with the value
-        # replace ['variable'] with df['variable']
-        logger.debug(f"calculating grade for multiple: {multiple}")
-        df_name = "df"
-        formula = re.sub(r"\bmultiple\b", str(multiple), formula)
-        formula = re.sub(
-            r"\[\s*['\"](\w+)['\"]\s*\]",
-            lambda m: f"{df_name}['{m.group(1)}']",
-            formula,
-        )
-
-        # evaluate the formula
-        try:
-            graded_df = eval(formula, {"np": np, df_name: df})
-        except Exception as e:
-            logger.error(
-                f"was not able to calculate multiple {multiple} using "
-                f"formula {formula}, most likely due to a syntax error in the formula."
-            )
-            logger.error(e)
-            return df
-
-        return graded_df
 
     def _merge_tables(
         self,
@@ -983,17 +937,33 @@ def map_rates(
     # this performs a lookup for each category to map the multiples to the df
     if mult_table is not None:
         for mult_col in mult_to_df_map:
-            mult_map = mult_table[mult_table["category"] == mult_col][
-                ["subcategory", "multiple", "grade"]
-            ]
-            mult_map = mult_map.rename(
+            columns = ["subcategory", "multiple"]
+            grade_col = f"_grade_{mult_col}"
+            mult_colname = f"_mult_{mult_col}"
+            if "grade" in mult_table.columns and mult_table["grade"].notna().any():
+                columns.append("grade")
+
+            mult_map = mult_table[mult_table["category"] == mult_col][columns].rename(
                 columns={
                     "subcategory": mult_col,
-                    "multiple": f"_mult_{mult_col}",
-                    "grade": f"_grade_{mult_col}",
+                    "multiple": mult_colname,
+                    **({"grade": grade_col} if "grade" in columns else {}),
                 }
             )
             df = df.merge(mult_map, on=mult_col, how="left")
+
+            # grade multiple if grade column exists
+            if grade_col in df.columns:
+                graded_mult = pd.Series(index=df.index, dtype=float)
+                for unique_formula in df[grade_col].dropna().unique():
+                    mask = df[grade_col] == unique_formula
+                    graded_mult[mask] = _formula_grade(
+                        df=df.loc[mask],
+                        multiple=mult_colname,
+                        formula=unique_formula,
+                    )
+                df[mult_colname] = graded_mult
+                df = df.drop(columns=[grade_col])
 
             # check for missing values in table
             missing_mult_values = set(df[mult_col].unique()) - set(
@@ -1012,10 +982,13 @@ def map_rates(
             years = rate_dict["mi_table"]["years"]
         except KeyError:
             years = 0
-        rate_table = mt.calc_mi_rates(years=years)
+        rate_table = mt.calc_mi_rates(
+            years=years, rate_table=rate_table, rate_name=rate_name
+        )
 
     # merge in the rates
     df = df.merge(rate_table, on=merge_keys, how="left")
+    print(df.columns)
     if mult_table is not None:
         for mult_col in mult_cols:
             df[rate_name] = df[rate_name] * df[mult_col]
@@ -1551,3 +1524,54 @@ def _create_grid(
     mort_grid = check_aa_ia_dur_cols(mort_grid, max_age=max_age)
 
     return mort_grid
+
+
+def _formula_grade(
+    df: pd.DataFrame, multiple: Union[float, str], formula: str
+) -> pd.Series:
+    """
+    Calculate individual grade from a formula string and multiple.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The dataframe to calculate the grade on.
+    multiple : float or str
+        The multiple value or column name of the multiple to use in the formula.
+          - value is useful for when calculating derived table
+          - column name is useful when mapping rates
+    formula : str
+        The formula to use to calculate the grade.
+
+    Returns
+    -------
+    graded_mult : pd.Series
+        The graded multiple.
+
+    """
+    # adjust string to be evaluatable
+    logger.debug(f"calculating grade for multiple: {multiple}")
+    # replace ['variable'] with df['variable']
+    formula = re.sub(
+        r"\[\s*['\"](\w+)['\"]\s*\]",
+        r'df["\1"]',
+        formula,
+    )
+    # replace multiple with the value
+    if isinstance(multiple, str):
+        formula = re.sub(r"\bmultiple\b", f'df["{multiple}"]', formula)
+    else:
+        formula = re.sub(r"\bmultiple\b", str(multiple), formula)
+
+    # evaluate the formula
+    try:
+        graded_mult = eval(formula, {"np": np, "df": df})
+    except Exception as e:
+        logger.error(
+            f"was not able to calculate multiple {multiple} using "
+            f"formula {formula}, most likely due to a syntax error in the formula."
+        )
+        logger.error(e)
+        return df
+
+    return graded_mult

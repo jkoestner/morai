@@ -137,8 +137,8 @@ def test_build_table_workbook():
     npt.assert_allclose(test_mult_table["multiple"], mult_table_vals, atol=1e-3)
 
 
-def test_map_rates():
-    """Tests the mapping of rates."""
+def test_map_rates_simple():
+    """Tests the mapping of rates with a simple model."""
     test_experience_df = tables.map_rates(
         df=experience_df,
         rate="simple_glm",
@@ -147,4 +147,42 @@ def test_map_rates():
 
     npt.assert_allclose(
         test_experience_df["rate"], test_experience_df["qx_simple_glm"], atol=1e-3
+    )
+
+
+def test_map_rates_simple_mi():
+    """Tests the mapping of rates with a simple model with mi."""
+    test_experience_df = tables.map_rates(
+        df=experience_df,
+        rate="simple_glm_mi",
+        rate_filename="rate_map_test.yaml",
+    )
+
+    npt.assert_allclose(
+        test_experience_df["rate"] * 0.99**10,
+        test_experience_df["qx_simple_glm_mi"],
+        atol=1e-3,
+        err_msg="The rates should have 10 years of 1% mi applied.",
+    )
+
+
+def test_map_rates_grade():
+    """Tests the mapping of rates with a graded rates."""
+    test_experience_df = tables.map_rates(
+        df=experience_df,
+        rate="graded_glm",
+        rate_filename="rate_map_test.yaml",
+    )
+
+    npt.assert_allclose(
+        test_experience_df.iloc[1]["qx_graded_glm"],
+        0.088,
+        atol=1e-3,
+        err_msg="Female Smoker should not be graded and still have multiple",
+    )
+    npt.assert_allclose(
+        test_experience_df.iloc[5]["qx_graded_glm"],
+        0.072,
+        atol=1e-3,
+        err_msg="Female Smoker should be graded and not have multiple",
     )
