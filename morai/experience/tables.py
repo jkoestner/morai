@@ -372,29 +372,34 @@ class MortTable:
 
         return mi_table
 
-    def calc_mi_rates(
+    def apply_mi_to_rate_table(
         self,
         years: int = 0,
-        keep_mi: bool = False,
         rate_table: pd.DataFrame = None,
         rate_name: str = "vals",
         mi_table: pd.DataFrame = None,
+        keep_mi: bool = False,
     ) -> pd.DataFrame:
         """
-        Calculate MI rates from the MI table.
+        Adjust rate_table using the MI table.
+
+        The MI table will be merged using the columns in the mi_table that are
+        also in the rate_table.
+
+        The years parameter will apply multiplicative MI: (1 - MI)**years
 
         Parameters
         ----------
         years : int, optional (default=0)
             The number of years to apply MI for to calculate the rate.
-        keep_mi : bool, optional (default=False)
-            Whether to keep the mi column in the rate table.
         rate_table : pd.DataFrame, optional (default=None)
             The rate table to use for calculating the MI rates.
         rate_name : str, optional (default="vals")
             The name of the rate column in the rate table.
         mi_table : pd.DataFrame, optional (default=None)
             The MI table to use for calculating the MI rates.
+        keep_mi : bool, optional (default=False)
+            Whether to keep the mi column in the rate table.
 
         Returns
         -------
@@ -855,6 +860,12 @@ def map_rates(
     """
     Map rates to the DataFrame.
 
+    The rate will be mapped as "qx_{rate_name}".
+
+    This function also handles:
+        - MI rates
+        - Multiples
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -890,11 +901,12 @@ def map_rates(
     # based on the rate_dict "keys"
     if rate_to_df_map is None:
         logger.debug(
-            "create 'rate_to_df_map' which assumes the keys are the same "
-            "between the rate and df."
+            "create 'rate_to_df_map' which assumes the keys in rate "
+            "are the same in the df."
         )
         rate_cols = rate_dict["keys"]
         rate_to_df_map = {col: col for col in rate_cols}
+        table_to_df_map = rate_to_df_map.copy()
 
     # check if columns are in the DataFrame
     for df_col in rate_to_df_map.values():
@@ -918,7 +930,7 @@ def map_rates(
 
     # update the rate_table to merge with the df
     # rename the columns and adjust dtypes to match df
-    # rename the rate column 'vals' to 'rate_name'
+    # rename the rate_table column 'vals' to 'rate_name'
     merge_keys = list(rate_to_df_map.values())
     table_rate_name = "vals"
     rate_table = rate_table.rename(columns=rate_to_df_map)
@@ -934,7 +946,8 @@ def map_rates(
         df = df.drop(columns=[rate_name])
 
     # update the mult_table to merge with the df
-    # this performs a lookup for each category to map the multiples to the df
+    # this performs a lookup for each category in the mult_table
+    # to map the multiples to the df
     if mult_table is not None:
         for mult_col in mult_to_df_map:
             columns = ["subcategory", "multiple"]
@@ -976,25 +989,52 @@ def map_rates(
                 )
         mult_cols = [col for col in df.columns if "_mult_" in col]
 
-    # apply mi to rate table
-    if mi_table is not None:
-        try:
-            years = rate_dict["mi_table"]["years"]
-        except KeyError:
-            years = 0
-        rate_table = mt.calc_mi_rates(
-            years=years, rate_table=rate_table, rate_name=rate_name
-        )
-
-    # merge in the rates
+    # merge in the rate_table rates
     df = df.merge(rate_table, on=merge_keys, how="left")
-    print(df.columns)
+
+    # apply the multiples if exists
     if mult_table is not None:
         for mult_col in mult_cols:
             df[rate_name] = df[rate_name] * df[mult_col]
         df = df.drop(columns=mult_cols)
         merge_keys = merge_keys + list(mult_to_df_map.keys())
     logger.info(f"the mapped rates are based on the following keys: {merge_keys}")
+
+    # apply mi to df
+    if mi_table is not None:
+        year_col = rate_dict["mi_table"].get("year_col", None)
+        year_start = rate_dict["mi_table"].get("year_start", None)
+        years = rate_dict["mi_table"].get("years", 0)
+
+        # merge mi
+        mi_to_df_map = {
+            key: value
+            for key, value in table_to_df_map.items()
+            if key in mi_table.columns
+        }
+        mi_table = mi_table.rename(columns=mi_to_df_map)
+        mi_table = mi_table.rename(columns={"mi": "_mi"})
+        mi_table = mi_table[[*mi_to_df_map.values(), "_mi"]]
+        merge_keys = list(mi_to_df_map.values())
+        df = df.merge(mi_table, on=merge_keys, how="left")
+
+        # multiply mi
+        if year_col and year_start:
+            logger.info(
+                f"applying MI to df with year_col: `{year_col}` "
+                f"and year_start: `{year_start}`"
+            )
+            try:
+                df["_mi"] = (1 - df["_mi"]) ** (df[year_col] - year_start)
+            except Exception as e:
+                logger.error(f"Error applying MI to df: {e}")
+        else:
+            logger.info(f"applying `{years}` years of MI")
+            df["_mi"] = (1 - df["_mi"]) ** years
+
+        # update rate
+        df[rate_name] = df[rate_name] * df["_mi"]
+        df = df.drop(columns=["_mi"])
 
     # check if there are any missing rates
     missing_rates = df[df[rate_name].isnull()]
@@ -1532,6 +1572,11 @@ def _formula_grade(
     """
     Calculate individual grade from a formula string and multiple.
 
+    If the multiple is a string the multiple will be used as a column name in
+    the dataframe.
+
+    If the multiple is a float the multiple will be used as a value.
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -1549,8 +1594,6 @@ def _formula_grade(
         The graded multiple.
 
     """
-    # adjust string to be evaluatable
-    logger.debug(f"calculating grade for multiple: {multiple}")
     # replace ['variable'] with df['variable']
     formula = re.sub(
         r"\[\s*['\"](\w+)['\"]\s*\]",
@@ -1565,6 +1608,7 @@ def _formula_grade(
 
     # evaluate the formula
     try:
+        logger.debug(f"calculating grade using formula: {formula}")
         graded_mult = eval(formula, {"np": np, "df": df})
     except Exception as e:
         logger.error(
