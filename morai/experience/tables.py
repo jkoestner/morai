@@ -906,12 +906,14 @@ def map_rates(
         )
         rate_cols = rate_dict["keys"]
         rate_to_df_map = {col: col for col in rate_cols}
-        table_to_df_map = rate_to_df_map.copy()
 
-    # check if columns are in the DataFrame
-    for df_col in rate_to_df_map.values():
-        if df_col not in df.columns:
-            raise ValueError(f"column: '{df_col}' not in the DataFrame.")
+    # only keep mapping if the column is in the df
+    table_to_df_map = rate_to_df_map.copy()
+    rate_to_df_map = {
+        rate_col: df_col
+        for rate_col, df_col in rate_to_df_map.items()
+        if df_col in df.columns
+    }
 
     # update the mapping if there is a mult_table
     # the rate table mapping will be based on what is in the rate_table and not
@@ -1008,9 +1010,9 @@ def map_rates(
 
         # merge mi
         mi_to_df_map = {
-            key: value
-            for key, value in table_to_df_map.items()
-            if key in mi_table.columns
+            mi_col: df_col
+            for mi_col, df_col in table_to_df_map.items()
+            if mi_col in mi_table.columns
         }
         mi_table = mi_table.rename(columns=mi_to_df_map)
         mi_table = mi_table.rename(columns={"mi": "_mi"})
@@ -1018,18 +1020,30 @@ def map_rates(
         merge_keys = list(mi_to_df_map.values())
         df = df.merge(mi_table, on=merge_keys, how="left")
 
+        # check for missing values in mi_table
+        if df["_mi"].isnull().any():
+            logger.warning(
+                "There are missing values in the MI table. "
+                "Filling with 1. Example: "
+                f"{df[df['_mi'].isnull()].head(1).to_dict(orient='records')[0]}"
+            )
+            df["_mi"] = df["_mi"].fillna(1)
+
         # multiply mi
         if year_col and year_start:
             logger.info(
                 f"applying MI to df with year_col: `{year_col}` "
-                f"and year_start: `{year_start}`"
+                f"and year_start: `{year_start}` "
+                f"and mapped keys: `{merge_keys}`"
             )
             try:
                 df["_mi"] = (1 - df["_mi"]) ** (df[year_col] - year_start)
             except Exception as e:
                 logger.error(f"Error applying MI to df: {e}")
         else:
-            logger.info(f"applying `{years}` years of MI")
+            logger.info(
+                f"applying `{years}` years of MI with mapped keys: `{merge_keys}`"
+            )
             df["_mi"] = (1 - df["_mi"]) ** years
 
         # update rate
