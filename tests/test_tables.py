@@ -137,6 +137,22 @@ def test_build_table_workbook():
     npt.assert_allclose(test_mult_table["multiple"], mult_table_vals, atol=1e-3)
 
 
+def test_calc_derived_table():
+    """Checks the derived table calculation."""
+    mt = tables.MortTable(rate="graded_glm", rate_filename="rate_map_test.yaml")
+    test_derived_table = mt.calc_derived_table_from_mults(
+        selected_dict={"smoker_status": ["S"]}
+    )
+    rate_table = mt.rate_table
+
+    npt.assert_allclose(
+        test_derived_table["vals"],
+        rate_table["vals"] * 1.22222,
+        atol=1e-3,
+        err_msg="The derived table should be the rate table times the multiple (1.22).",
+    )
+
+
 def test_map_rates_simple():
     """Tests the mapping of rates with a simple rate_table."""
     test_experience_df = tables.map_rates(

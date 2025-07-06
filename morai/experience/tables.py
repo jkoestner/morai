@@ -15,6 +15,7 @@ from morai.forecast import preprocessors
 from morai.models import core
 from morai.utils import custom_logger, helpers
 from morai.utils.custom_logger import suppress_logs
+from morai.utils.helpers import check_merge
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -563,6 +564,11 @@ class MortTable:
         """
         Merge the source table into the merge table.
 
+        This is specifically for the MortTable class as it will handle
+          - rename 'vals' column
+          - handle extra dimensions
+          - check for missing values
+
         Parameters
         ----------
         merge_table : pd.DataFrame
@@ -897,7 +903,7 @@ def map_rates(
     mi_table = mt.mi_table
     logger.info(f"mapping rate: '{rate_name}' with format: '{rate_type}'")
 
-    # create rate_to_df_map if not provided
+    # create table_to_df_map if not provided
     # based on the rate_dict "keys"
     if rate_to_df_map is None:
         logger.debug(
@@ -906,40 +912,39 @@ def map_rates(
         )
         rate_cols = rate_dict["keys"]
         rate_to_df_map = {col: col for col in rate_cols}
-
-    # only keep mapping if the column is in the df
     table_to_df_map = rate_to_df_map.copy()
-    rate_to_df_map = {
-        rate_col: df_col
-        for rate_col, df_col in rate_to_df_map.items()
-        if df_col in df.columns
-    }
 
-    # update the mapping if there is a mult_table
-    # the rate table mapping will be based on what is in the rate_table and not
-    # what is in the mult_table
+    # renaming the df columns temporarily to merge rates
+    missing_cols = [col for col in table_to_df_map.values() if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"The following columns are missing from the DataFrame used in "
+            f"'rate_to_df_map': {missing_cols}"
+        )
+    df_to_table_map = {v: k for k, v in table_to_df_map.items()}
+    df = df.rename(columns=df_to_table_map)
+
+    # getting the keys
+    table_keys = list(table_to_df_map.keys())
+    rate_keys = [key for key in table_keys if key in rate_table.columns]
+    mult_keys = []
+    mi_keys = []
+
     if mult_table is not None:
-        mult_to_df_map = {
-            mult_col: df_col
-            for mult_col, df_col in rate_to_df_map.items()
-            if mult_col in list(mult_table["category"].unique())
-        }
-        rate_to_df_map = {
-            rate_col: df_col
-            for rate_col, df_col in rate_to_df_map.items()
-            if rate_col in rate_table.columns
-        }
+        mult_keys = [
+            key for key in table_keys if key in list(mult_table["category"].unique())
+        ]
 
-    # update the rate_table to merge with the df
-    # rename the columns and adjust dtypes to match df
+    if mi_table is not None:
+        mi_keys = [key for key in table_keys if key in mi_table.columns]
+
+    # update the rate_table
+    # adjust dtypes to match df
     # rename the rate_table column 'vals' to 'rate_name'
-    merge_keys = list(rate_to_df_map.values())
-    table_rate_name = "vals"
-    rate_table = rate_table.rename(columns=rate_to_df_map)
-    for rate_col in rate_to_df_map.values():
+    for rate_col in rate_keys:
         rate_table[rate_col] = rate_table[rate_col].astype(df[rate_col].dtype)
-    rate_table = rate_table[[*merge_keys, table_rate_name]]
-    rate_table = rate_table.rename(columns={table_rate_name: rate_name})
+    rate_table = rate_table[[*rate_keys, "vals"]]
+    rate_table = rate_table.rename(columns={"vals": rate_name})
     if rate_name in df.columns:
         logger.warning(
             f"rate: '{rate_name}' already exists in the DataFrame. "
@@ -947,11 +952,11 @@ def map_rates(
         )
         df = df.drop(columns=[rate_name])
 
-    # update the mult_table to merge with the df
+    # update the mult_table
     # this performs a lookup for each category in the mult_table
     # to map the multiples to the df
     if mult_table is not None:
-        for mult_col in mult_to_df_map:
+        for mult_col in mult_keys:
             columns = ["subcategory", "multiple"]
             grade_col = f"_grade_{mult_col}"
             mult_colname = f"_mult_{mult_col}"
@@ -965,7 +970,12 @@ def map_rates(
                     **({"grade": grade_col} if "grade" in columns else {}),
                 }
             )
-            df = df.merge(mult_map, on=mult_col, how="left")
+            df = check_merge(pd.merge)(
+                left=df,
+                right=mult_map,
+                how="left",
+                on=mult_col,
+            )
 
             # grade multiple if grade column exists
             if grade_col in df.columns:
@@ -992,15 +1002,21 @@ def map_rates(
         mult_cols = [col for col in df.columns if "_mult_" in col]
 
     # merge in the rate_table rates
-    df = df.merge(rate_table, on=merge_keys, how="left")
+    df = check_merge(pd.merge)(
+        left=df,
+        right=rate_table,
+        on=rate_keys,
+        how="left",
+    )
 
     # apply the multiples if exists
     if mult_table is not None:
         for mult_col in mult_cols:
             df[rate_name] = df[rate_name] * df[mult_col]
         df = df.drop(columns=mult_cols)
-        merge_keys = merge_keys + list(mult_to_df_map.keys())
-    logger.info(f"the mapped rates are based on the following keys: {merge_keys}")
+    logger.info(
+        f"the mapped rates are based on the following keys: {rate_keys + mult_keys}"
+    )
 
     # apply mi to df
     if mi_table is not None:
@@ -1009,16 +1025,15 @@ def map_rates(
         years = rate_dict["mi_table"].get("years", 0)
 
         # merge mi
-        mi_to_df_map = {
-            mi_col: df_col
-            for mi_col, df_col in table_to_df_map.items()
-            if mi_col in mi_table.columns
-        }
-        mi_table = mi_table.rename(columns=mi_to_df_map)
         mi_table = mi_table.rename(columns={"mi": "_mi"})
-        mi_table = mi_table[[*mi_to_df_map.values(), "_mi"]]
-        merge_keys = list(mi_to_df_map.values())
-        df = df.merge(mi_table, on=merge_keys, how="left")
+        mi_table = mi_table[[*mi_keys, "_mi"]]
+        logger.info(f"the mapped mi are based on the following keys: {mi_keys}")
+        df = check_merge(pd.merge)(
+            left=df,
+            right=mi_table,
+            on=mi_keys,
+            how="left",
+        )
 
         # check for missing values in mi_table
         if df["_mi"].isnull().any():
@@ -1033,17 +1048,14 @@ def map_rates(
         if year_col and year_start:
             logger.info(
                 f"applying MI to df with year_col: `{year_col}` "
-                f"and year_start: `{year_start}` "
-                f"and mapped keys: `{merge_keys}`"
+                f"and year_start: `{year_start}`"
             )
             try:
                 df["_mi"] = (1 - df["_mi"]) ** (df[year_col] - year_start)
             except Exception as e:
                 logger.error(f"Error applying MI to df: {e}")
         else:
-            logger.info(
-                f"applying `{years}` years of MI with mapped keys: `{merge_keys}`"
-            )
+            logger.info(f"applying `{years}` years of MI")
             df["_mi"] = (1 - df["_mi"]) ** years
 
         # update rate
@@ -1056,6 +1068,9 @@ def map_rates(
         logger.warning(
             f" there are '{len(missing_rates)}' missing values for '{rate_name}'."
         )
+
+    # rename the df back to original
+    df = df.rename(columns=table_to_df_map)
 
     return df
 
@@ -1614,6 +1629,16 @@ def _formula_grade(
         r'df["\1"]',
         formula,
     )
+
+    # check if variables exist in df
+    variables = re.findall(r"\[\s*['\"](\w+)['\"]\s*\]", formula)
+    variables = list(set(variables))
+    missing_variables = [
+        variable for variable in variables if variable not in df.columns
+    ]
+    if missing_variables:
+        raise ValueError(f"Variables {missing_variables} not found in dataframe.")
+
     # replace multiple with the value
     if isinstance(multiple, str):
         formula = re.sub(r"\bmultiple\b", f'df["{multiple}"]', formula)
