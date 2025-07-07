@@ -90,7 +90,7 @@ class MortTable:
                 )
 
             # get mi_table
-            mi_filename = self.rate_dict.get("mi_table", {}).get("filename")
+            mi_filename = self.rate_dict.get("mi_table", {}).get("mi_filename")
             if mi_filename:
                 self.mi_table = self.get_mi_table(mi_filename)
 
@@ -375,11 +375,11 @@ class MortTable:
 
     def apply_mi_to_rate_table(
         self,
-        years: int = 0,
-        rate_table: pd.DataFrame = None,
-        rate_name: str = "vals",
-        mi_table: pd.DataFrame = None,
+        mi_years: int = 0,
         keep_mi: bool = False,
+        rate_table: pd.DataFrame = None,
+        mi_table: pd.DataFrame = None,
+        rate_name: str = "vals",
     ) -> pd.DataFrame:
         """
         Adjust rate_table using the MI table.
@@ -391,16 +391,16 @@ class MortTable:
 
         Parameters
         ----------
-        years : int, optional (default=0)
+        mi_years : int, optional (default=0)
             The number of years to apply MI for to calculate the rate.
-        rate_table : pd.DataFrame, optional (default=None)
-            The rate table to use for calculating the MI rates.
-        rate_name : str, optional (default="vals")
-            The name of the rate column in the rate table.
-        mi_table : pd.DataFrame, optional (default=None)
-            The MI table to use for calculating the MI rates.
         keep_mi : bool, optional (default=False)
             Whether to keep the mi column in the rate table.
+        rate_table : pd.DataFrame, optional (default=None)
+            The rate table to use for calculating the MI rates.
+        mi_table : pd.DataFrame, optional (default=None)
+            The MI table to use for calculating the MI rates.
+        rate_name : str, optional (default="vals")
+            The name of the rate column in the rate table.
 
         Returns
         -------
@@ -414,12 +414,12 @@ class MortTable:
             mi_table = self.mi_table
 
         # calculate mi rates
-        if years != 0:
+        if mi_years != 0:
             if mi_table is None:
                 logger.warning("there is no mi_table set currently.")
                 return rate_table
 
-            logger.info(f"calculating mi rates for {years} years.")
+            logger.info(f"calculating mi rates for {mi_years} years.")
 
             # merge data
             merge_cols = [
@@ -445,7 +445,7 @@ class MortTable:
 
             # calculate new rates
             rate_table[rate_name] = (
-                rate_table[rate_name] * (1 - rate_table["mi"]) ** years
+                rate_table[rate_name] * (1 - rate_table["mi"]) ** mi_years
             )
             if not keep_mi:
                 rate_table = rate_table.drop(columns=["mi"])
@@ -455,9 +455,9 @@ class MortTable:
     def calc_derived_table_from_mults(
         self,
         selected_dict: Optional[dict[str, list]] = None,
+        keep_mult: bool = False,
         rate_table: Optional[pd.DataFrame] = None,
         mult_table: Optional[pd.DataFrame] = None,
-        keep_mult: bool = False,
     ) -> pd.DataFrame:
         """
         Calculate a derived rate table from the rate table and multiplier table.
@@ -476,12 +476,12 @@ class MortTable:
                     "category": ["subcategory"],
                     "category2": ["subcategory2"],
                 }
+        keep_mult : bool, optional (default=False)
+            Whether to keep the mult column in the derived table.
         rate_table : pd.DataFrame, optional (default=None)
             The rate table to use for calculating the derived table.
         mult_table : pd.DataFrame, optional (default=None)
             The multiplier table to use for calculating the derived table.
-        keep_mult : bool, optional (default=False)
-            Whether to keep the mult column in the derived table.
 
         Returns
         -------
@@ -869,8 +869,8 @@ def map_rates(
     The rate will be mapped as "qx_{rate_name}".
 
     This function also handles:
-        - MI rates
         - Multiples
+        - MI rates
 
     Parameters
     ----------
@@ -883,6 +883,7 @@ def map_rates(
         be based on the key list in the rate file mapping.
           - The keys are the rate map keys
           - The values are the dataframe keys
+          - e.g. {"attained_age": "age", "year": "study_year"}
     rate_filename : str, optional
         The location of the rate map file. If none this is assumed to
         be in the dataset/tables folder.
@@ -923,6 +924,14 @@ def map_rates(
         )
     df_to_table_map = {v: k for k, v in table_to_df_map.items()}
     df = df.rename(columns=df_to_table_map)
+
+    # get mi_table parameters
+    if mi_table is not None:
+        mi_year_col = rate_dict["mi_table"].get("mi_year_col", None)
+        mi_start_year = rate_dict["mi_table"].get("mi_start_year", None)
+        mi_years = 1
+        if mi_year_col and mi_year_col not in df.columns:
+            raise ValueError(f"mi_year_col: '{mi_year_col}' not found in df.")
 
     # getting the keys
     table_keys = list(table_to_df_map.keys())
@@ -1020,10 +1029,6 @@ def map_rates(
 
     # apply mi to df
     if mi_table is not None:
-        year_col = rate_dict["mi_table"].get("year_col", None)
-        year_start = rate_dict["mi_table"].get("year_start", None)
-        years = rate_dict["mi_table"].get("years", 0)
-
         # merge mi
         mi_table = mi_table.rename(columns={"mi": "_mi"})
         mi_table = mi_table[[*mi_keys, "_mi"]]
@@ -1045,18 +1050,18 @@ def map_rates(
             df["_mi"] = df["_mi"].fillna(1)
 
         # multiply mi
-        if year_col and year_start:
+        if mi_year_col and mi_start_year:
             logger.info(
-                f"applying MI to df with year_col: `{year_col}` "
-                f"and year_start: `{year_start}`"
+                f"applying MI to df with year_col: `{mi_year_col}` "
+                f"and year_start: `{mi_start_year}`"
             )
             try:
-                df["_mi"] = (1 - df["_mi"]) ** (df[year_col] - year_start)
+                df["_mi"] = (1 - df["_mi"]) ** (df[mi_year_col] - mi_start_year)
             except Exception as e:
                 logger.error(f"Error applying MI to df: {e}")
         else:
-            logger.info(f"applying `{years}` years of MI")
-            df["_mi"] = (1 - df["_mi"]) ** years
+            logger.info(f"applying `{mi_years}` years of MI")
+            df["_mi"] = (1 - df["_mi"]) ** mi_years
 
         # update rate
         df[rate_name] = df[rate_name] * df["_mi"]
@@ -1637,7 +1642,10 @@ def _formula_grade(
         variable for variable in variables if variable not in df.columns
     ]
     if missing_variables:
-        raise ValueError(f"Variables {missing_variables} not found in dataframe.")
+        raise ValueError(
+            f"Variables {missing_variables} not found in dataframe or "
+            f"are not in the rate map."
+        )
 
     # replace multiple with the value
     if isinstance(multiple, str):

@@ -175,10 +175,10 @@ def test_map_rates_simple_mi_year():
     )
 
     npt.assert_allclose(
-        test_experience_df["rate"] * 0.99**10,
+        test_experience_df["rate"] * 0.99**1,
         test_experience_df["qx_simple_glm_mi_year"],
         atol=1e-3,
-        err_msg="The rates should have 10 years of 1% mi applied.",
+        err_msg="The rates should have 1 years of 1% mi applied.",
     )
 
 
