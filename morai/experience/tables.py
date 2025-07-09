@@ -151,6 +151,7 @@ class MortTable:
         extra_dims: Optional[Dict[str, List[str]]] = None,
         juv_list: Optional[List[int]] = None,
         extend: bool = False,
+        add_year: Optional[float] = None,
     ) -> pd.DataFrame:
         """
         Build a 1-d mortality dataframe from a list of tables.
@@ -164,13 +165,12 @@ class MortTable:
 
         Example
         -------
-        extra_dims={"sex":["F","M"], "smoker_status":["NS","S"]}
-        table_list=[3224, 3234, 3252, 3262]
-        juv_list=[3273, 3273, 3274, 3274]
-        mort_table = build_table(table_list=table_list,
-                                 extra_dims=extra_dims,
-                                 juv_list=juv_list,
-                                 extend=True)
+        extra_dims = {"sex": ["F", "M"], "smoker_status": ["NS", "S"]}
+        table_list = [3224, 3234, 3252, 3262]
+        juv_list = [3273, 3273, 3274, 3274]
+        mort_table = mt.build_table_soa(
+            table_list=table_list, extra_dims=extra_dims, juv_list=juv_list, extend=True
+        )
 
         Parameters
         ----------
@@ -184,6 +184,8 @@ class MortTable:
             should have the same length as table_list and will only use issue ages 0-17.
         extend : bool, optional (default=False)
             Whether to extend the table to fill in missing values.
+        add_year : float, optional (default=None)
+            Whether to add a year to the table.
 
         Returns
         -------
@@ -302,6 +304,10 @@ class MortTable:
                 mort_table["vals"] = grouped["vals"].apply(
                     lambda x: x.astype(float).ffill().bfill()
                 )
+
+        if add_year:
+            mort_table["year"] = add_year
+            dims = dims | {"year": [add_year]}
 
         logger.info(f"Created table that has the following dims: {dims}")
         logger.info(f"Table has {len(mort_table)} cells.")
