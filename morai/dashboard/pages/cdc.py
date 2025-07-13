@@ -217,7 +217,18 @@ def layout():
                             ),
                             dbc.Row(
                                 html.P(
-                                    "The chart shows the amount of deaths by COD over the past few years. ",
+                                    [
+                                        "The chart shows the amount of deaths by COD over the past few years. ",
+                                        html.Br(),
+                                        "The chart also includes an adjustment for the current year by multiplying "
+                                        "the deaths by 365/",
+                                        html.Span(
+                                            "days elapsed",
+                                            id="cod-days-elapsed-text",
+                                            className="text-muted small",
+                                        ),
+                                        ".",
+                                    ]
                                 ),
                             ),
                             dbc.Row(
@@ -267,8 +278,13 @@ def layout():
                             dbc.Row(
                                 html.P(
                                     [
-                                        "Tree map that is a breakout of deaths from the most recent "
-                                        "year in the data",
+                                        "Tree map that is a breakout of deaths from ",
+                                        html.Span(
+                                            "the most recent year",
+                                            id="cod-tree-year-text",
+                                            className="text-muted small",
+                                        ),
+                                        ".",
                                     ]
                                 ),
                             ),
@@ -288,7 +304,13 @@ def layout():
                                 html.P(
                                     [
                                         "These tables show the top causes of death by age "
-                                        "group for the most recent year in the data.",
+                                        "group for ",
+                                        html.Span(
+                                            "the most recent year",
+                                            id="cod-table-year-text",
+                                            className="text-muted small",
+                                        ),
+                                        ".",
                                     ]
                                 ),
                             ),
@@ -354,7 +376,21 @@ def layout():
                                     ),
                                     dbc.Col(
                                         html.P(
-                                            "The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
+                                            [
+                                                "The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
+                                                html.Br(),
+                                                "The chart also includes an adjustment for the current year by multiplying "
+                                                "the deaths by 365/",
+                                                html.Span(
+                                                    "days elapsed",
+                                                    id="cod-trend-days-elapsed-text",
+                                                    className="text-muted small",
+                                                ),
+                                                html.Br(),
+                                                "Note: The trends should be caveated that they are based on a linear regression, "
+                                                "and there may be population differences that aren't being considered. A LeeCarter, "
+                                                "model may be more appropriate.",
+                                            ]
                                         ),
                                         width=11,
                                     ),
@@ -626,6 +662,9 @@ def update_cdc_data_async(n_clicks):
         Output("cdc-top-cause-deaths", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
+        Output("cod-days-elapsed-text", "children"),
+        Output("cod-tree-year-text", "children"),
+        Output("cod-table-year-text", "children"),
     ],
     Input("button-cod", "n_clicks"),
     [
@@ -663,6 +702,15 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         col=CATEGORY_COL,
         on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
+
+    # normalize the partial deaths
+    cod_all["deaths"] = cod_all["deaths"].astype(float)
+    data_through = pd.Timestamp(mcd18_cod["data_through"].max())
+    start_of_year = pd.Timestamp(f"{data_through.year}-01-01")
+    days_elapsed = (data_through - start_of_year).days + 1
+    factor_parial_year = 365 / days_elapsed
+    mask = cod_all["year"] == data_through.year
+    cod_all.loc[mask, "deaths"] *= factor_parial_year
     cod_all = dh.filter_data(df=cod_all, callback_context=states_info)
 
     # create totals column
@@ -769,6 +817,9 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         ),
         False,
         "",
+        days_elapsed,
+        most_recent_year,
+        most_recent_year,
     )
 
 
@@ -777,6 +828,7 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         Output("cdc-cod-trends", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
+        Output("cod-trend-days-elapsed-text", "children"),
     ],
     [
         Input("button-cod-trends", "n_clicks"),
@@ -809,6 +861,15 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         col=CATEGORY_COL,
         on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
+
+    # normalize the partial deaths
+    cod_all["deaths"] = cod_all["deaths"].astype(float)
+    data_through = pd.Timestamp(mcd18_cod["data_through"].max())
+    start_of_year = pd.Timestamp(f"{data_through.year}-01-01")
+    days_elapsed = (data_through - start_of_year).days + 1
+    factor_parial_year = 365 / days_elapsed
+    mask = cod_all["year"] == data_through.year
+    cod_all.loc[mask, "deaths"] *= factor_parial_year
 
     # create totals column
     totals = cod_all.groupby("year").sum(numeric_only=True).reset_index()
@@ -888,7 +949,7 @@ def display_cdc_cod_trends(n_clicks, active_tab):
             columnDefs=columnDefs,
         )
 
-    return tab_content, False, ""
+    return tab_content, False, "", days_elapsed
 
 
 @callback(

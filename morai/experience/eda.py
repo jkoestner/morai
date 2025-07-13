@@ -260,7 +260,7 @@ def gvif(
     """
     df = df.copy()
     if features is None:
-        features = df.columns
+        features = list(df.columns)
     else:
         missing_features = set(features) - set(df.columns)
         if missing_features:
@@ -270,9 +270,8 @@ def gvif(
     if constant_col not in df.columns:
         logger.debug(f"Adding a constant column '{constant_col}'.")
         df[constant_col] = 1
-        features.append(constant_col)
     if constant_col not in features:
-        features.append(constant_col)
+        features = [*list(features), constant_col]
 
     # get the features to use
     features_num = df[features].select_dtypes(include=[np.number]).columns
@@ -298,9 +297,9 @@ def gvif(
         raise ValueError("The DataFrame contains missing values.")
 
     # calculate gvif for each feature
-    logger.info(f"Calculating the GVIF for '{len(features)-1}' features.")
+    logger.info(f"Calculating the GVIF for '{len(features) - 1}' features.")
     gvif_data = []
-    features_exclude_constant = [f for f in features if f not in constant_col]
+    features_exclude_constant = [f for f in features if f != constant_col]
     for feature in features_exclude_constant:
         logger.debug(f"Calculating GVIF for '{feature}'")
 
@@ -310,7 +309,8 @@ def gvif(
 
             model = LinearRegression().fit(X, y)
             r2 = model.score(X, y)
-            gvif_value = 1 / (1 - r2)
+            epsilon = 1e-10
+            gvif_value = 1 / (max(1 - r2, epsilon))
 
         elif feature in features_cat:
             pattern = re.compile(rf"^{feature}_")
