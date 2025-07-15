@@ -1021,7 +1021,7 @@ def target(
     weights: Optional[Union[List[str], str]] = None,
     normalize: Optional[List[str]] = None,
     add_line: bool = False,
-    pairwise: bool = False,
+    generate_pairwise: bool = False,
 ) -> go.Figure:
     """
     Create multiplot showing variable relationship with target.
@@ -1050,8 +1050,8 @@ def target(
         The columns to normalize.
     add_line : bool, optional
         Whether to add a line to the chart at y-axis of 1.
-    pairwise : bool, optional
-        Whether to create a pairwise plot of the features.
+    generate_pairwise : bool, optional
+        Whether to generate pairwise plots from list of features.
 
     Returns
     -------
@@ -1078,6 +1078,18 @@ def target(
         numerator = []
     if weights is None:
         weights = []
+
+    # check if pairwise or not
+    pairwise = False
+    if generate_pairwise:
+        nbr_of_pairs = (len(features) * (len(features) - 1)) // 2
+        logger.info(f"Generating `{nbr_of_pairs}` pairwise plots from features")
+        features = [list(pair) for pair in itertools.combinations(features, 2)]
+    if len(features[0]) == 2:
+        pairwise = True
+        feature_check = list({item for sublist in features for item in sublist})
+    else:
+        feature_check = features
 
     features = [*features, "_aggregate"]
 
@@ -1114,8 +1126,8 @@ def target(
     else:  # pandas
         df_columns = df.columns
 
-    if not set(features).issubset(df_columns):
-        missing_features = set(features) - set(df_columns)
+    if not set(feature_check).issubset(df_columns):
+        missing_features = set(feature_check) - set(df_columns)
         raise ValueError(f"Features {missing_features} not in DataFrame columns.")
     if not set(normalize).issubset(df_columns):
         missing_features = set(normalize) - set(df_columns)
@@ -1157,19 +1169,34 @@ def target(
     # number of rows for the subplot grid
     if pairwise:
         features.remove("_aggregate")
-        feature_pairs = [list(pair) for pair in itertools.combinations(features, 2)]
-        num_plots = len(feature_pairs)
+        num_plots = len(features)
         num_rows = math.ceil(num_plots / cols)
-        plot_features = feature_pairs
+        plot_features = features
         title = f"Pairwise Plots using '{target}'"
+        logger.info(f"Creating '{num_plots}' pairwise plots.")
+        legend = {
+            "orientation": "v",
+            "yanchor": "middle",
+            "y": 0.5,
+            "xanchor": "left",
+            "x": 1.02,
+        }
+
     else:
         num_plots = len(features)
         num_rows = math.ceil(num_plots / cols)
         plot_features = [[feature] for feature in features]
         title = f"Target Plots using '{target}'"
+        logger.info(f"Creating '{num_plots}' target plots.")
+        legend = {
+            "orientation": "v",
+            "x": 1.02,
+            "xanchor": "left",
+            "y": 1,
+            "yanchor": "top",
+        }  # default
 
     # create a subplot grid
-    logger.info(f"Creating '{num_plots}' target plots.")
     fig = make_subplots(
         rows=num_rows,
         cols=cols,
@@ -1295,7 +1322,7 @@ def target(
             )
 
             # adding trace for current target within the subplot for the feature
-            if len(plot_feature) == 2:
+            if pairwise:
                 feature_1, feature_2 = plot_feature
 
                 if is_lazy:
@@ -1321,7 +1348,8 @@ def target(
                 )
 
                 for trace in line_fig.data:
-                    trace.showlegend = False
+                    trace.legendgroup = f"{row}-{col}-{target_name}"
+                    trace.showlegend = True
                     fig.add_trace(trace, row=row, col=col)
             else:
                 feature = plot_feature[0]
@@ -1370,6 +1398,7 @@ def target(
         height=chart_height * num_rows,
         width=chart_width,
         title_text=title,
+        legend=legend,
     )
 
     return fig
