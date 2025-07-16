@@ -1347,10 +1347,39 @@ def target(
                     labels={feature_x: feature_x, target[idx]: target[idx]},
                 )
 
+                legend_lines = []
                 for trace in line_fig.data:
-                    trace.legendgroup = f"{row}-{col}-{target_name}"
-                    trace.showlegend = True
+                    trace.showlegend = False
+                    color = (
+                        trace.line.color if hasattr(trace.line, "color") else "black"
+                    )
+                    legend_lines.append(
+                        f'<span style="color:{color}; font-size:18px;">&#9679;'
+                        f"</span> {trace.name}"
+                    )
                     fig.add_trace(trace, row=row, col=col)
+
+                # add annotation
+                legend_text = "<br>".join(legend_lines)
+                fig.add_annotation(
+                    text=legend_text,
+                    align="left",
+                    showarrow=False,
+                    x=0,
+                    y=1,
+                    xref="x domain",
+                    yref="y domain",
+                    xanchor="left",
+                    yanchor="top",
+                    font={"size": 10},
+                    bgcolor="white",
+                    bordercolor="black",
+                    borderwidth=1,
+                    opacity=0.85,
+                    row=row,
+                    col=col,
+                )
+
             else:
                 feature = plot_feature[0]
                 target_name = f"{target[idx]}_{idx}"
