@@ -169,7 +169,7 @@ def chart(
         )
     grouped_data = grouped_data.sort_values(
         groupby_cols,
-        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, pd.CategoricalDtype) else x,
     )
 
     # calculate ratios if needed
@@ -420,7 +420,7 @@ def compare_rates(
         )
     grouped_data = grouped_data.sort_values(
         groupby_features,
-        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, pd.CategoricalDtype) else x,
     )
 
     # return data if not display
@@ -1314,12 +1314,12 @@ def target(
                         .mean()
                         .reset_index()
                     )
-            grouped_data = grouped_data.sort_values(
-                by=plot_feature,
-                key=lambda x: x.astype(str)
-                if isinstance(x.dtype, CategoricalDtype)
-                else x,
-            )
+
+            # categorical needs to be converted to string for proper
+            # values visual
+            for feature in plot_feature:
+                if isinstance(grouped_data[feature].dtype, pd.CategoricalDtype):
+                    grouped_data[feature] = grouped_data[feature].astype(str)
 
             # adding trace for current target within the subplot for the feature
             if pairwise:
@@ -1338,6 +1338,7 @@ def target(
 
                 feature_color = feature_2 if feature_x == feature_1 else feature_1
                 target_name = f"{target[idx]}_{idx}"
+
                 line_fig = px.line(
                     grouped_data,
                     x=feature_x,
