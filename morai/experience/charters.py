@@ -1315,6 +1315,21 @@ def target(
                         .reset_index()
                     )
 
+            # ensure grouped data has all combos for smooth lines
+            if pairwise:
+                feature_1, feature_2 = plot_feature
+                f1_unique = grouped_data[feature_1].unique()
+                f2_unique = grouped_data[feature_2].unique()
+                all_combos = pd.MultiIndex.from_product(
+                    [f1_unique, f2_unique], names=[feature_1, feature_2]
+                ).to_frame(index=False)
+                grouped_data = pd.merge(
+                    all_combos,
+                    grouped_data,
+                    on=[feature_1, feature_2],
+                    how="left",
+                )
+
             # sort values and then convert to string if categorical
             grouped_data = grouped_data.sort_values(
                 by=plot_feature,
@@ -1328,30 +1343,11 @@ def target(
 
             # adding trace for current target within the subplot for the feature
             if pairwise:
-                feature_1, feature_2 = plot_feature
-
-                if is_lazy:
-                    f1_nunique = df.select(pl.col(feature_1)).collect().n_unique()
-                    f2_nunique = df.select(pl.col(feature_2)).collect().n_unique()
-                    feature_x = feature_1 if f1_nunique > f2_nunique else feature_2
-                else:  # pandas
-                    feature_x = (
-                        feature_1
-                        if df[feature_1].nunique() > df[feature_2].nunique()
-                        else feature_2
-                    )
-
-                # ensure grouped data has all combos for smooth lines
-                f1_unique = grouped_data[feature_1].unique()
-                f2_unique = grouped_data[feature_2].unique()
-                all_combos = pd.MultiIndex.from_product(
-                    [f1_unique, f2_unique], names=[feature_1, feature_2]
-                ).to_frame(index=False)
-                grouped_data = pd.merge(
-                    all_combos,
-                    grouped_data,
-                    on=[feature_1, feature_2],
-                    how="left",
+                feature_x = (
+                    feature_1
+                    if grouped_data[feature_1].nunique()
+                    > grouped_data[feature_2].nunique()
+                    else feature_2
                 )
 
                 feature_color = feature_2 if feature_x == feature_1 else feature_1
