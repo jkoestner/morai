@@ -1341,6 +1341,19 @@ def target(
                         else feature_2
                     )
 
+                # ensure grouped data has all combos for smooth lines
+                f1_unique = grouped_data[feature_1].unique()
+                f2_unique = grouped_data[feature_2].unique()
+                all_combos = pd.MultiIndex.from_product(
+                    [f1_unique, f2_unique], names=[feature_1, feature_2]
+                ).to_frame(index=False)
+                grouped_data = pd.merge(
+                    all_combos,
+                    grouped_data,
+                    on=[feature_1, feature_2],
+                    how="left",
+                )
+
                 feature_color = feature_2 if feature_x == feature_1 else feature_1
                 target_name = f"{target[idx]}_{idx}"
 
