@@ -1315,8 +1315,13 @@ def target(
                         .reset_index()
                     )
 
-            # categorical needs to be converted to string for proper
-            # values visual
+            # sort values and then convert to string if categorical
+            grouped_data = grouped_data.sort_values(
+                by=plot_feature,
+                key=lambda x: x.astype(str)
+                if isinstance(x.dtype, pd.CategoricalDtype) and not x.cat.ordered
+                else x,
+            )
             for feature in plot_feature:
                 if isinstance(grouped_data[feature].dtype, pd.CategoricalDtype):
                     grouped_data[feature] = grouped_data[feature].astype(str)
