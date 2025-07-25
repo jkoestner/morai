@@ -24,6 +24,8 @@ def preprocess_data(
     """
     Preprocess the features.
 
+    This includes adding a constant, encoding, standardization, or cleaning.
+
     Parameters
     ----------
     model_data : pd.DataFrame
@@ -322,8 +324,9 @@ def bin_feature(feature: pd.Series, bins: int) -> pd.Series:
     bin_edges = np.linspace(range_min, range_max, bins + 1)
 
     # generate lables for the bins
+    max_width = len(str(int(max(bin_edges))))
     labels = [
-        f"{int(bin_edges[i]) + 1}-{int(bin_edges[i + 1])}"
+        f"{int(bin_edges[i] + 1):0{max_width}d}~{int(bin_edges[i + 1]):0{max_width}d}"
         for i in range(len(bin_edges) - 1)
     ]
 
@@ -362,10 +365,15 @@ def lazy_bin_feature(
         A new LazyFrame with the binned feature added or replaced.
 
     """
-    # check if feature exists
-    if feature not in lf.columns:
+    # check if feature exists and if it is numeric
+    schema = lf.collect_schema()
+    if feature not in schema:
         raise ValueError(
-            f"Feature '{feature}' not found in LazyFrame columns: {lf.columns}"
+            f"Feature '{feature}' not found in LazyFrame columns: {list(schema.keys())}"
+        )
+    if schema[feature] not in pl.datatypes.group.NUMERIC_DTYPES:
+        raise ValueError(
+            f"Feature: [{feature}] is not numeric (dtype is {schema[feature]})"
         )
 
     # get min/max
@@ -373,27 +381,21 @@ def lazy_bin_feature(
         [pl.col(feature).min().alias("min"), pl.col(feature).max().alias("max")]
     ).collect()
     range_min, range_max = stats["min"][0] - 1, stats["max"][0]
-
-    # create bin edges, labels, and unique values
     bin_edges = np.linspace(range_min, range_max, bins + 1)
+    breaks = bin_edges[1:-1]
+
+    # create labels
+    max_width = len(str(int(max(bin_edges))))
     labels = [
-        f"{int(bin_edges[i]) + 1}-{int(bin_edges[i + 1])}"
+        f"{int(bin_edges[i] + 1):0{max_width}d}~{int(bin_edges[i + 1]):0{max_width}d}"
         for i in range(len(bin_edges) - 1)
     ]
-    unique_vals = lf.select(pl.col(feature).unique()).collect()[feature].to_list()
 
     # create a new lzdf with binned values column
-    binned_vals = pd.cut(
-        pd.Series(unique_vals),
-        bins=bin_edges,
-        labels=pd.Categorical(labels, ordered=True),
-        include_lowest=True,
-        right=True,
-    )
-    bin_mapping = dict(zip(unique_vals, binned_vals.astype(str), strict=False))
     output_col = feature if inplace else f"{feature}_binned"
-
-    lf = lf.with_columns(pl.col(feature).replace(bin_mapping).alias(output_col))
+    lf = lf.with_columns(
+        pl.col(feature).cut(breaks=breaks, labels=labels).alias(output_col)
+    )
 
     return lf
 

@@ -603,6 +603,7 @@ def display_pdp(
     filtered_df = dh.filter_data(df=model_data, callback_context=states_info)
 
     # encode data
+    filtered_df = filtered_df.collect().to_pandas()
     preprocess_dict = preprocessors.preprocess_data(
         filtered_df,
         feature_dict=feature_dict,

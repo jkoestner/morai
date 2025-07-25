@@ -203,6 +203,8 @@ def chart(
         )
         if add_line:
             # using scatter to add to legend
+            if isinstance(grouped_data[x_axis].dtype, pd.CategoricalDtype):
+                grouped_data[x_axis] = grouped_data[x_axis].cat.as_ordered()
             fig.add_scatter(
                 x=[grouped_data[x_axis].min(), grouped_data[x_axis].max()],
                 y=[1, 1],
