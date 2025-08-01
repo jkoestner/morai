@@ -14,7 +14,12 @@ from morai.utils import custom_logger, helpers
 logger = custom_logger.setup_logging(__name__)
 
 
-def smape(y_true: pd.Series, y_pred: pd.Series, epsilon: float = 1e-10) -> float:
+def smape(
+    y_true: pd.Series,
+    y_pred: pd.Series,
+    epsilon: float = 1e-10,
+    sample_weight: pd.Series = None,
+) -> float:
     """
     Calculate the Symetric Mean Absolute Percentage Error (sMAPE).
 
@@ -28,6 +33,8 @@ def smape(y_true: pd.Series, y_pred: pd.Series, epsilon: float = 1e-10) -> float
         The predicted column name
     epsilon : float, optional (default=1e-10)
         The epsilon value
+    sample_weight : series, optional (default=None)
+        The sample weights column name
 
     Returns
     -------
@@ -36,7 +43,7 @@ def smape(y_true: pd.Series, y_pred: pd.Series, epsilon: float = 1e-10) -> float
 
     """
     denominator = (y_true.abs() + y_pred.abs()) / 2 + epsilon
-    return np.mean((y_true - y_pred).abs() / denominator)
+    return np.average((y_true - y_pred).abs() / denominator, weights=sample_weight)
 
 
 def ae(y_true: pd.Series, y_pred: pd.Series) -> float:
@@ -180,6 +187,7 @@ def calculate_metrics(
     metrics: list,
     prefix: str = "",
     model: Optional[Any] = None,
+    sample_weight: Optional[pd.Series] = None,
     **kwargs,
 ) -> dict:
     """
@@ -197,19 +205,33 @@ def calculate_metrics(
         The prefix for the metrics
     model : model, optional (default=None)
         The model to calculate the AIC
+    sample_weight : series, optional (default=None)
+        The sample weights column name
     kwargs : dict
         The keyword arguments for the metrics calculation from sklearn.metrics
+        https://scikit-learn.org/stable/api/sklearn.metrics.html
 
     Returns
     -------
     metric_dict : dict
         The dictionary of metrics
 
+    Notes
+    -----
+    Here are some pros/cons of a few well-known metrics:
+    - SMAPE: provides percentage errors and won't be affected by scale, only
+             the number of data points
+    - MAPE:  similar to SMAPE but would be affected by zeros
+    - MAE:   provides absolute error and not as sensitive to outliers
+    - MSE:   provides absolute error and sensitive to outliers
+    - R2:    similar to MSE but normalized, affected by weights. this can be
+             negative if the model is worse than the mean
+
     """
     metric_dict = {}
     for metric in metrics:
         if metric == "smape":
-            metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred)
+            metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred, sample_weight)
         elif metric == "shape":
             metric_dict[f"{prefix}_{metric}"] = y_true.shape[0]
         elif metric == "ae":
@@ -227,7 +249,7 @@ def calculate_metrics(
         else:
             try:
                 metric_dict[f"{prefix}_{metric}"] = getattr(skm, metric)(
-                    y_true, y_pred, **kwargs
+                    y_true, y_pred, sample_weight=sample_weight, **kwargs
                 )
             except AttributeError:
                 logger.error(f"Metric `{metric}` not found in sklearn.metrics")
