@@ -335,6 +335,7 @@ def load_data(dataset, config):
             "rates": False,
             "weights": False,
             "normalize": True,
+            "y_log": True,
         },
     )
 
@@ -454,6 +455,7 @@ def update_tab_content(
                 denominator=dh._inputs_parse_id(states_info, "denominator_selector"),
                 x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
                 add_line=dh._inputs_parse_id(states_info, "add_line_selector"),
+                y_log=dh._inputs_parse_id(states_info, "y_log_selector"),
             )
             if dh._inputs_parse_id(states_info, "secondary_selector"):
                 chart_secondary = charters.chart(
@@ -593,6 +595,7 @@ def toggle_tool(tool, all_selectors):
         "x_bins",
         "add_line",
         "normalize",
+        "y_log",
     ]
     compare_selectors = [
         "x_axis",

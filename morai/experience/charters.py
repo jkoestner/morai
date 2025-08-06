@@ -1158,15 +1158,14 @@ def target(
 
     # normalize if requested
     if normalize:
-        for idx, _ in enumerate(target):
-            df = experience.normalize(
-                df,
-                features=normalize,
-                numerator=numerator[idx],
-                denominator=denominator[idx],
-                suffix=f"{idx}",
-            )
-            numerator[idx] = f"{numerator[idx]}_norm_{idx}"
+        df = experience.normalize(
+            df,
+            features=normalize,
+            numerator=numerator,
+            denominator=denominator,
+            add_norm_col=True,
+        )
+        numerator = f"{numerator}_norm"
 
     # number of rows for the subplot grid
     if pairwise:

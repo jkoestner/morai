@@ -20,6 +20,22 @@ def test_smape():
     assert metrics.smape(y_true, y_pred, epsilon) == test_smape, "sMAPE not matching"
 
 
+def test_smape_weighted():
+    """Tests the sMAPE calculation."""
+    y_true = metric_df["actual"]
+    y_pred = metric_df["pred"]
+    epsilon = 1e-10
+    sample_weight = metric_df["weight"]
+    test_smape = (
+        (y_true - y_pred).abs() / ((y_true + y_pred) / 2 + epsilon)
+    ) * sample_weight
+    test_smape = test_smape.sum() / sample_weight.sum()
+
+    assert metrics.smape(y_true, y_pred, epsilon, sample_weight) == test_smape, (
+        "sMAPE weighted not matching"
+    )
+
+
 def test_mape():
     """Tests the MAPE calculation."""
     y_true = metric_df["actual"]

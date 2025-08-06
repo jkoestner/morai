@@ -43,7 +43,9 @@ def smape(
 
     """
     denominator = (y_true.abs() + y_pred.abs()) / 2 + epsilon
-    return np.average((y_true - y_pred).abs() / denominator, weights=sample_weight)
+    smape = np.average((y_true - y_pred).abs() / denominator, weights=sample_weight)
+
+    return smape
 
 
 def ae(y_true: pd.Series, y_pred: pd.Series) -> float:
@@ -231,7 +233,9 @@ def calculate_metrics(
     metric_dict = {}
     for metric in metrics:
         if metric == "smape":
-            metric_dict[f"{prefix}_{metric}"] = smape(y_true, y_pred, sample_weight)
+            metric_dict[f"{prefix}_{metric}"] = smape(
+                y_true=y_true, y_pred=y_pred, sample_weight=sample_weight
+            )
         elif metric == "shape":
             metric_dict[f"{prefix}_{metric}"] = y_true.shape[0]
         elif metric == "ae":

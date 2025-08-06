@@ -14,8 +14,8 @@ logger = custom_logger.setup_logging(__name__)
 def normalize(
     df: pd.DataFrame,
     features: List[str],
-    numerator: str,
-    denominator: Optional[str] = None,
+    numerator: List[str] or str,
+    denominator: List[str] or str = None,
     add_norm_col: Optional[bool] = False,
 ) -> pd.DataFrame:
     """
@@ -54,9 +54,9 @@ def normalize(
         DataFrame to normalize.
     features : list
         List of columns to group by.
-    numerator : str
+    numerator : list or str
         Column to normalize.
-    denominator : str, optional default=None
+    denominator : list or str, optional default=None
         Weighting column.
     add_norm_col : bool, optional default=False
         Add the normalized column instead of overwriting.
@@ -68,7 +68,12 @@ def normalize(
 
 
     """
-    numerator_col = numerator if not add_norm_col else f"{numerator}_norm"
+    if isinstance(numerator, list):
+        numerator = numerator[0]
+    if isinstance(denominator, list):
+        denominator = denominator[0]
+
+    numerator_col = f"{numerator}_norm" if add_norm_col else numerator
 
     # calculate the relative risk
     df = calc_relative_risk(
@@ -85,8 +90,8 @@ def normalize(
 def calc_relative_risk(
     df: pd.DataFrame,
     features: List[str],
-    numerator: str,
-    denominator: Optional[str] = None,
+    numerator: List[str] or str,
+    denominator: List[str] or str = None,
 ) -> pd.DataFrame:
     """
     Calculate relative risk of a column (numerator) based on a number of features.
@@ -101,9 +106,9 @@ def calc_relative_risk(
         DataFrame to normalize.
     features : list
         List of columns to group by.
-    numerator : str
+    numerator : list or str
         Column to normalize.
-    denominator : str, optional
+    denominator : list or str, optional
         Weighting column.
 
     Returns
@@ -113,6 +118,11 @@ def calc_relative_risk(
 
 
     """
+    if isinstance(numerator, list):
+        numerator = numerator[0]
+    if isinstance(denominator, list):
+        denominator = denominator[0]
+
     if denominator is None:
         df["temp_one"] = 1
         denominator = "temp_one"

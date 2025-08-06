@@ -765,11 +765,25 @@ def generate_selectors(
                 dbc.Checkbox(
                     id={"type": prefix_selector, "index": "add_line_selector"},
                     value=False,
-                    label="select on/off",
+                    label="show line",
                 ),
             ],
             style={"display": "block"}
             if selector_dict.get("add_line") == True
+            else {"display": "none"},
+        ),
+        html.Div(
+            id={"type": prefix_group, "index": "y_log"},
+            children=[
+                html.Label("Y Log"),
+                dbc.Checkbox(
+                    id={"type": prefix_selector, "index": "y_log_selector"},
+                    value=False,
+                    label="show log scale",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("y_log") == True
             else {"display": "none"},
         ),
         html.Div(
