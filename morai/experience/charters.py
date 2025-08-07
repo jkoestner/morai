@@ -1074,12 +1074,14 @@ def target(
 
     if normalize is None:
         normalize = []
-    if denominator is None:
-        denominator = []
-    if numerator is None:
-        numerator = []
-    if weights is None:
-        weights = []
+    if isinstance(target, list):
+        target = target[0]
+    if isinstance(numerator, list):
+        numerator = numerator[0]
+    if isinstance(denominator, list):
+        denominator = denominator[0]
+    if isinstance(weights, list):
+        weights = weights[0]
 
     # check if pairwise or not
     pairwise = False
@@ -1101,26 +1103,6 @@ def target(
     else:  # pandas
         df.loc[:, "_aggregate"] = 1
 
-    if isinstance(target, str):
-        target = [target]
-    if isinstance(weights, str):
-        weights = [weights]
-
-    # validations
-    # make target, weights, numerator same length
-    if len(denominator) != 0 and len(target) != len(denominator):
-        logger.debug(
-            f"Target is updated to match denominator length: {len(denominator)}"
-        )
-        target = [target[0]] * len(denominator)
-    if len(weights) != 0 and len(weights) != len(target):
-        weights = [weights[0]] * len(target)
-    if len(denominator) != 0 and len(numerator) != len(denominator):
-        logger.debug(
-            f"Numerator is updated to match denominator length: {len(denominator)}"
-        )
-        numerator = [numerator[0]] * len(denominator)
-
     # ensure all features are in df
     if is_lazy:
         schema = df.collect_schema()
@@ -1136,36 +1118,37 @@ def target(
         raise ValueError(f"Normalize {missing_features} not in DataFrame columns.")
 
     # check that the right parameters are set for the function
-    for idx, _ in enumerate(target):
-        if target[idx] not in [*list(df_columns), "ratio", "risk"]:
-            raise ValueError(
-                f"Target '{target[idx]}' needs to be in DataFrame columns, "
-                f"'ratio', or 'risk'"
-            )
-        if target[idx] in ["ratio", "risk"] and (
-            numerator[idx] is None or denominator[idx] is None
-        ):
-            raise ValueError(
-                "Numerator/Denominator is required for ratio or risk target."
-            )
-        if target[idx] not in ["ratio", "risk"] and (
-            len(numerator) + len(denominator) > 0
-        ):
-            logger.warning(
-                "Parameters 'numerator' and 'denominator' are ignored if target is "
-                "not 'ratio' or 'risk'."
-            )
+    if target not in [*list(df_columns), "ratio", "risk"]:
+        raise ValueError(
+            f"Target '{target}' needs to be in DataFrame columns, 'ratio', or 'risk'"
+        )
+    if target in ["ratio", "risk"] and (numerator is None or denominator is None):
+        raise ValueError("Numerator/Denominator is required for ratio or risk target.")
+    if target not in ["ratio", "risk"] and (
+        numerator is not None or denominator is not None
+    ):
+        logger.warning(
+            "Parameters 'numerator' and 'denominator' are ignored if target is "
+            "not 'ratio' or 'risk'."
+        )
 
     # normalize if requested
     if normalize:
-        df = experience.normalize(
-            df,
-            features=normalize,
-            numerator=numerator,
-            denominator=denominator,
-            add_norm_col=True,
-        )
-        numerator = f"{numerator}_norm"
+        if target in ["ratio", "risk"]:
+            df = experience.normalize(
+                df,
+                features=normalize,
+                normalize_col=numerator,
+                weight_col=denominator,
+                ratio=True,
+            )
+        else:
+            df = experience.normalize(
+                df,
+                features=normalize,
+                normalize_col=target,
+                weight_col=weights,
+            )
 
     # number of rows for the subplot grid
     if pairwise:
@@ -1215,228 +1198,208 @@ def target(
 
         # create line for targets
         # ratio or risk
-        for idx, _ in enumerate(target):
-            if target[idx] in ["ratio", "risk"]:
-                if is_lazy:
-                    grouped_data = (
-                        df.group_by(plot_feature)
-                        .agg(
-                            [
-                                pl.sum(numerator[idx]).alias(numerator[idx]),
-                                pl.sum(denominator[idx]).alias(denominator[idx]),
-                            ]
-                        )
-                        .collect()
-                        .to_pandas()
-                    )
-                    if target[idx] == "ratio":
-                        grouped_data[target[idx]] = (
-                            grouped_data[numerator[idx]]
-                            / grouped_data[denominator[idx]]
-                        )
-                    elif target[idx] == "risk":
-                        num_sum = (
-                            df.select(pl.col(numerator[idx]).sum()).collect().item()
-                        )
-                        denom_sum = (
-                            df.select(pl.col(denominator[idx]).sum()).collect().item()
-                        )
-                        grouped_data[target[idx]] = (
-                            grouped_data[numerator[idx]]
-                            / grouped_data[denominator[idx]]
-                        ) / (num_sum / denom_sum)
-                else:  # pandas
-                    grouped_data = (
-                        df.groupby(plot_feature, observed=True)[
-                            [numerator[idx], denominator[idx]]
+        if target in ["ratio", "risk"]:
+            if is_lazy:
+                grouped_data = (
+                    df.group_by(plot_feature)
+                    .agg(
+                        [
+                            pl.sum(numerator).alias(numerator),
+                            pl.sum(denominator).alias(denominator),
                         ]
-                        .sum()
-                        .reset_index()
                     )
-                    if target[idx] == "ratio":
-                        grouped_data[target[idx]] = (
-                            grouped_data[numerator[idx]]
-                            / grouped_data[denominator[idx]]
-                        )
-                    elif target[idx] == "risk":
-                        grouped_data[target[idx]] = (
-                            grouped_data[numerator[idx]]
-                            / grouped_data[denominator[idx]]
-                        ) / (df[numerator[idx]].sum() / df[denominator[idx]].sum())
+                    .collect()
+                    .to_pandas()
+                )
+                if target == "ratio":
+                    grouped_data[target] = (
+                        grouped_data[numerator] / grouped_data[denominator]
+                    )
+                elif target == "risk":
+                    num_sum = df.select(pl.col(numerator).sum()).collect().item()
+                    denom_sum = df.select(pl.col(denominator).sum()).collect().item()
+                    grouped_data[target] = (
+                        grouped_data[numerator] / grouped_data[denominator]
+                    ) / (num_sum / denom_sum)
+            else:  # pandas
+                grouped_data = (
+                    df.groupby(plot_feature, observed=True)[[numerator, denominator]]
+                    .sum()
+                    .reset_index()
+                )
+                if target == "ratio":
+                    grouped_data[target] = (
+                        grouped_data[numerator] / grouped_data[denominator]
+                    )
+                elif target == "risk":
+                    grouped_data[target] = (
+                        grouped_data[numerator] / grouped_data[denominator]
+                    ) / (df[numerator].sum() / df[denominator].sum())
 
-            # weighted average
-            elif weights:
-                if is_lazy:
-                    grouped_data = (
-                        df.select([*plot_feature, target[idx], weights[idx]])
-                        .groupby(plot_feature)
-                        .agg(
-                            [
-                                (pl.col(target[idx]) * pl.col(weights[idx]))
-                                .sum()
-                                .alias("weighted_sum"),
-                                pl.col(weights[idx]).sum().alias("weight_sum"),
-                            ]
-                        )
-                        .with_columns(
-                            (pl.col("weighted_sum") / pl.col("weight_sum")).alias(
-                                target[idx]
-                            )
-                        )
-                        .select([*plot_feature, target[idx]])
-                        .collect()
-                        .to_pandas()
-                    )
-                else:  # pandas
-                    grouped_data = (
-                        df.groupby(plot_feature, observed=True)[
-                            [target[idx], weights[idx]]
+        # weighted average
+        elif weights:
+            if is_lazy:
+                grouped_data = (
+                    df.select([*plot_feature, target, weights])
+                    .groupby(plot_feature)
+                    .agg(
+                        [
+                            (pl.col(target) * pl.col(weights))
+                            .sum()
+                            .alias("weighted_sum"),
+                            pl.col(weights).sum().alias("weight_sum"),
                         ]
-                        .apply(
-                            lambda x: helpers._weighted_mean(
-                                x.iloc[:, 0], weights=x.iloc[:, 1]
-                            )
+                    )
+                    .with_columns(
+                        (pl.col("weighted_sum") / pl.col("weight_sum")).alias(target)
+                    )
+                    .select([*plot_feature, target])
+                    .collect()
+                    .to_pandas()
+                )
+            else:  # pandas
+                grouped_data = (
+                    df.groupby(plot_feature, observed=True)[[target, weights]]
+                    .apply(
+                        lambda x: helpers._weighted_mean(
+                            x.iloc[:, 0], weights=x.iloc[:, 1]
                         )
-                        .reset_index(name=f"{target[idx]}")
                     )
-
-            # mean
-            else:  # noqa: PLR5501
-                if is_lazy:
-                    grouped_data = (
-                        df.group_by(plot_feature)
-                        .agg(pl.mean(target[idx]).alias(target[idx]))
-                        .collect()
-                        .to_pandas()
-                    )
-                else:  # pandas
-                    grouped_data = (
-                        df.groupby(plot_feature, observed=True)[target[idx]]
-                        .mean()
-                        .reset_index()
-                    )
-
-            # ensure grouped data has all combos for smooth lines
-            if pairwise:
-                feature_1, feature_2 = plot_feature
-                f1_unique = grouped_data[feature_1].unique()
-                f2_unique = grouped_data[feature_2].unique()
-                all_combos = pd.MultiIndex.from_product(
-                    [f1_unique, f2_unique], names=[feature_1, feature_2]
-                ).to_frame(index=False)
-                grouped_data = pd.merge(
-                    all_combos,
-                    grouped_data,
-                    on=[feature_1, feature_2],
-                    how="left",
+                    .reset_index(name=f"{target}")
                 )
 
-            # sort values and then convert to string if categorical
-            grouped_data = grouped_data.sort_values(
-                by=plot_feature,
-                key=lambda x: x.astype(str)
-                if isinstance(x.dtype, pd.CategoricalDtype) and not x.cat.ordered
-                else x,
+        # mean
+        else:  # noqa: PLR5501
+            if is_lazy:
+                grouped_data = (
+                    df.group_by(plot_feature)
+                    .agg(pl.mean(target).alias(target))
+                    .collect()
+                    .to_pandas()
+                )
+            else:  # pandas
+                grouped_data = (
+                    df.groupby(plot_feature, observed=True)[target].mean().reset_index()
+                )
+
+        # ensure grouped data has all combos for smooth lines
+        if pairwise:
+            feature_1, feature_2 = plot_feature
+            f1_unique = grouped_data[feature_1].unique()
+            f2_unique = grouped_data[feature_2].unique()
+            all_combos = pd.MultiIndex.from_product(
+                [f1_unique, f2_unique], names=[feature_1, feature_2]
+            ).to_frame(index=False)
+            grouped_data = pd.merge(
+                all_combos,
+                grouped_data,
+                on=[feature_1, feature_2],
+                how="left",
             )
-            for feature in plot_feature:
-                if isinstance(grouped_data[feature].dtype, pd.CategoricalDtype):
-                    grouped_data[feature] = grouped_data[feature].astype(str)
 
-            # adding trace for current target within the subplot for the feature
-            if pairwise:
-                feature_x = (
-                    feature_1
-                    if grouped_data[feature_1].nunique()
-                    > grouped_data[feature_2].nunique()
-                    else feature_2
+        # sort values and then convert to string if categorical
+        grouped_data = grouped_data.sort_values(
+            by=plot_feature,
+            key=lambda x: x.astype(str)
+            if isinstance(x.dtype, pd.CategoricalDtype) and not x.cat.ordered
+            else x,
+        )
+        for feature in plot_feature:
+            if isinstance(grouped_data[feature].dtype, pd.CategoricalDtype):
+                grouped_data[feature] = grouped_data[feature].astype(str)
+
+        # adding trace for current target within the subplot for the feature
+        if pairwise:
+            feature_x = (
+                feature_1
+                if grouped_data[feature_1].nunique() > grouped_data[feature_2].nunique()
+                else feature_2
+            )
+
+            feature_color = feature_2 if feature_x == feature_1 else feature_1
+            target_name = f"{target}"
+
+            line_fig = px.line(
+                grouped_data,
+                x=feature_x,
+                y=target,
+                color=feature_color,
+                title=f"{feature_x} vs {feature_color}",
+                labels={feature_x: feature_x, target: target},
+            )
+
+            legend_lines = []
+            for trace in line_fig.data:
+                trace.showlegend = False
+                color = trace.line.color if hasattr(trace.line, "color") else "black"
+                legend_lines.append(
+                    f'<span style="color:{color}; font-size:18px;">&#9679;'
+                    f"</span> {trace.name}"
                 )
+                fig.add_trace(trace, row=row, col=col)
 
-                feature_color = feature_2 if feature_x == feature_1 else feature_1
-                target_name = f"{target[idx]}_{idx}"
+            # add annotation
+            legend_text = "<br>".join(legend_lines)
+            fig.add_annotation(
+                text=legend_text,
+                align="left",
+                showarrow=False,
+                x=0,
+                y=1,
+                xref="x domain",
+                yref="y domain",
+                xanchor="left",
+                yanchor="top",
+                font={"size": 10},
+                bgcolor="white",
+                bordercolor="black",
+                borderwidth=1,
+                opacity=0.85,
+                row=row,
+                col=col,
+            )
 
-                line_fig = px.line(
-                    grouped_data,
-                    x=feature_x,
-                    y=target[idx],
-                    color=feature_color,
-                    title=f"{feature_x} vs {feature_color}",
-                    labels={feature_x: feature_x, target[idx]: target[idx]},
-                )
+        else:
+            feature = plot_feature[0]
+            target_name = f"{target}"
+            fig.add_trace(
+                go.Scatter(
+                    x=grouped_data[feature],
+                    y=grouped_data[target],
+                    mode="lines" if not feature == "_aggregate" else "markers",
+                    name=target_name,
+                    line={"color": color_scale[0 % len(color_scale)]},
+                    showlegend=target_name not in legend_added,
+                ),
+                row=row,
+                col=col,
+            )
+            legend_added.add(target_name)
 
-                legend_lines = []
-                for trace in line_fig.data:
-                    trace.showlegend = False
-                    color = (
-                        trace.line.color if hasattr(trace.line, "color") else "black"
-                    )
-                    legend_lines.append(
-                        f'<span style="color:{color}; font-size:18px;">&#9679;'
-                        f"</span> {trace.name}"
-                    )
-                    fig.add_trace(trace, row=row, col=col)
-
-                # add annotation
-                legend_text = "<br>".join(legend_lines)
-                fig.add_annotation(
-                    text=legend_text,
-                    align="left",
-                    showarrow=False,
-                    x=0,
-                    y=1,
-                    xref="x domain",
-                    yref="y domain",
-                    xanchor="left",
-                    yanchor="top",
-                    font={"size": 10},
-                    bgcolor="white",
-                    bordercolor="black",
-                    borderwidth=1,
-                    opacity=0.85,
-                    row=row,
-                    col=col,
-                )
-
+        # add trace for line
+        if add_line:
+            line_name = "y=1"
+            if pd.api.types.is_numeric_dtype(grouped_data[plot_feature[0]].dtype):
+                add_line_x = [
+                    grouped_data[plot_feature[0]].min(),
+                    grouped_data[plot_feature[0]].max(),
+                ]
             else:
-                feature = plot_feature[0]
-                target_name = f"{target[idx]}_{idx}"
-                fig.add_trace(
-                    go.Scatter(
-                        x=grouped_data[feature],
-                        y=grouped_data[target[idx]],
-                        mode="lines" if not feature == "_aggregate" else "markers",
-                        name=target_name,
-                        line={"color": color_scale[idx % len(color_scale)]},
-                        showlegend=target_name not in legend_added,
-                    ),
-                    row=row,
-                    col=col,
-                )
-                legend_added.add(target_name)
-
-            # add trace for line
-            if add_line:
-                line_name = "y=1"
-                if pd.api.types.is_numeric_dtype(grouped_data[plot_feature[0]].dtype):
-                    add_line_x = [
-                        grouped_data[plot_feature[0]].min(),
-                        grouped_data[plot_feature[0]].max(),
-                    ]
-                else:
-                    add_line_x = sorted(grouped_data[plot_feature[0]].unique())
-                    add_line_x = [add_line_x[0], add_line_x[-1]]
-                fig.add_trace(
-                    go.Scatter(
-                        x=add_line_x,
-                        y=[1, 1],
-                        mode="lines",
-                        line={"dash": "dot", "color": "grey"},
-                        name=line_name,
-                        showlegend=line_name not in legend_added,
-                    ),
-                    row=row,
-                    col=col,
-                )
-                legend_added.add(line_name)
+                add_line_x = sorted(grouped_data[plot_feature[0]].unique())
+                add_line_x = [add_line_x[0], add_line_x[-1]]
+            fig.add_trace(
+                go.Scatter(
+                    x=add_line_x,
+                    y=[1, 1],
+                    mode="lines",
+                    line={"dash": "dot", "color": "grey"},
+                    name=line_name,
+                    showlegend=line_name not in legend_added,
+                ),
+                row=row,
+                col=col,
+            )
+            legend_added.add(line_name)
 
     # update layout
     fig.update_layout(

@@ -439,10 +439,10 @@ def update_tab_content(
                 filtered_df = experience.normalize(
                     df=filtered_df,
                     features=dh._inputs_parse_id(states_info, "normalize_selector"),
-                    numerator=dh._inputs_parse_id(states_info, "numerator_selector"),
-                    denominator=dh._inputs_parse_id(
-                        states_info, "denominator_selector"
+                    normalize_col=dh._inputs_parse_id(
+                        states_info, "numerator_selector"
                     ),
+                    weight_col=dh._inputs_parse_id(states_info, "denominator_selector"),
                     add_norm_col=False,
                 )
             chart = charters.chart(

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-from morai.utils import custom_logger
+from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -14,22 +14,23 @@ logger = custom_logger.setup_logging(__name__)
 def normalize(
     df: pd.DataFrame,
     features: List[str],
-    numerator: List[str] or str,
-    denominator: List[str] or str = None,
+    normalize_col: List[str] or str,
+    weight_col: Optional[List[str] or str] = None,
     add_norm_col: Optional[bool] = False,
+    ratio: Optional[bool] = False,
 ) -> pd.DataFrame:
     """
-    Normalize a column (numerator) based on a number of features.
+    Normalize a column (normalize_col) based on a number of features.
 
-    The normalization is done by calculating the relative risk of the numerator
-    for each feature group and can be weighted by the denominator if provided.
+    The normalization is done by calculating the relative risk of the normalize_col
+    for each feature group and can be weighted by the weight_col if provided.
 
     Normalizing over the features is a crude method to adjust data for differences
     in the feature groups. when the features are independent, this method is
     appropriate. When the features are not independent, this method will blend
     the effects.
 
-    Creates a new column with the normalized numerator with the suffix '_norm'.
+    Creates a new column with the suffix '_norm' if add_norm_col is True.
 
     Tip:
     -----
@@ -44,9 +45,12 @@ def normalize(
     --------
     Male = 100 deaths / 1000 exposures = 0.1
     Female = 100 deaths / 500 exposures = 0.2
+    Total = 200 deaths / 1500 exposures = 0.133
+    Male_risk = .1 / .133 = .75
+    Female_risk = .2 / .133 = 1.5
     Normalization would be:
     Male = 100 / .75 = 133.3, rate = .133
-    Female = 50 / 1.5 = 66.6, rate = .133
+    Female = 100 / 1.5 = 66.6, rate = .133
 
     Parameters
     ----------
@@ -54,12 +58,15 @@ def normalize(
         DataFrame to normalize.
     features : list
         List of columns to group by.
-    numerator : list or str
+    normalize_col : list or str
         Column to normalize.
-    denominator : list or str, optional default=None
+    weight_col : list or str, optional default=None
         Weighting column.
     add_norm_col : bool, optional default=False
-        Add the normalized column instead of overwriting.
+        Add the normalized column instead of overwriting the column being normalized.
+    ratio : bool, optional default=False
+        If the normalize_col is being used as a ratio.
+        If True, the normalize_col is expected to be used as the numerator for the ratio.
 
     Returns
     -------
@@ -68,20 +75,24 @@ def normalize(
 
 
     """
-    if isinstance(numerator, list):
-        numerator = numerator[0]
-    if isinstance(denominator, list):
-        denominator = denominator[0]
-
-    numerator_col = f"{numerator}_norm" if add_norm_col else numerator
+    # handling input types and warnings
+    if normalize_col is not None and isinstance(normalize_col, list):
+        normalize_col = normalize_col[0]
+    if weight_col is not None and isinstance(weight_col, list):
+        weight_col = weight_col[0]
 
     # calculate the relative risk
     df = calc_relative_risk(
-        df=df, features=features, numerator=numerator, denominator=denominator
+        df=df,
+        features=features,
+        risk_col=normalize_col,
+        weight_col=weight_col,
+        ratio=ratio,
     )
 
     # normalize the numerator
-    df[numerator_col] = df[numerator] / df["risk"]
+    normalized_col_name = f"{normalize_col}_norm" if add_norm_col else normalize_col
+    df[normalized_col_name] = df[normalize_col] / df["risk"]
     df = df.drop(columns=["risk"])
 
     return df
@@ -90,26 +101,30 @@ def normalize(
 def calc_relative_risk(
     df: pd.DataFrame,
     features: List[str],
-    numerator: List[str] or str,
-    denominator: List[str] or str = None,
+    risk_col: List[str] or str,
+    weight_col: Optional[List[str] or str] = None,
+    ratio: Optional[bool] = False,
 ) -> pd.DataFrame:
     """
-    Calculate relative risk of a column (numerator) based on a number of features.
+    Calculate relative risk of a column (risk_col) based on a number of features.
 
-    The relative risk is calculated as the average rate for the feature group
-    divided by the average rate for all groups. The relative risk is weighted by
-    the denominator if provided.
+    The relative risk is calculated as the average risk for the feature group
+    divided by the average risk for all groups. The relative risk is weighted by
+    the 'weight_col' if provided.
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame to normalize.
+        DataFrame to calculate relative risk for.
     features : list
         List of columns to group by.
-    numerator : list or str
-        Column to normalize.
-    denominator : list or str, optional
+    risk_col : list or str
+        Column to calculate relative risk for.
+    weight_col : list or str, optional
         Weighting column.
+    ratio : bool, optional
+        If the risk_col is being used as a ratio.
+        If True, the risk_col is expected to be used as the numerator for the ratio.
 
     Returns
     -------
@@ -118,23 +133,30 @@ def calc_relative_risk(
 
 
     """
-    if isinstance(numerator, list):
-        numerator = numerator[0]
-    if isinstance(denominator, list):
-        denominator = denominator[0]
+    # handling input types and warnings
+    if risk_col is not None and isinstance(risk_col, list):
+        risk_col = risk_col[0]
+    if weight_col is not None and isinstance(weight_col, list):
+        weight_col = weight_col[0]
 
-    if denominator is None:
+    if weight_col is None:
         df["temp_one"] = 1
-        denominator = "temp_one"
+        weight_col = "temp_one"
 
     # calculated the relative risk for each feature group
     grouped_df = (
-        df.groupby(features, observed=True)[[numerator, denominator]]
-        .sum()
-        .reset_index()
+        df.groupby(features, observed=True)[[risk_col, weight_col]].sum().reset_index()
     )
-    total_ratio = grouped_df[numerator].sum() / grouped_df[denominator].sum()
-    grouped_df["risk"] = (grouped_df[numerator] / grouped_df[denominator]) / total_ratio
+    if ratio:
+        total_ratio = grouped_df[risk_col].sum() / grouped_df[weight_col].sum()
+        grouped_df["risk"] = (
+            grouped_df[risk_col] / grouped_df[weight_col]
+        ) / total_ratio
+    else:
+        total_ratio = helpers._weighted_mean(
+            grouped_df[risk_col], grouped_df[weight_col]
+        )
+        grouped_df["risk"] = grouped_df[risk_col] / total_ratio
 
     # merge risk back to the original dataframe
     df = df.merge(grouped_df[[*features, "risk"]], on=features, how="left")

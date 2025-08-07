@@ -7,12 +7,13 @@ from morai.utils import helpers
 
 test_experience_path = helpers.ROOT_PATH / "tests" / "files" / "experience"
 experience_df = pd.read_csv(test_experience_path / "simple_normalization.csv")
+normalization_2_df = pd.read_csv(test_experience_path / "simple_normalization_2.csv")
 
 
 def test_relative_risk() -> None:
     """Tests the relative risk calculation."""
     test_df = experience.calc_relative_risk(
-        df=experience_df, features=["year"], numerator="year_lob_rate"
+        df=experience_df, features=["year"], risk_col=["year_lob_rate"]
     )
     total_mean = test_df["year_lob_rate"].mean()
     year_mean = test_df[test_df["year"] == 2019]["year_lob_rate"].mean()
@@ -24,17 +25,58 @@ def test_relative_risk() -> None:
     )
 
 
+def test_relative_risk_weighted() -> None:
+    """Tests the relative risk calculation with weights."""
+    test_df = experience.calc_relative_risk(
+        df=normalization_2_df,
+        features=["sex"],
+        risk_col=["rate"],
+        weight_col=["exposures"],
+    )
+
+    assert round(test_df[test_df["sex"] == "M"]["risk"].iloc[0], 3) == 0.75, (
+        "Expected relative risk to be weighted average rate for feature group divided "
+        "by the weighted average rate for all groups"
+    )
+
+
 def test_normalize() -> None:
     """Tests the normalization calculation."""
     test_df = experience.normalize(
         df=experience_df,
         features=["year"],
-        numerator="year_lob_rate",
+        normalize_col=["year_rate"],
         add_norm_col=True,
     )
-    test_df = experience.calc_relative_risk(
-        df=test_df, features=["year"], numerator="year_lob_rate_norm"
-    )
     assert (
-        round(test_df[test_df["year"] == 2019]["risk"].iloc[0], 3) == 1.0
-    ), "The relative risk should be 1.0 for the after normalizing column"
+        round(test_df[test_df["year"] == 2019]["year_rate_norm"].iloc[0], 3) == 1.075
+    ), "The normalized rate should be 1.075 after normalizing column"
+
+
+def test_normalize_weighted() -> None:
+    """Tests the normalization calculation with weights."""
+    test_df = experience.normalize(
+        df=normalization_2_df,
+        features=["sex"],
+        normalize_col=["rate"],
+        weight_col=["exposures"],
+        add_norm_col=True,
+    )
+    assert round(test_df[test_df["sex"] == "M"]["rate_norm"].iloc[0], 3) == 0.133, (
+        "The normalized rate should be 0.133 after normalizing column"
+    )
+
+
+def test_normalize_ratio() -> None:
+    """Tests the normalization calculation with ratio option."""
+    test_df = experience.normalize(
+        df=normalization_2_df,
+        features=["sex"],
+        normalize_col=["deaths"],
+        weight_col=["exposures"],
+        add_norm_col=True,
+        ratio=True,
+    )
+    assert round(test_df[test_df["sex"] == "M"]["deaths_norm"].iloc[0], 3) == 133.333, (
+        "The normalized rate should be 133.333 after normalizing column"
+    )
