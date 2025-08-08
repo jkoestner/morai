@@ -444,6 +444,7 @@ def update_tab_content(
                     ),
                     weight_col=dh._inputs_parse_id(states_info, "denominator_selector"),
                     add_norm_col=False,
+                    ratio=True,
                 )
             chart = charters.chart(
                 df=filtered_df,

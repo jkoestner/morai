@@ -744,7 +744,7 @@ def generate_selectors(
         html.Div(
             id={"type": prefix_group, "index": "normalize"},
             children=[
-                html.Label("Normalize"),
+                html.Label("Normalize (only when y-axis is ratio or risk)"),
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "normalize_selector"},
                     options=config_dataset["columns"]["features"],

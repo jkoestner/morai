@@ -1,6 +1,6 @@
 """Experience study model."""
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -75,10 +75,13 @@ def normalize(
 
 
     """
+    # check if lazy
+    is_lazy = isinstance(df, pl.LazyFrame)
+
     # handling input types and warnings
-    if normalize_col is not None and isinstance(normalize_col, list):
+    if isinstance(normalize_col, list):
         normalize_col = normalize_col[0]
-    if weight_col is not None and isinstance(weight_col, list):
+    if isinstance(weight_col, list):
         weight_col = weight_col[0]
 
     # calculate the relative risk
@@ -92,19 +95,26 @@ def normalize(
 
     # normalize the numerator
     normalized_col_name = f"{normalize_col}_norm" if add_norm_col else normalize_col
-    df[normalized_col_name] = df[normalize_col] / df["risk"]
-    df = df.drop(columns=["risk"])
+
+    if is_lazy:
+        df = df.with_columns(
+            (pl.col(normalize_col) / pl.col("risk")).alias(normalized_col_name)
+        )
+        df = df.drop("risk")
+    else:
+        df[normalized_col_name] = df[normalize_col] / df["risk"]
+        df = df.drop(columns=["risk"])
 
     return df
 
 
 def calc_relative_risk(
-    df: pd.DataFrame,
+    df: Union[pd.DataFrame, pl.LazyFrame],
     features: List[str],
     risk_col: List[str] or str,
     weight_col: Optional[List[str] or str] = None,
     ratio: Optional[bool] = False,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, pl.LazyFrame]:
     """
     Calculate relative risk of a column (risk_col) based on a number of features.
 
@@ -114,7 +124,7 @@ def calc_relative_risk(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : pd.DataFrame or pl.LazyFrame
         DataFrame to calculate relative risk for.
     features : list
         List of columns to group by.
@@ -128,40 +138,90 @@ def calc_relative_risk(
 
     Returns
     -------
-    df : pd.DataFrame
+    df : pd.DataFrame or pl.LazyFrame
         DataFrame with additional column for relative risk 'risk'
 
-
     """
+    # check if lazy
+    is_lazy = isinstance(df, pl.LazyFrame)
+
     # handling input types and warnings
-    if risk_col is not None and isinstance(risk_col, list):
+    if isinstance(risk_col, list):
         risk_col = risk_col[0]
-    if weight_col is not None and isinstance(weight_col, list):
+    if isinstance(weight_col, list):
         weight_col = weight_col[0]
 
     if weight_col is None:
-        df["temp_one"] = 1
         weight_col = "temp_one"
+        if is_lazy:
+            df = df.with_columns(pl.lit(1).alias(weight_col))
+        else:  # pandas
+            df[weight_col] = 1
 
     # calculated the relative risk for each feature group
-    grouped_df = (
-        df.groupby(features, observed=True)[[risk_col, weight_col]].sum().reset_index()
-    )
-    if ratio:
-        total_ratio = grouped_df[risk_col].sum() / grouped_df[weight_col].sum()
-        grouped_df["risk"] = (
-            grouped_df[risk_col] / grouped_df[weight_col]
-        ) / total_ratio
-    else:
-        total_ratio = helpers._weighted_mean(
-            grouped_df[risk_col], grouped_df[weight_col]
+    if is_lazy:
+        grouped_df = df.group_by(features).agg(
+            [
+                pl.col(risk_col).sum().alias(risk_col),
+                pl.col(weight_col).sum().alias(weight_col),
+            ]
         )
-        grouped_df["risk"] = grouped_df[risk_col] / total_ratio
+        if ratio:
+            total_ratio = (
+                grouped_df.select(
+                    (pl.col(risk_col).sum() / pl.col(weight_col).sum()).alias(
+                        "total_ratio"
+                    )
+                )
+                .collect()
+                .item()
+            )
+            grouped_df = grouped_df.with_columns(
+                ((pl.col(risk_col) / pl.col(weight_col)) / total_ratio).alias("risk")
+            )
+        else:
+            total_ratio = (
+                grouped_df.select(
+                    (
+                        (pl.col(risk_col) * pl.col(weight_col)).sum()
+                        / pl.col(weight_col).sum()
+                    ).alias("total_ratio")
+                )
+                .collect()
+                .item()
+            )
+            grouped_df = grouped_df.with_columns(
+                (pl.col(risk_col) / total_ratio).alias("risk")
+            )
+
+    else:  # pandas
+        grouped_df = (
+            df.groupby(features, observed=True)[[risk_col, weight_col]]
+            .sum()
+            .reset_index()
+        )
+        if ratio:
+            total_ratio = grouped_df[risk_col].sum() / grouped_df[weight_col].sum()
+            grouped_df["risk"] = (
+                grouped_df[risk_col] / grouped_df[weight_col]
+            ) / total_ratio
+        else:
+            total_ratio = helpers._weighted_mean(
+                grouped_df[risk_col], grouped_df[weight_col]
+            )
+            grouped_df["risk"] = grouped_df[risk_col] / total_ratio
 
     # merge risk back to the original dataframe
-    df = df.merge(grouped_df[[*features, "risk"]], on=features, how="left")
-    if "temp_one" in df.columns:
-        df = df.drop(columns=["temp_one"])
+    if is_lazy:
+        grouped_df = grouped_df.select([*features, "risk"])
+        df = df.join(grouped_df, on=features, how="left")
+    else:  # pandas
+        df = df.merge(grouped_df[[*features, "risk"]], on=features, how="left")
+    if weight_col == "temp_one":
+        if is_lazy:
+            df = df.drop("temp_one")
+        else:  # pandas
+            df = df.drop(columns=["temp_one"])
 
     return df
 
