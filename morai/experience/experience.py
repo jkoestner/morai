@@ -65,7 +65,6 @@ def normalize(
     add_norm_col : bool, optional default=False
         Add the normalized column instead of overwriting the column being normalized.
     ratio : bool, optional default=False
-        If the normalize_col is being used as a ratio.
         If True, the normalize_col is expected to be used as the numerator for the ratio.
 
     Returns
@@ -133,7 +132,6 @@ def calc_relative_risk(
     weight_col : list or str, optional
         Weighting column.
     ratio : bool, optional
-        If the risk_col is being used as a ratio.
         If True, the risk_col is expected to be used as the numerator for the ratio.
 
     Returns
@@ -160,7 +158,7 @@ def calc_relative_risk(
 
     # calculated the relative risk for each feature group
     if is_lazy:
-        grouped_df = df.group_by(features).agg(
+        grouped_df = df.group_by(features, maintain_order=True).agg(
             [
                 pl.col(risk_col).sum().alias(risk_col),
                 pl.col(weight_col).sum().alias(weight_col),
@@ -196,7 +194,7 @@ def calc_relative_risk(
 
     else:  # pandas
         grouped_df = (
-            df.groupby(features, observed=True)[[risk_col, weight_col]]
+            df.groupby(features, observed=True, sort=False)[[risk_col, weight_col]]
             .sum()
             .reset_index()
         )
@@ -212,10 +210,19 @@ def calc_relative_risk(
             grouped_df["risk"] = grouped_df[risk_col] / total_ratio
 
     # merge risk back to the original dataframe
+    # when a risk is 0, the risk_col was 0 and therfore the relative risk is 1
+    # this is to avoid division by zero when normalizing.
     if is_lazy:
+        grouped_df = grouped_df.with_columns(
+            pl.when(pl.col("risk") == 0)
+            .then(pl.lit(1))
+            .otherwise(pl.col("risk"))
+            .alias("risk")
+        )
         grouped_df = grouped_df.select([*features, "risk"])
         df = df.join(grouped_df, on=features, how="left")
     else:  # pandas
+        grouped_df.loc[grouped_df["risk"] == 0, "risk"] = 1
         df = df.merge(grouped_df[[*features, "risk"]], on=features, how="left")
     if weight_col == "temp_one":
         if is_lazy:
