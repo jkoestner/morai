@@ -50,6 +50,10 @@ class GLM(BaseEstimator, RegressorMixin):
         """
         Fit the GLM model.
 
+        Notes
+        -----
+        The weights are used as var_weights in statsmodels.
+
         Parameters
         ----------
         X : pd.DataFrame
@@ -363,7 +367,7 @@ class GLM(BaseEstimator, RegressorMixin):
                 formula=formula,
                 data=model_data,
                 family=family,
-                freq_weights=weights,
+                var_weights=weights,
                 **kwargs,
             )
         else:
@@ -371,7 +375,7 @@ class GLM(BaseEstimator, RegressorMixin):
                 endog=y,
                 exog=X,
                 family=family,
-                freq_weights=weights,
+                var_weights=weights,
                 **kwargs,
             )
 
@@ -1571,7 +1575,7 @@ class GAMStats(BaseEstimator, RegressorMixin):
                 formula=formula,
                 data=model_data,
                 family=family,
-                freq_weights=weights,
+                var_weights=weights,
                 smoother=smoother,
                 alpha=alpha,
                 **kwargs,
@@ -1581,7 +1585,7 @@ class GAMStats(BaseEstimator, RegressorMixin):
                 endog=y,
                 exog=X_model,
                 family=family,
-                freq_weights=weights,
+                var_weights=weights,
                 smoother=smoother,
                 alpha=alpha,
                 **kwargs,
@@ -1731,8 +1735,8 @@ class GAMStats(BaseEstimator, RegressorMixin):
         # effective degrees of freedom from penalty
         adf = len(self.smoother.col_names) + 1
         mean_exposure = (
-            np.mean(self.unfit_model.freq_weights)
-            if self.unfit_model.freq_weights is not None
+            np.mean(self.unfit_model.var_weights)
+            if self.unfit_model.var_weights is not None
             else 1.0
         )
         edf = self.model.edf[
