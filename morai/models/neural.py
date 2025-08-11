@@ -179,7 +179,6 @@ class Neural(nn.Module):
         y = y * weights
 
         # convert to torch tensors
-        X_torch = self._prepare_input_tensor(X)
         y_torch = torch.tensor(y.to_numpy().reshape(-1), dtype=torch.float32)
         weights_torch = torch.tensor(
             weights.to_numpy().reshape(-1), dtype=torch.float32
@@ -206,6 +205,9 @@ class Neural(nn.Module):
         for epoch in pbar:
             self.train()
             opt.zero_grad()
+
+            # convert to torch tensors, prepare fresh
+            X_torch = self._prepare_input_tensor(X)
             z_torch = self(X_torch)
 
             if self.task == "poisson":
@@ -274,7 +276,8 @@ class Neural(nn.Module):
         # convert to rate
         if self.task == "poisson":
             mu = np.exp(z_torch)
-            q = 1.0 - np.exp(-mu)
+            # q = 1.0 - np.exp(-mu)
+            q = mu / (1 + mu)
             predictions = pd.Series(np.clip(q, 1e-9, 1 - 1e-9))
 
         else:  # binomial
@@ -300,8 +303,17 @@ class Neural(nn.Module):
         """
         # set up embeddings
         total_embedding_dim = 0
+        self.label_encoders = {}
+
         for cat_feature in self.cat_cols:
-            vocab_size = X[cat_feature].nunique()
+            # create label encoder
+            unique_values = X[cat_feature].dropna().unique()
+            self.label_encoders[cat_feature] = {
+                "__UNK__": 0,
+                **{val: idx + 1 for idx, val in enumerate(unique_values)},
+            }
+            vocab_size = len(self.label_encoders[cat_feature])
+
             if cat_feature not in self.embedding_dims:
                 # use a rule of thumb for embedding dimensions
                 # capping at 50, and generally half the vocabulary size
@@ -343,7 +355,13 @@ class Neural(nn.Module):
 
         # categorical features
         for cat_col in self.cat_cols:
-            cat_data = torch.tensor(X[cat_col].to_numpy(), dtype=torch.long)
+            # label encode
+            cat_values = (
+                X[cat_col].map(self.label_encoders[cat_col]).fillna(0).astype("int64")
+            )
+
+            # convert to torch tensor
+            cat_data = torch.tensor(cat_values.to_numpy(), dtype=torch.long)
             embedded = self.embeddings[cat_col](cat_data)
             features.append(embedded)
 
