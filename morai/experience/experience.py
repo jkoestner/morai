@@ -113,6 +113,7 @@ def calc_relative_risk(
     risk_col: List[str] or str,
     weight_col: Optional[List[str] or str] = None,
     ratio: Optional[bool] = False,
+    relative_to: Optional[str] = "aggregate",
 ) -> Union[pd.DataFrame, pl.LazyFrame]:
     """
     Calculate relative risk of a column (risk_col) based on a number of features.
@@ -133,6 +134,13 @@ def calc_relative_risk(
         Weighting column.
     ratio : bool, optional
         If True, the risk_col is expected to be used as the numerator for the ratio.
+    relative_to : str, optional
+        Column to calculate relative risk relative to, default is "aggregate".
+        Options are "aggregate" or "minimum".
+          - "aggregate" : relative risk is calculated as the average risk for
+          the feature group divided by the average risk for all groups.
+          - "minimum" : relative risk is calculated as the average risk for
+          the feature group divided by the minimum risk for all groups.
 
     Returns
     -------
@@ -221,9 +229,15 @@ def calc_relative_risk(
         )
         grouped_df = grouped_df.select([*features, "risk"])
         df = df.join(grouped_df, on=features, how="left")
+        if relative_to == "minimum":
+            min_risk = grouped_df.select(pl.col("risk").min()).collect().item()
+            df = df.with_columns((pl.col("risk") / min_risk).alias("risk"))
     else:  # pandas
         grouped_df.loc[grouped_df["risk"] == 0, "risk"] = 1
         df = df.merge(grouped_df[[*features, "risk"]], on=features, how="left")
+        if relative_to == "minimum":
+            min_risk = grouped_df["risk"].min()
+            df["risk"] = df["risk"] / min_risk
     if weight_col == "temp_one":
         if is_lazy:
             df = df.drop("temp_one")

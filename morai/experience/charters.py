@@ -485,6 +485,231 @@ def compare_rates(
     return fig
 
 
+def compare_features(
+    df: Union[pd.DataFrame, pl.LazyFrame],
+    x_axis: str,
+    y_axis: str,
+    feature_1: str,
+    feature_1_values: List[str],
+    feature_2: str,
+    feature_2_values: List[str],
+    color: Optional[str] = None,
+    numerator: Optional[str] = None,
+    denominator: Optional[str] = None,
+    secondary: Optional[str] = None,
+    y_log: bool = False,
+    x_bins: Optional[int] = None,
+    display: bool = True,
+    **kwargs: Any,
+) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
+    """
+    Compare the data by two features with different values.
+
+    This is useful for comparing features to get a relative risk.
+
+    Parameters
+    ----------
+    df : Union[pd.DataFrame, pl.LazyFrame]
+        The DataFrame or LazyFrame to use.
+    x_axis : str
+        The name of the column to use for the x-axis.
+    y_axis : str
+        The name of the column to use for the y-axis.
+    feature_1 : str
+        The name of the column to use for the first feature.
+    feature_1_values : list
+        A list of values to use for the first feature.
+    feature_2 : str
+        The name of the column to use for the second feature.
+    feature_2_values : list
+        A list of values to use for the second feature.
+    color : str, optional (default=None)
+        The name of the column to use for the color.
+    numerator : str, optional (default=None)
+        The name of the column to use for the numerator.
+    denominator : str, optional (default=None)
+        The name of the column to use for the denominator.
+    secondary : str, optional (default=None)
+        The name of the column to have a secondary y-axis for.
+    y_log : bool, optional (default=False)
+        Whether to log the y-axis.
+    x_bins : int, optional (default=None)
+        The number of bins to use for the x-axis.
+    display : bool, optional (default=True)
+        Whether to display figure or now.
+    **kwargs : dict
+        Additional keyword arguments to pass to Plotly Express.
+
+    Returns
+    -------
+    fig : Figure or DataFrame/LazyFrame
+        The chart or grouped data if display=False
+
+    """
+    # check if lazy
+    is_lazy = isinstance(df, pl.LazyFrame)
+
+    if is_lazy:
+        if df.collect().height == 0:
+            logger.warning("DataFrame is empty.")
+            return go.Figure()
+        schema = df.collect_schema()
+        columns = list(schema.keys())
+    else:
+        df = df.copy()
+        if df.empty:
+            logger.warning("DataFrame is empty.")
+            return go.Figure()
+        columns = df.columns
+
+    # check parameters
+    parameters = [
+        x_axis,
+        feature_1,
+        feature_2,
+        color,
+        numerator,
+        denominator,
+        secondary,
+    ]
+    for parameter in parameters:
+        if parameter and not isinstance(parameter, str):
+            raise ValueError(f"{parameter} should be a string.")
+        if parameter and parameter not in columns:
+            raise ValueError(
+                f"Variable {parameter} is not in the DataFrame columns {columns}."
+            )
+
+    # groupby attributes
+    agg_cols = [y_axis]
+    aggs = ["mean"]
+    groupby_cols = [x_axis, "_feature"]
+
+    if y_axis in ["ratio", "risk"]:
+        agg_cols = [numerator, denominator]
+        aggs = ["sum", "sum"]
+    if color:
+        groupby_cols.append(color)
+    if secondary:
+        agg_cols.append(secondary)
+        aggs.append("sum")
+
+    # create indicator for features and group
+    if is_lazy:
+        if x_bins:
+            logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
+            df = preprocessors.lazy_bin_feature(df, x_axis, x_bins, inplace=True)
+
+        df_subset = pl.concat(
+            [
+                df.filter(pl.col(feature_1).is_in(feature_1_values)).with_columns(
+                    pl.lit("feature_1").alias("_feature")
+                ),
+                df.filter(pl.col(feature_2).is_in(feature_2_values)).with_columns(
+                    pl.lit("feature_2").alias("_feature")
+                ),
+            ]
+        )
+
+        grouped_data = preprocessors.lazy_groupby(
+            df_subset, groupby_cols, agg_cols, aggs
+        )
+        grouped_data = grouped_data.collect().to_pandas()
+
+    else:  # pandas
+        if x_bins:
+            logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
+            df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)
+
+        df_subset = pd.concat(
+            [
+                df[df[feature_1].isin(feature_1_values)].assign(_feature="feature_1"),
+                df[df[feature_2].isin(feature_2_values)].assign(_feature="feature_2"),
+            ]
+        )
+
+        agg_dict = dict(zip(agg_cols, aggs))
+        grouped_data = (
+            df_subset.groupby(groupby_cols, observed=True)[agg_cols]
+            .agg(agg_dict)
+            .reset_index()
+        )
+
+    # calculate ratios if needed
+    if y_axis == "ratio":
+        grouped_data[y_axis] = grouped_data[numerator] / grouped_data[denominator]
+    elif y_axis == "risk":
+        average_y_axis = grouped_data[numerator].sum() / grouped_data[denominator].sum()
+        grouped_data[y_axis] = (
+            grouped_data[numerator] / grouped_data[denominator]
+        ) / average_y_axis
+
+    # calculate relative risk and sort
+    grouped_data = experience.calc_relative_risk(
+        df=grouped_data, features=["_feature"], risk_col=y_axis, relative_to="minimum"
+    )
+    grouped_data = grouped_data.sort_values(
+        groupby_cols,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, pd.CategoricalDtype) else x,
+    )
+
+    # return data if not display
+    if not display:
+        return grouped_data
+
+    # create figures
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    if secondary:
+        fig.add_trace(
+            go.Bar(
+                x=grouped_data[x_axis],
+                y=grouped_data[secondary],
+                name=secondary,
+                marker_color="rgba(135, 206, 250, 0.6)",
+            ),
+            secondary_y=True,
+        )
+
+    # add lines
+    color_values = grouped_data[color].unique() if color else [None]
+
+    for color_value in color_values:
+        if color:
+            df_subset = grouped_data[grouped_data[color] == color_value]
+            x_values, y_values = df_subset[x_axis], df_subset["risk"]
+            trace_name = color_value
+        else:
+            x_values, y_values = grouped_data[x_axis], grouped_data["risk"]
+            trace_name = "risk"
+
+        fig.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=y_values,
+                name=trace_name,
+                mode="lines+markers",
+                **kwargs,
+            ),
+            secondary_y=False,
+        )
+
+    # plot layout
+    yaxis_type = "-"
+    y_title = "Relative Risk"
+    if y_log:
+        yaxis_type = "log"
+        y_title = "Log Relative Risk"
+
+    fig.update_layout(
+        title_text=f"Comparison of 'Relative Risk' by '{x_axis}'",
+        yaxis_type=yaxis_type,
+        yaxis_title=y_title,
+    )
+
+    return fig
+
+
 def frequency(
     df: Union[pd.DataFrame, pl.LazyFrame],
     cols: int = 1,

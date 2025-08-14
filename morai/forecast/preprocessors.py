@@ -404,7 +404,7 @@ def lazy_groupby(
     df: pl.LazyFrame,
     groupby_cols: Union[str, List[str]],
     agg_cols: Union[str, List[str]],
-    agg: str,
+    aggs: Union[str, List[str]],
 ) -> pl.LazyFrame:
     """
     Mimics a Pandas groupby call using Polars' lazy API.
@@ -417,9 +417,8 @@ def lazy_groupby(
         The column name(s) to group by.
     agg_cols : str or list
         The column name(s) on which to perform the aggregation.
-    agg : str
+    aggs : str or list
         The aggregation function to apply.
-        Supported values are 'sum', 'mean', and 'count'.
 
     Returns
     -------
@@ -427,31 +426,40 @@ def lazy_groupby(
         The grouped and aggregated LazyFrame.
 
     """
-    # check if columns are list or string and build aggregation expressions
-    # defaults to sum aggregation
-    if isinstance(agg_cols, list):
-        agg_expr = []
-        for col in agg_cols:
-            if agg == "sum":
-                agg_expr.append(pl.sum(col).alias(col))
-            elif agg == "mean":
-                agg_expr.append(pl.mean(col).alias(col))
-            elif agg == "count":
-                agg_expr.append(pl.count(col).alias(col))
-            else:
-                agg_expr.append(pl.sum(col).alias(col))
-    else:  # noqa: PLR5501
-        if agg == "sum":
-            agg_expr = pl.sum(agg_cols).alias(agg_cols)
-        elif agg == "mean":
-            agg_expr = pl.mean(agg_cols).alias(agg_cols)
-        elif agg == "count":
-            agg_expr = pl.count(agg_cols).alias(agg_cols)
+    # normalize
+    if isinstance(groupby_cols, str):
+        groupby_cols = [groupby_cols]
+    if isinstance(agg_cols, str):
+        agg_cols = [agg_cols]
+    if isinstance(aggs, str):
+        aggs = [aggs]
+
+    # align lists
+    if len(aggs) == 1 and len(agg_cols) > 1:
+        aggs = [aggs[0]] * len(agg_cols)
+
+    # mapping
+    agg_func_map = {
+        "sum": pl.sum,
+        "mean": pl.mean,
+        "count": pl.count,
+        "min": pl.min,
+        "max": pl.max,
+        "median": pl.median,
+        "n_unique": pl.n_unique,
+    }
+
+    # build expressions
+    agg_exprs = []
+    for i, agg_col in enumerate(agg_cols):
+        func = agg_func_map.get(aggs[i])
+        if func:
+            agg_exprs.append(func(agg_col).alias(agg_col))
         else:
-            agg_expr = pl.sum(agg_cols).alias(agg_cols)
+            raise ValueError(f"Unsupported aggregation function: '{aggs[i]}'")
 
     # groupby and aggregate
-    grouped_df = df.group_by(groupby_cols).agg(agg_expr)
+    grouped_df = df.group_by(groupby_cols).agg(agg_exprs)
 
     return grouped_df
 
