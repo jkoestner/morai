@@ -418,3 +418,29 @@ def _convert_object_to_category(df: pd.DataFrame, column: str) -> pd.DataFrame:
     if df[column].dtype == "object":
         df[column] = df[column].astype("category")
     return df
+
+
+def _to_list(val: Union[str, list, dict, None]) -> list:
+    """
+    Convert a string, dict, or None to a list.
+
+    Parameters
+    ----------
+    val : str, list, dict, or None
+        The value to convert.
+
+    Returns
+    -------
+    _l
+        The value as a list.
+
+    """
+    if val is None:
+        _l = []
+    if isinstance(val, str):
+        _l = [val]
+    if isinstance(val, dict):
+        _l = list(val.keys())
+    if isinstance(val, list):
+        _l = val
+    return _l

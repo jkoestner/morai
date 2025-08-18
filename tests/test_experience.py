@@ -11,7 +11,7 @@ experience_df = pd.read_csv(test_experience_path / "simple_normalization.csv")
 normalization_2_df = pd.read_csv(test_experience_path / "simple_normalization_2.csv")
 
 
-def test_relative_risk() -> None:
+def test_relative_risk_aggregate() -> None:
     """Tests the relative risk calculation."""
     test_df = experience.calc_relative_risk(
         df=experience_df, features=["year"], risk_col=["year_lob_rate"]
@@ -27,11 +27,15 @@ def test_relative_risk() -> None:
     )
     test_lf = test_lf.collect().to_pandas()
 
-    assert round(test_df[test_df["year"] == 2019]["risk"].iloc[0], 3) == year_risk, (
+    assert (
+        round(test_df[test_df["year"] == 2019]["relative_risk"].iloc[0], 3) == year_risk
+    ), (
         "Expected relative risk to be average rate for feature group divided "
         "by the average rate for all groups"
     )
-    assert round(test_lf[test_lf["year"] == 2019]["risk"].iloc[0], 3) == year_risk, (
+    assert (
+        round(test_lf[test_lf["year"] == 2019]["relative_risk"].iloc[0], 3) == year_risk
+    ), (
         "Expected relative risk to be average rate for feature group divided "
         "by the average rate for all groups"
     )
@@ -56,13 +60,159 @@ def test_relative_risk_weighted() -> None:
     )
     test_lf = test_lf.collect().to_pandas()
 
-    assert round(test_df[test_df["sex"] == "M"]["risk"].iloc[0], 3) == 0.75, (
+    assert round(test_df[test_df["sex"] == "M"]["relative_risk"].iloc[0], 3) == 0.75, (
         "Expected relative risk to be weighted average rate for feature group divided "
         "by the weighted average rate for all groups"
     )
-    assert round(test_lf[test_lf["sex"] == "M"]["risk"].iloc[0], 3) == 0.75, (
+    assert round(test_lf[test_lf["sex"] == "M"]["relative_risk"].iloc[0], 3) == 0.75, (
         "Expected relative risk to be weighted average rate for feature group divided "
         "by the weighted average rate for all groups"
+    )
+
+
+def test_relative_risk_reference() -> None:
+    """Tests the relative risk calculation with reference."""
+    test_df = experience.calc_relative_risk(
+        df=experience_df,
+        features=["year"],
+        risk_col=["year_lob_multi_rate"],
+        relative_to="reference",
+    )
+    reference_mean = test_df[test_df["year"] == 2019]["year_lob_multi_rate"].mean()
+    year_mean = test_df[test_df["year"] == 2020]["year_lob_multi_rate"].mean()
+    year_risk = round(year_mean / reference_mean, 3)
+
+    # polars
+    experience_lf = pl.from_pandas(experience_df).lazy()
+    test_lf = experience.calc_relative_risk(
+        df=experience_lf,
+        features=["year"],
+        risk_col=["year_lob_multi_rate"],
+        relative_to="reference",
+    )
+    test_lf = test_lf.collect().to_pandas()
+
+    assert (
+        round(test_df[test_df["year"] == 2020]["relative_risk"].iloc[0], 3) == year_risk
+    ), (
+        "Expected relative risk to be average rate for feature group divided "
+        "by the average rate for reference"
+    )
+    assert (
+        round(test_lf[test_lf["year"] == 2020]["relative_risk"].iloc[0], 3) == year_risk
+    ), (
+        "Expected relative risk to be average rate for feature group divided "
+        "by the average rate for reference"
+    )
+
+
+def test_relative_risk_reference_by() -> None:
+    """Tests the relative risk calculation with reference."""
+    test_df = experience.calc_relative_risk(
+        df=experience_df,
+        features=["year"],
+        risk_col=["year_lob_multi_rate"],
+        relative_to="reference",
+        relative_cols=["lob"],
+    )
+    reference_mean = test_df[(test_df["year"] == 2019) & (test_df["lob"] == "UL")][
+        "year_lob_multi_rate"
+    ].mean()
+    year_mean = test_df[(test_df["year"] == 2020) & (test_df["lob"] == "UL")][
+        "year_lob_multi_rate"
+    ].mean()
+    year_risk = round(year_mean / reference_mean, 3)
+
+    # polars
+    experience_lf = pl.from_pandas(experience_df).lazy()
+    test_lf = experience.calc_relative_risk(
+        df=experience_lf,
+        features=["year"],
+        risk_col=["year_lob_multi_rate"],
+        relative_to="reference",
+        relative_cols=["lob"],
+    )
+    test_lf = test_lf.collect().to_pandas()
+
+    assert (
+        round(
+            test_df[(test_df["year"] == 2020) & (test_df["lob"] == "UL")][
+                "relative_risk"
+            ].iloc[0],
+            3,
+        )
+        == year_risk
+    ), (
+        "Expected relative risk to be average rate for feature group divided "
+        "by the average rate for reference that is in the same relative group"
+    )
+    assert (
+        round(
+            test_lf[(test_df["year"] == 2020) & (test_df["lob"] == "UL")][
+                "relative_risk"
+            ].iloc[0],
+            3,
+        )
+        == year_risk
+    ), (
+        "Expected relative risk to be average rate for feature group divided "
+        "by the average rate for reference that is in the same relative group"
+    )
+
+
+def test_relative_risk_subset() -> None:
+    """Tests the relative risk calculation with subset."""
+    test_df = experience.calc_relative_risk(
+        df=experience_df,
+        features=["year"],
+        risk_col=["year_lob_multi_rate"],
+        relative_to="subset",
+        relative_cols=["lob"],
+        subset_dict={"year": [2019, 2020]},
+    )
+    reference_mean = test_df[
+        (test_df["year"].isin([2019, 2020])) & (test_df["lob"] == "UL")
+    ]["year_lob_multi_rate"].mean()
+    year_mean = test_df[(test_df["year"] == 2020) & (test_df["lob"] == "UL")][
+        "year_lob_multi_rate"
+    ].mean()
+    year_risk = round(year_mean / reference_mean, 3)
+
+    # polars
+    experience_lf = pl.from_pandas(experience_df).lazy()
+    test_lf = experience.calc_relative_risk(
+        df=experience_lf,
+        features=["year"],
+        risk_col=["year_lob_multi_rate"],
+        relative_to="subset",
+        relative_cols=["lob"],
+        subset_dict={"year": [2019, 2020]},
+    )
+    test_lf = test_lf.collect().to_pandas()
+
+    assert (
+        round(
+            test_df[(test_df["year"] == 2020) & (test_df["lob"] == "UL")][
+                "relative_risk"
+            ].iloc[0],
+            3,
+        )
+        == year_risk
+    ), (
+        "Expected relative risk to be average rate for feature group divided "
+        "by the average rate for subset"
+    )
+    assert (
+        round(
+            test_lf[(test_df["year"] == 2020) & (test_df["lob"] == "UL")][
+                "relative_risk"
+            ].iloc[0],
+            3,
+        )
+        == year_risk
+    ), (
+        "Expected relative risk to be average rate for feature group divided "
+        "by the average rate for subset"
     )
 
 

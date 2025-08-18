@@ -1,5 +1,7 @@
 """Experience dashboard."""
 
+import ast
+
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
@@ -252,6 +254,7 @@ def _build_selectors_column():
                         {"label": "📊 Chart Analysis", "value": "chart"},
                         {"label": "📈 Rate Comparison", "value": "compare"},
                         {"label": "🎯 Target Analysis", "value": "target"},
+                        {"label": "⚖️ Relative Risk", "value": "relative"},
                     ],
                     value="chart",
                     clearable=False,
@@ -336,6 +339,11 @@ def load_data(dataset, config):
             "weights": False,
             "normalize": True,
             "y_log": True,
+            "relative": False,
+            "relative_to": False,
+            "relative_cols": False,
+            "subset_dict": False,
+            "flip_x_color": False,
         },
     )
 
@@ -401,6 +409,31 @@ def update_tab_content(
     states_info = dh._inputs_flatten_list(callback_context.states_list)
     x_axis = dh._inputs_parse_id(states_info, "x_axis_selector")
     y_axis = dh._inputs_parse_id(states_info, "y_axis_selector")
+    color = dh._inputs_parse_id(states_info, "color_selector")
+    chart_type = dh._inputs_parse_id(states_info, "chart_type_selector")
+    rates = dh._inputs_parse_id(states_info, "rates_selector")
+    weights = dh._inputs_parse_id(states_info, "weights_selector")
+    secondary = dh._inputs_parse_id(states_info, "secondary_selector")
+    x_bins = dh._inputs_parse_id(states_info, "x_bins_selector")
+    add_line = dh._inputs_parse_id(states_info, "add_line_selector")
+    y_log = dh._inputs_parse_id(states_info, "y_log_selector")
+    numerator = dh._inputs_parse_id(states_info, "numerator_selector")
+    denominator = dh._inputs_parse_id(states_info, "denominator_selector")
+    target = dh._inputs_parse_id(states_info, "target_selector")
+    normalize = dh._inputs_parse_id(states_info, "normalize_selector")
+    relative = dh._inputs_parse_id(states_info, "relative_selector")
+    relative_to = dh._inputs_parse_id(states_info, "relative_to_selector")
+    relative_cols = dh._inputs_parse_id(states_info, "relative_cols_selector")
+    subset_dict = dh._inputs_parse_id(states_info, "subset_dict_selector")
+    flip_x_color = dh._inputs_parse_id(states_info, "flip_x_color_selector")
+    if not subset_dict or subset_dict.strip() == "":
+        subset_dict = None
+    else:
+        try:
+            subset_dict = ast.literal_eval(subset_dict)
+        except Exception:
+            logger.warning(f"`{subset_dict}` is not a dictionary.")
+            subset_dict = None
 
     # filter the dataset - only filter what's needed
     filtered_df = dh.filter_data(df=dataset, callback_context=states_info)
@@ -429,20 +462,18 @@ def update_tab_content(
             chart = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=dh._inputs_parse_id(states_info, "rates_selector"),
-                weights=dh._inputs_parse_id(states_info, "weights_selector"),
-                secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
-                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
+                rates=rates,
+                weights=weights,
+                secondary=secondary,
+                x_bins=x_bins,
             )
         elif tool == "chart":
-            if dh._inputs_parse_id(states_info, "normalize_selector"):
+            if normalize:
                 filtered_df = experience.normalize(
                     df=filtered_df,
-                    features=dh._inputs_parse_id(states_info, "normalize_selector"),
-                    normalize_col=dh._inputs_parse_id(
-                        states_info, "numerator_selector"
-                    ),
-                    weight_col=dh._inputs_parse_id(states_info, "denominator_selector"),
+                    features=normalize,
+                    normalize_col=numerator,
+                    weight_col=denominator,
                     add_norm_col=False,
                     ratio=True,
                 )
@@ -450,35 +481,73 @@ def update_tab_content(
                 df=filtered_df,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                color=dh._inputs_parse_id(states_info, "color_selector"),
-                type=dh._inputs_parse_id(states_info, "chart_type_selector"),
-                numerator=dh._inputs_parse_id(states_info, "numerator_selector"),
-                denominator=dh._inputs_parse_id(states_info, "denominator_selector"),
-                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
-                add_line=dh._inputs_parse_id(states_info, "add_line_selector"),
-                y_log=dh._inputs_parse_id(states_info, "y_log_selector"),
+                color=color,
+                type=chart_type,
+                numerator=numerator,
+                denominator=denominator,
+                x_bins=x_bins,
+                add_line=add_line,
+                y_log=y_log,
             )
-            if dh._inputs_parse_id(states_info, "secondary_selector"):
+            if secondary:
+                if color:
+                    type = "histogram"
+                    barmode = "group"
+                else:
+                    type = "bar"
+                    barmode = "relative"
                 chart_secondary = charters.chart(
                     df=filtered_df,
                     x_axis=x_axis,
-                    y_axis=dh._inputs_parse_id(states_info, "secondary_selector"),
-                    color=dh._inputs_parse_id(states_info, "color_selector"),
-                    type="bar",
-                    x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
+                    y_axis=secondary,
+                    color=color,
+                    type=type,
+                    x_bins=x_bins,
+                    barmode=barmode,
                 )
                 chart_secondary = dcc.Graph(figure=chart_secondary)
         elif tool == "target":
             chart = charters.target(
                 df=filtered_df,
-                target=[dh._inputs_parse_id(states_info, "target_selector")],
+                target=[target],
                 features=config_dataset["columns"]["features"],
-                numerator=dh._inputs_parse_id(states_info, "multi_numerator_selector"),
-                denominator=dh._inputs_parse_id(
-                    states_info, "multi_denominator_selector"
-                ),
-                add_line=dh._inputs_parse_id(states_info, "add_line_selector"),
+                numerator=numerator,
+                denominator=denominator,
+                add_line=add_line,
             )
+        elif tool == "relative":
+            chart = charters.relative_risk(
+                df=filtered_df,
+                y_axis=y_axis,
+                features=relative,
+                numerator=numerator,
+                denominator=denominator,
+                relative_to=relative_to,
+                relative_cols=relative_cols,
+                subset_dict=subset_dict,
+                x_bins=x_bins,
+                add_line=add_line,
+                flip_x_color=flip_x_color,
+            )
+            if flip_x_color:
+                relative, relative_cols = relative_cols, relative
+            if secondary:
+                if relative_cols:
+                    type = "histogram"
+                    barmode = "group"
+                else:
+                    type = "bar"
+                    barmode = "relative"
+                chart_secondary = charters.chart(
+                    df=filtered_df,
+                    x_axis=relative,
+                    y_axis=secondary,
+                    color=relative_cols,
+                    type=type,
+                    x_bins=x_bins,
+                    barmode=barmode,
+                )
+                chart_secondary = dcc.Graph(figure=chart_secondary)
         tab_content = dcc.Graph(figure=chart)
 
     elif active_tab == "tab-table":
@@ -486,10 +555,10 @@ def update_tab_content(
             table = charters.compare_rates(
                 df=filtered_df,
                 x_axis=x_axis,
-                rates=dh._inputs_parse_id(states_info, "rates_selector"),
-                weights=dh._inputs_parse_id(states_info, "weights_selector"),
-                secondary=dh._inputs_parse_id(states_info, "secondary_selector"),
-                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
+                rates=rates,
+                weights=weights,
+                secondary=secondary,
+                x_bins=x_bins,
                 display=False,
             )
         elif tool == "chart":
@@ -497,16 +566,31 @@ def update_tab_content(
                 df=filtered_df,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                color=dh._inputs_parse_id(states_info, "color_selector"),
-                type=dh._inputs_parse_id(states_info, "chart_type_selector"),
-                numerator=dh._inputs_parse_id(states_info, "numerator_selector"),
-                denominator=dh._inputs_parse_id(states_info, "denominator_selector"),
-                x_bins=dh._inputs_parse_id(states_info, "x_bins_selector"),
+                color=color,
+                type=chart_type,
+                numerator=numerator,
+                denominator=denominator,
+                x_bins=x_bins,
                 display=False,
             )
         elif tool == "target":
             # give blank table
             table = filtered_df.head(0)
+        elif tool == "relative":
+            table = charters.relative_risk(
+                df=filtered_df,
+                y_axis=y_axis,
+                features=relative,
+                numerator=numerator,
+                denominator=denominator,
+                relative_to=relative_to,
+                relative_cols=relative_cols,
+                subset_dict=subset_dict,
+                x_bins=x_bins,
+                add_line=add_line,
+                flip_x_color=flip_x_color,
+                display=False,
+            )
 
         columnDefs = dash_formats.get_column_defs(table)
         export_button = html.Button(
@@ -611,6 +695,19 @@ def toggle_tool(tool, all_selectors):
         "multi_denominator",
         "add_line",
     ]
+    relative_selectors = [
+        "y_axis",
+        "relative",
+        "relative_cols",
+        "numerator",
+        "denominator",
+        "secondary",
+        "x_bins",
+        "add_line",
+        "relative_to",
+        "subset_dict",
+        "flip_x_color",
+    ]
     # determine which selectors to toggle
     if tool == "chart":
         show_selectors = chart_selectors
@@ -618,6 +715,8 @@ def toggle_tool(tool, all_selectors):
         show_selectors = compare_selectors
     elif tool == "target":
         show_selectors = target_selectors
+    elif tool == "relative":
+        show_selectors = relative_selectors
     else:
         return [dash.no_update for _ in all_selectors]
 

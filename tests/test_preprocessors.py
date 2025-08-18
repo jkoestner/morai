@@ -30,6 +30,6 @@ def test_lazy_groupby():
         }
     )
     grouped = preprocessors.lazy_groupby(
-        df=lf, groupby_cols=["group"], agg_cols=["value1"], agg="sum"
+        df=lf, groupby_cols=["group"], agg_cols=["value1"], aggs="sum"
     )
     assert grouped.collect()["value1"].unique().to_list() == [3, 12]
