@@ -6,7 +6,7 @@ it finds do not line up with the relationships in the data.
 
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -58,7 +58,9 @@ class Neural(nn.Module):
 
         """
         super().__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.task = task
+        self.feature_names = None
         if cat_cols is None:
             cat_cols = []
         self.cat_cols = cat_cols
@@ -69,6 +71,12 @@ class Neural(nn.Module):
         self.embeddings = nn.ModuleDict()
         self.fc1 = self.fc2 = self.fc3 = self.output = None
         self.relu1 = self.relu2 = self.relu3 = None
+        self.label_encoders = {}
+        self.to(self.device)
+        logger.info(
+            f"initialized Neural model with task: {self.task} "
+            f"and Torch and device: {self.device}"
+        )
 
     def setup_model(self, X_train: pd.DataFrame, dropout: float = 0.0) -> None:
         """
@@ -84,6 +92,7 @@ class Neural(nn.Module):
         """
         # get input size
         num_cols = [col for col in X_train.columns if col not in self.cat_cols]
+        self.feature_names = X_train.columns
         self.num_cols = num_cols
         logger.info(f"numeric columns: {self.num_cols}")
         logger.info(f"categorical columns: {self.cat_cols}")
@@ -95,18 +104,21 @@ class Neural(nn.Module):
         # create layers
         self.fc1 = nn.Linear(input_size, 32)
         self.relu1 = nn.ReLU()
-        # self.dropout1 = nn.Dropout(dropout)
+        self.dropout1 = nn.Dropout(dropout)
 
         self.fc2 = nn.Linear(32, 32)
         self.relu2 = nn.ReLU()
-        # self.dropout2 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
 
         self.fc3 = nn.Linear(32, 16)
         self.relu3 = nn.ReLU()
+        self.dropout3 = nn.Dropout(dropout)
 
         self.output = nn.Linear(16, 1)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, X_torch_num: torch.Tensor, X_torch_cat_idx: [torch.Tensor]
+    ) -> torch.Tensor:
         """
         Forward function to be called from nn.Module.
 
@@ -114,8 +126,10 @@ class Neural(nn.Module):
 
         Parameters
         ----------
-        x : torch.Tensor
-            The input tensor
+        X_torch_num : torch.Tensor
+            Numeric features
+        X_torch_cat_idx : list
+            Index of Categorical features
 
         Returns
         -------
@@ -123,9 +137,32 @@ class Neural(nn.Module):
             The output tensor
 
         """
+        if self.cat_cols:
+            embedding_vectors = [
+                self.embeddings[col](idx)
+                for col, idx in zip(self.cat_cols, X_torch_cat_idx)
+            ]
+            x = torch.cat(embedding_vectors, dim=1)
+        else:
+            # no categorical columns, make a zero tensor
+            n = X_torch_num.size(0) if X_torch_num is not None else 0
+            x = torch.zeros(
+                (n, 0),
+                dtype=torch.float32,
+                device=X_torch_num.device if X_torch_num is not None else None,
+            )
+
+        # if numeric features are present, combine with embeddings
+        if X_torch_num is not None:
+            x = torch.cat([x, X_torch_num], dim=1)
+
+        # forward pass
         x = self.relu1(self.fc1(x))
+        x = self.dropout1(x)
         x = self.relu2(self.fc2(x))
+        x = self.dropout2(x)
         x = self.relu3(self.fc3(x))
+        x = self.dropout3(x)
         x = self.output(x).squeeze(-1)
 
         return x
@@ -179,9 +216,12 @@ class Neural(nn.Module):
         y = y * weights
 
         # convert to torch tensors
-        y_torch = torch.tensor(y.to_numpy().reshape(-1), dtype=torch.float32)
+        X_torch_num, X_torch_cat_idx = self._prepare_input_tensor(X)
+        y_torch = torch.tensor(
+            y.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
+        )
         weights_torch = torch.tensor(
-            weights.to_numpy().reshape(-1), dtype=torch.float32
+            weights.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
 
         # setup optimizer and a learning rate scheduler to reduce learning rate
@@ -207,12 +247,11 @@ class Neural(nn.Module):
             opt.zero_grad()
 
             # convert to torch tensors, prepare fresh
-            X_torch = self._prepare_input_tensor(X)
-            z_torch = self(X_torch)
+            z_torch = self(X_torch_num, X_torch_cat_idx)
 
             if self.task == "poisson":
                 logE = torch.log(weights_torch).clamp(min=-30.0)
-                loglam = (logE + z_torch).clamp(min=-30.0, max=30.0)
+                loglam = z_torch + logE
                 loss = F.poisson_nll_loss(
                     input=loglam,
                     target=y_torch,
@@ -249,7 +288,6 @@ class Neural(nn.Module):
     def predict(
         self,
         X: pd.DataFrame,
-        weights: pd.Series,
     ) -> pd.Series:
         """
         Predict the target.
@@ -258,8 +296,6 @@ class Neural(nn.Module):
         ----------
         X : pd.DataFrame
             The features
-        weights : pd.Series
-            The weights
 
         Returns
         -------
@@ -269,15 +305,14 @@ class Neural(nn.Module):
         """
         # make prediction
         self.eval()
-        X_torch = self._prepare_input_tensor(X)
+        X_torch_num, X_torch_cat_idx = self._prepare_input_tensor(X)
         with torch.no_grad():
-            z_torch = self(X_torch).cpu().numpy()
+            z_torch = self(X_torch_num, X_torch_cat_idx).cpu().numpy()
 
         # convert to rate
         if self.task == "poisson":
             mu = np.exp(z_torch)
-            # q = 1.0 - np.exp(-mu)
-            q = mu / (1 + mu)
+            q = mu
             predictions = pd.Series(np.clip(q, 1e-9, 1 - 1e-9))
 
         else:  # binomial
@@ -303,7 +338,6 @@ class Neural(nn.Module):
         """
         # set up embeddings
         total_embedding_dim = 0
-        self.label_encoders = {}
 
         for cat_feature in self.cat_cols:
             # create label encoder
@@ -331,9 +365,13 @@ class Neural(nn.Module):
 
         return total_embedding_dim
 
-    def _prepare_input_tensor(self, X: pd.DataFrame) -> torch.Tensor:
+    def _prepare_input_tensor(
+        self, X: pd.DataFrame
+    ) -> Tuple[torch.Tensor, [torch.Tensor]]:
         """
-        Prepare input tensor by combining numerical features and embeddings.
+        Prepare input tensor by combining numerical features and embeddings list.
+
+        This will be used as a lookup for the embeddings in the forward pass.
 
         Parameters
         ----------
@@ -342,34 +380,31 @@ class Neural(nn.Module):
 
         Returns
         -------
-        X_torch : torch.Tensor
-            Combined tensor ready for forward pass
+        X_torch_num : torch.Tensor
+            Numeric features
+        X_torch_cat_idx : list
+            Index of Categorical features
 
         """
-        features = []
+        X_torch_num = None
 
         # numeric features
         if self.num_cols:
-            numerical_data = X[self.num_cols].to_numpy()
-            features.append(torch.tensor(numerical_data, dtype=torch.float32))
-
-        # categorical features
-        for cat_col in self.cat_cols:
-            # label encode
-            cat_values = (
-                X[cat_col].map(self.label_encoders[cat_col]).fillna(0).astype("int64")
+            X_torch_num = torch.tensor(
+                X[self.num_cols].to_numpy(), dtype=torch.float32, device=self.device
             )
 
-            # convert to torch tensor
-            cat_data = torch.tensor(cat_values.to_numpy(), dtype=torch.long)
-            embedded = self.embeddings[cat_col](cat_data)
-            features.append(embedded)
+        # categorical features
+        X_torch_cat_idx = []
+        for cat_col in self.cat_cols:
+            # label encode
+            idx = (
+                X[cat_col]
+                .map(self.label_encoders[cat_col])
+                .fillna(0)
+                .astype("int64")
+                .to_numpy()
+            )
+            X_torch_cat_idx.append(torch.from_numpy(idx).to(self.device))
 
-        # concatenate
-        if features:
-            X_torch = torch.cat(features, dim=1)
-        else:
-            # if no features, return empty tensor
-            X_torch = torch.empty(len(X), 0, dtype=torch.float32)
-
-        return X_torch
+        return X_torch_num, X_torch_cat_idx

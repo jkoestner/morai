@@ -64,7 +64,7 @@ ai_adv = [
 ]
 
 r = [
-    "rpy2>=3.5.17",                     # only for mgcv (gam)
+    "rpy2==3.6.2",                     # only for mgcv (gam) and keeping it fixed to not change docker
 ]
 
 [project.scripts]
