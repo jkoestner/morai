@@ -1,10 +1,11 @@
 """Preprocessors used in the models."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import polars as pl
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 
 from morai.utils import custom_logger, helpers
@@ -557,3 +558,90 @@ def update_mapping(mapping: Dict[str, Any], key: str, values: Any) -> Dict[str, 
         raise ValueError("values must be a list, tuple, or dict")
     mapping[key]["values"] = values
     return mapping
+
+
+def time_based_split(
+    *arrays,
+    time_col: Optional[str] = None,
+    cutoff: Optional[int] = None,
+    **kwargs: dict,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series]:
+    """
+    Split X, y, weights by a calendar/time column and a cutoff value.
+
+    The test set will be greater than the cutoff.
+
+    Parameters
+    ----------
+    *arrays : array-like
+        The arrays to split
+    time_col : str, optional
+        The name of the time column
+    cutoff : int, optional
+        The cutoff value for the split
+    kwargs : dict
+        Additional arguments to pass to train_test_split
+
+
+    Returns
+    -------
+    splitting : list, length=2 * len(arrays)
+        List containing train-test split of inputs.
+
+    """
+    # validation
+    if (time_col and cutoff is None) or (cutoff and time_col is None):
+        raise ValueError(
+            "cutoff and time_col must both be specified if using time-based splitting"
+        )
+
+    if len(set(map(len, arrays))) != 1:
+        raise ValueError("All arrays must have the same length")
+
+    # mask for pre_cutoff
+    if cutoff:
+        if hasattr(arrays[0], "loc"):
+            pre_cutoff_mask = arrays[0][time_col] <= cutoff
+        else:
+            raise ValueError(
+                "When using time_col, the first array must be a pandas DataFrame "
+                "or Series"
+            )
+    else:
+        pre_cutoff_mask = np.ones(len(arrays[0]), dtype=bool)
+
+    # split into pre and post cutoff arrays
+    pre_cutoff_arrays = [
+        array.loc[pre_cutoff_mask] if hasattr(array, "loc") else array[pre_cutoff_mask]
+        for array in arrays
+    ]
+    post_test_arrays = [
+        array.loc[~pre_cutoff_mask]
+        if hasattr(array, "loc")
+        else array[~pre_cutoff_mask]
+        for array in arrays
+    ]
+
+    # split the subset arrays
+    pre_splits = train_test_split(
+        *pre_cutoff_arrays,
+        **kwargs,
+    )
+    train_arrays = pre_splits[::2]
+    pre_test_arrays = pre_splits[1::2]
+
+    # concatenate the pre_split_test array with the post_cutoff_array
+    test_arrays = []
+    for test_part, post_part in zip(pre_test_arrays, post_test_arrays, strict=True):
+        if hasattr(test_part, "loc"):
+            test_array = pd.concat([test_part, post_part])
+        else:
+            test_array = np.concatenate([test_part, post_part])
+        test_arrays.append(test_array)
+
+    # output the splits
+    splits = []
+    for train, test in zip(train_arrays, test_arrays, strict=True):
+        splits.extend([train, test])
+
+    return splits

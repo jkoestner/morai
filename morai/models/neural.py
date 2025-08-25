@@ -140,7 +140,7 @@ class Neural(nn.Module):
         if self.cat_cols:
             embedding_vectors = [
                 self.embeddings[col](idx)
-                for col, idx in zip(self.cat_cols, X_torch_cat_idx)
+                for col, idx in zip(self.cat_cols, X_torch_cat_idx, strict=True)
             ]
             x = torch.cat(embedding_vectors, dim=1)
         else:
@@ -397,14 +397,16 @@ class Neural(nn.Module):
         # categorical features
         X_torch_cat_idx = []
         for cat_col in self.cat_cols:
+            mapped_values = X[cat_col].map(self.label_encoders[cat_col])
+            # handle missing values by adding 0 to categories if needed
+            if (
+                isinstance(mapped_values.dtype, pd.CategoricalDtype)
+                and 0 not in mapped_values.cat.categories
+            ):
+                mapped_values = mapped_values.cat.add_categories([0])
+
             # label encode
-            idx = (
-                X[cat_col]
-                .map(self.label_encoders[cat_col])
-                .fillna(0)
-                .astype("int64")
-                .to_numpy()
-            )
+            idx = mapped_values.fillna(0).astype("int64").to_numpy()
             X_torch_cat_idx.append(torch.from_numpy(idx).to(self.device))
 
         return X_torch_num, X_torch_cat_idx
