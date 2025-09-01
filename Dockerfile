@@ -26,6 +26,9 @@ RUN apt-get update && \
         libbz2-dev \
         liblzma-dev \
         libblas-dev \
+        libdeflate-dev \
+        libtirpc-dev \
+        libicu-dev \
         zlib1g-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

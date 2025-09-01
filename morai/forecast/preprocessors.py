@@ -1,10 +1,11 @@
 """Preprocessors used in the models."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import polars as pl
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 
 from morai.utils import custom_logger, helpers
@@ -23,6 +24,8 @@ def preprocess_data(
 ) -> dict:
     """
     Preprocess the features.
+
+    This includes adding a constant, encoding, standardization, or cleaning.
 
     Parameters
     ----------
@@ -322,8 +325,9 @@ def bin_feature(feature: pd.Series, bins: int) -> pd.Series:
     bin_edges = np.linspace(range_min, range_max, bins + 1)
 
     # generate lables for the bins
+    max_width = len(str(int(max(bin_edges))))
     labels = [
-        f"{int(bin_edges[i]) + 1}-{int(bin_edges[i + 1])}"
+        f"{int(bin_edges[i] + 1):0{max_width}d}~{int(bin_edges[i + 1]):0{max_width}d}"
         for i in range(len(bin_edges) - 1)
     ]
 
@@ -362,10 +366,15 @@ def lazy_bin_feature(
         A new LazyFrame with the binned feature added or replaced.
 
     """
-    # check if feature exists
-    if feature not in lf.columns:
+    # check if feature exists and if it is numeric
+    schema = lf.collect_schema()
+    if feature not in schema:
         raise ValueError(
-            f"Feature '{feature}' not found in LazyFrame columns: {lf.columns}"
+            f"Feature '{feature}' not found in LazyFrame columns: {list(schema.keys())}"
+        )
+    if schema[feature] not in pl.datatypes.group.NUMERIC_DTYPES:
+        raise ValueError(
+            f"Feature: [{feature}] is not numeric (dtype is {schema[feature]})"
         )
 
     # get min/max
@@ -373,27 +382,21 @@ def lazy_bin_feature(
         [pl.col(feature).min().alias("min"), pl.col(feature).max().alias("max")]
     ).collect()
     range_min, range_max = stats["min"][0] - 1, stats["max"][0]
-
-    # create bin edges, labels, and unique values
     bin_edges = np.linspace(range_min, range_max, bins + 1)
+    breaks = bin_edges[1:-1]
+
+    # create labels
+    max_width = len(str(int(max(bin_edges))))
     labels = [
-        f"{int(bin_edges[i]) + 1}-{int(bin_edges[i + 1])}"
+        f"{int(bin_edges[i] + 1):0{max_width}d}~{int(bin_edges[i + 1]):0{max_width}d}"
         for i in range(len(bin_edges) - 1)
     ]
-    unique_vals = lf.select(pl.col(feature).unique()).collect()[feature].to_list()
 
     # create a new lzdf with binned values column
-    binned_vals = pd.cut(
-        pd.Series(unique_vals),
-        bins=bin_edges,
-        labels=labels,
-        include_lowest=True,
-        right=True,
-    )
-    bin_mapping = dict(zip(unique_vals, binned_vals.astype(str), strict=False))
     output_col = feature if inplace else f"{feature}_binned"
-
-    lf = lf.with_columns(pl.col(feature).replace(bin_mapping).alias(output_col))
+    lf = lf.with_columns(
+        pl.col(feature).cut(breaks=breaks, labels=labels).alias(output_col)
+    )
 
     return lf
 
@@ -402,7 +405,7 @@ def lazy_groupby(
     df: pl.LazyFrame,
     groupby_cols: Union[str, List[str]],
     agg_cols: Union[str, List[str]],
-    agg: str,
+    aggs: Union[str, List[str]],
 ) -> pl.LazyFrame:
     """
     Mimics a Pandas groupby call using Polars' lazy API.
@@ -415,9 +418,8 @@ def lazy_groupby(
         The column name(s) to group by.
     agg_cols : str or list
         The column name(s) on which to perform the aggregation.
-    agg : str
+    aggs : str or list
         The aggregation function to apply.
-        Supported values are 'sum', 'mean', and 'count'.
 
     Returns
     -------
@@ -425,31 +427,40 @@ def lazy_groupby(
         The grouped and aggregated LazyFrame.
 
     """
-    # check if columns are list or string and build aggregation expressions
-    # defaults to sum aggregation
-    if isinstance(agg_cols, list):
-        agg_expr = []
-        for col in agg_cols:
-            if agg == "sum":
-                agg_expr.append(pl.sum(col).alias(col))
-            elif agg == "mean":
-                agg_expr.append(pl.mean(col).alias(col))
-            elif agg == "count":
-                agg_expr.append(pl.count(col).alias(col))
-            else:
-                agg_expr.append(pl.sum(col).alias(col))
-    else:  # noqa: PLR5501
-        if agg == "sum":
-            agg_expr = pl.sum(agg_cols).alias(agg_cols)
-        elif agg == "mean":
-            agg_expr = pl.mean(agg_cols).alias(agg_cols)
-        elif agg == "count":
-            agg_expr = pl.count(agg_cols).alias(agg_cols)
+    # normalize
+    if isinstance(groupby_cols, str):
+        groupby_cols = [groupby_cols]
+    if isinstance(agg_cols, str):
+        agg_cols = [agg_cols]
+    if isinstance(aggs, str):
+        aggs = [aggs]
+
+    # align lists
+    if len(aggs) == 1 and len(agg_cols) > 1:
+        aggs = [aggs[0]] * len(agg_cols)
+
+    # mapping
+    agg_func_map = {
+        "sum": pl.sum,
+        "mean": pl.mean,
+        "count": pl.count,
+        "min": pl.min,
+        "max": pl.max,
+        "median": pl.median,
+        "n_unique": pl.n_unique,
+    }
+
+    # build expressions
+    agg_exprs = []
+    for i, agg_col in enumerate(agg_cols):
+        func = agg_func_map.get(aggs[i])
+        if func:
+            agg_exprs.append(func(agg_col).alias(agg_col))
         else:
-            agg_expr = pl.sum(agg_cols).alias(agg_cols)
+            raise ValueError(f"Unsupported aggregation function: '{aggs[i]}'")
 
     # groupby and aggregate
-    grouped_df = df.group_by(groupby_cols).agg(agg_expr)
+    grouped_df = df.group_by(groupby_cols).agg(agg_exprs)
 
     return grouped_df
 
@@ -547,3 +558,90 @@ def update_mapping(mapping: Dict[str, Any], key: str, values: Any) -> Dict[str, 
         raise ValueError("values must be a list, tuple, or dict")
     mapping[key]["values"] = values
     return mapping
+
+
+def time_based_split(
+    *arrays,
+    time_col: Optional[str] = None,
+    cutoff: Optional[int] = None,
+    **kwargs: dict,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series]:
+    """
+    Split X, y, weights by a calendar/time column and a cutoff value.
+
+    The test set will be greater than the cutoff.
+
+    Parameters
+    ----------
+    *arrays : array-like
+        The arrays to split
+    time_col : str, optional
+        The name of the time column
+    cutoff : int, optional
+        The cutoff value for the split
+    kwargs : dict
+        Additional arguments to pass to train_test_split
+
+
+    Returns
+    -------
+    splitting : list, length=2 * len(arrays)
+        List containing train-test split of inputs.
+
+    """
+    # validation
+    if (time_col and cutoff is None) or (cutoff and time_col is None):
+        raise ValueError(
+            "cutoff and time_col must both be specified if using time-based splitting"
+        )
+
+    if len(set(map(len, arrays))) != 1:
+        raise ValueError("All arrays must have the same length")
+
+    # mask for pre_cutoff
+    if cutoff:
+        if hasattr(arrays[0], "loc"):
+            pre_cutoff_mask = arrays[0][time_col] <= cutoff
+        else:
+            raise ValueError(
+                "When using time_col, the first array must be a pandas DataFrame "
+                "or Series"
+            )
+    else:
+        pre_cutoff_mask = np.ones(len(arrays[0]), dtype=bool)
+
+    # split into pre and post cutoff arrays
+    pre_cutoff_arrays = [
+        array.loc[pre_cutoff_mask] if hasattr(array, "loc") else array[pre_cutoff_mask]
+        for array in arrays
+    ]
+    post_test_arrays = [
+        array.loc[~pre_cutoff_mask]
+        if hasattr(array, "loc")
+        else array[~pre_cutoff_mask]
+        for array in arrays
+    ]
+
+    # split the subset arrays
+    pre_splits = train_test_split(
+        *pre_cutoff_arrays,
+        **kwargs,
+    )
+    train_arrays = pre_splits[::2]
+    pre_test_arrays = pre_splits[1::2]
+
+    # concatenate the pre_split_test array with the post_cutoff_array
+    test_arrays = []
+    for test_part, post_part in zip(pre_test_arrays, post_test_arrays, strict=True):
+        if hasattr(test_part, "loc"):
+            test_array = pd.concat([test_part, post_part])
+        else:
+            test_array = np.concatenate([test_part, post_part])
+        test_arrays.append(test_array)
+
+    # output the splits
+    splits = []
+    for train, test in zip(train_arrays, test_arrays, strict=True):
+        splits.extend([train, test])
+
+    return splits

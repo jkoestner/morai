@@ -137,8 +137,24 @@ def test_build_table_workbook():
     npt.assert_allclose(test_mult_table["multiple"], mult_table_vals, atol=1e-3)
 
 
-def test_map_rates():
-    """Tests the mapping of rates."""
+def test_calc_derived_table():
+    """Checks the derived table calculation."""
+    mt = tables.MortTable(rate="graded_glm", rate_filename="rate_map_test.yaml")
+    test_derived_table = mt.calc_derived_table_from_mults(
+        selected_dict={"smoker_status": ["S"]}
+    )
+    rate_table = mt.rate_table
+
+    npt.assert_allclose(
+        test_derived_table["vals"],
+        rate_table["vals"] * 1.22222,
+        atol=1e-3,
+        err_msg="The derived table should be the rate table times the multiple (1.22).",
+    )
+
+
+def test_map_rates_simple():
+    """Tests the mapping of rates with a simple rate_table."""
     test_experience_df = tables.map_rates(
         df=experience_df,
         rate="simple_glm",
@@ -147,4 +163,107 @@ def test_map_rates():
 
     npt.assert_allclose(
         test_experience_df["rate"], test_experience_df["qx_simple_glm"], atol=1e-3
+    )
+
+
+def test_map_rates_simple_mi_year():
+    """Tests the mapping of rates with a simple rate_table with mi by year."""
+    test_experience_df = tables.map_rates(
+        df=experience_df,
+        rate="simple_glm_mi_year",
+        rate_filename="rate_map_test.yaml",
+    )
+
+    npt.assert_allclose(
+        test_experience_df["rate"] * 0.99**1,
+        test_experience_df["qx_simple_glm_mi_year"],
+        atol=1e-3,
+        err_msg="The rates should have 1 years of 1% mi applied.",
+    )
+
+
+def test_map_rates_simple_mi_col():
+    """Tests the mapping of rates with a simple rate_table with mi by column."""
+    test_experience_df = tables.map_rates(
+        df=experience_df,
+        rate="simple_glm_mi_col",
+        rate_filename="rate_map_test.yaml",
+    )
+
+    npt.assert_allclose(
+        test_experience_df["rate"] * 0.99**2,
+        test_experience_df["qx_simple_glm_mi_col"],
+        atol=1e-3,
+        err_msg="The rates should have 2 years of 1% mi applied.",
+    )
+
+
+def test_map_rates_grade():
+    """Tests the mapping of rates with a graded rate_table."""
+    test_experience_df = tables.map_rates(
+        df=experience_df,
+        rate="graded_glm",
+        rate_filename="rate_map_test.yaml",
+    )
+
+    npt.assert_allclose(
+        test_experience_df.iloc[1]["qx_graded_glm"],
+        0.088,
+        atol=1e-3,
+        err_msg="Female Smoker should not be graded and still have multiple",
+    )
+    npt.assert_allclose(
+        test_experience_df.iloc[5]["qx_graded_glm"],
+        0.072,
+        atol=1e-3,
+        err_msg="Female Smoker should be graded and not have multiple",
+    )
+
+
+def test_formula_grade():
+    """Tests the formula grading evaluation."""
+    experience_df["test_multiple"] = 1
+
+    # value multiple
+    formula = "multiple"
+    value_mult = tables._formula_grade(
+        df=experience_df,
+        multiple=1.25,
+        formula=formula,
+    )
+    npt.assert_equal(
+        value_mult,
+        1.25,
+        err_msg="The multiple should be 1.25.",
+    )
+
+    # simple multiple
+    formula = "multiple * 1.25"
+    simple_mult = tables._formula_grade(
+        df=experience_df,
+        multiple="test_multiple",
+        formula=formula,
+    )
+    npt.assert_equal(
+        simple_mult.iloc[0],
+        1.25,
+        err_msg="The multiple should be simple multiple times 1.25.",
+    )
+
+    # graded multiple
+    formula = "multiple * 1.25 * ['smoker_status_encode']"
+    graded_mult = tables._formula_grade(
+        df=experience_df,
+        multiple="test_multiple",
+        formula=formula,
+    )
+    npt.assert_equal(
+        graded_mult.iloc[1],
+        1.25,
+        err_msg="The multiple should be 1.25 when smoker_status_encode is 1.",
+    )
+    npt.assert_equal(
+        graded_mult.iloc[0],
+        0,
+        err_msg="The multiple should be 0 when smoker_status_encode is 0.",
     )

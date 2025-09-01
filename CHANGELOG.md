@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/jkoestner/morai/tree/v0.3.0)
+
+[Full Changelog](https://github.com/jkoestner/morai/compare/v0.2.0...v0.3.0)
+
+**Enhancements**
+- add neural network model
+- add relative risk charts
+- add population excess death trends for CDC
+
+**Documentation**
+- update notebooks
+- created tests (relative risk, normalize, polars, 
+  metrics, bin features, groupby features, tables)
+
 ## [0.2.0](https://github.com/jkoestner/morai/tree/v0.2.0)
 
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.1.0...v0.2.0)

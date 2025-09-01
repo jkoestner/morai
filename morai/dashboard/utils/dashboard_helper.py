@@ -13,6 +13,7 @@ import polars as pl
 import yaml
 from dash import dcc, html
 
+from morai.experience import tables
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
@@ -79,6 +80,7 @@ def filter_data(
     df: Union[pd.DataFrame, pl.LazyFrame],
     callback_context: list[dict],
     num_to_str_count: int = num_to_str_count,
+    mult_table: Optional[pd.DataFrame] = None,
 ) -> Union[pd.DataFrame, pl.LazyFrame]:
     """
     Filter data based on the number of unique values.
@@ -91,6 +93,8 @@ def filter_data(
         List of callback context.
     num_to_str_count : int
         Number of unique values to convert to string.
+    mult_table : pd.DataFrame
+        Multiplier dataframe to adjust a rate_table.
 
     Returns
     -------
@@ -134,6 +138,20 @@ def filter_data(
     # convert back to pandas
     if not is_lazy:
         filtered_df = filtered_df.collect().to_pandas()
+
+    # apply the multiplier table if exists
+    # this is for a rate_table
+    if mult_table is not None and not mult_table.empty:
+        mult_table_cols = mult_table["category"].tolist()
+        selected_dict = {}
+        for mult in mult_table_cols:
+            mult_values = _inputs_parse_id(callback_context, mult)
+            if mult_values:
+                selected_dict[mult] = [str(mult_values)]
+        mt = tables.MortTable()
+        filtered_df = mt.calc_derived_table_from_mults(
+            selected_dict=selected_dict, rate_table=filtered_df, mult_table=mult_table
+        )
 
     return filtered_df
 
@@ -286,7 +304,7 @@ def generate_filters(
         filters.append(filter)
 
     # create radio options for mult_table
-    if mult_table is not None:
+    if mult_table is not None and not mult_table.empty:
         categories = mult_table["category"].unique()
         for category in categories:
             mult_table_options = mult_table[mult_table["category"] == category][
@@ -600,6 +618,43 @@ def generate_selectors(
             else {"display": "none"},
         ),
         html.Div(
+            id={"type": prefix_group, "index": "relative"},
+            children=[
+                html.Div(
+                    [
+                        html.Label("X-Axis/Relative Feature"),
+                        html.Span(
+                            "ℹ",  # Info icon
+                            id="relative-info",
+                            style={
+                                "marginLeft": "8px",
+                                "cursor": "help",
+                                "color": "#007bff",
+                                "fontWeight": "bold",
+                                "fontSize": "16px",
+                                "position": "relative",
+                            },
+                            title=(
+                                "Relative feature is the feature that'd be "
+                                "compared to while the relative columns would "
+                                "be different segments if selected."
+                            ),
+                        ),
+                    ],
+                    style={"display": "flex", "alignItems": "center"},
+                ),
+                dcc.Dropdown(
+                    id={"type": prefix_selector, "index": "relative_selector"},
+                    options=config_dataset["columns"]["features"],
+                    value=None,
+                    placeholder="Select Relative Feature",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("relative") == True
+            else {"display": "none"},
+        ),
+        html.Div(
             id={"type": prefix_group, "index": "y_axis"},
             children=[
                 html.Label("Y-Axis"),
@@ -612,7 +667,7 @@ def generate_selectors(
                 ),
             ],
             style={"display": "block"}
-            if selector_dict.get("color") == True
+            if selector_dict.get("y_axis") == True
             else {"display": "none"},
         ),
         html.Div(
@@ -631,6 +686,21 @@ def generate_selectors(
             else {"display": "none"},
         ),
         html.Div(
+            id={"type": prefix_group, "index": "relative_cols"},
+            children=[
+                html.Label("Color/Relative Columns"),
+                dcc.Dropdown(
+                    id={"type": prefix_selector, "index": "relative_cols_selector"},
+                    options=config_dataset["columns"]["features"],
+                    value=None,
+                    placeholder="Select Relative Columns",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("relative_cols") == True
+            else {"display": "none"},
+        ),
+        html.Div(
             id={"type": prefix_group, "index": "chart_type"},
             children=[
                 html.Label("Chart Type"),
@@ -642,7 +712,7 @@ def generate_selectors(
                 ),
             ],
             style={"display": "block"}
-            if selector_dict.get("color") == True
+            if selector_dict.get("chart_type") == True
             else {"display": "none"},
         ),
         html.Div(
@@ -726,12 +796,34 @@ def generate_selectors(
         html.Div(
             id={"type": prefix_group, "index": "normalize"},
             children=[
-                html.Label("Normalize"),
+                html.Div(
+                    [
+                        html.Label("Normalize"),
+                        html.Span(
+                            "ℹ",  # Info icon
+                            id="normalize-info",
+                            style={
+                                "marginLeft": "8px",
+                                "cursor": "help",
+                                "color": "#007bff",
+                                "fontWeight": "bold",
+                                "fontSize": "16px",
+                                "position": "relative",
+                            },
+                            title=(
+                                "Normalization adjusts values relative to the "
+                                "selected features. Currently only supported when "
+                                "'ratio' and 'risk' are selected for y-axis."
+                            ),
+                        ),
+                    ],
+                    style={"display": "flex", "alignItems": "center"},
+                ),
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "normalize_selector"},
                     options=config_dataset["columns"]["features"],
                     value=None,
-                    clearable=False,
+                    clearable=True,
                     multi=True,
                     placeholder="Normalize By",
                 ),
@@ -747,11 +839,25 @@ def generate_selectors(
                 dbc.Checkbox(
                     id={"type": prefix_selector, "index": "add_line_selector"},
                     value=False,
-                    label="select on/off",
+                    label="show line",
                 ),
             ],
             style={"display": "block"}
             if selector_dict.get("add_line") == True
+            else {"display": "none"},
+        ),
+        html.Div(
+            id={"type": prefix_group, "index": "y_log"},
+            children=[
+                html.Label("Y Log"),
+                dbc.Checkbox(
+                    id={"type": prefix_selector, "index": "y_log_selector"},
+                    value=False,
+                    label="show log scale",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("y_log") == True
             else {"display": "none"},
         ),
         html.Div(
@@ -832,6 +938,48 @@ def generate_selectors(
             ],
             style={"display": "block"}
             if selector_dict.get("multi_denominator") == True
+            else {"display": "none"},
+        ),
+        html.Div(
+            id={"type": prefix_group, "index": "relative_to"},
+            children=[
+                html.Label("Relative To"),
+                dcc.Dropdown(
+                    id={"type": prefix_selector, "index": "relative_to_selector"},
+                    options=["aggregate", "subset", "reference"],
+                    value="reference",
+                    placeholder="Select Relative To",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("relative_to") == True
+            else {"display": "none"},
+        ),
+        html.Div(
+            id={"type": prefix_group, "index": "subset_dict"},
+            children=[
+                html.Label("Subset Dict"),
+                dcc.Textarea(
+                    id={"type": prefix_selector, "index": "subset_dict_selector"},
+                    placeholder='e.g. {"lob": ["Term", "UL"], "year": [2020, 2021]}',
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("subset_dict") == True
+            else {"display": "none"},
+        ),
+        html.Div(
+            id={"type": prefix_group, "index": "flip_x_color"},
+            children=[
+                html.Label("Flip X Color"),
+                dbc.Checkbox(
+                    id={"type": prefix_selector, "index": "flip_x_color_selector"},
+                    value=False,
+                    label="flip x to color",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("flip_x_color") == True
             else {"display": "none"},
         ),
     ]

@@ -263,8 +263,18 @@ def check_merge(func: Callable) -> Callable:
     """
     Check the merge for a few common issues.
 
+    This function will provide warning if any of the issues are found. Currently
+    only works for "left" join.
+
+    Issues checked:
       - check if the merge column already exists.
-      - check if there is a one-to-many or many-to-many relationship.
+      - check if there is an x-to-many relationship.
+
+    Requires the following arguments
+      - left : pd.DataFrame
+      - right : pd.DataFrame
+      - left_on, right_on, or on : str
+      - how : str
 
     Parameters
     ----------
@@ -283,7 +293,11 @@ def check_merge(func: Callable) -> Callable:
         right_df = kwargs.get("right", None)
         left_on = kwargs.get("left_on", None)
         right_on = kwargs.get("right_on", None)
+        on = kwargs.get("on", None)
         how = kwargs.get("how", None)
+        if on is not None:
+            left_on = on
+            right_on = on
         if (
             left_df is None
             or right_df is None
@@ -294,36 +308,51 @@ def check_merge(func: Callable) -> Callable:
             raise ValueError(
                 "The left, right, left_on, right_on, and how arguments are required"
             )
+        if isinstance(left_on, str):
+            left_on = [left_on]
+        if isinstance(right_on, str):
+            right_on = [right_on]
         right_columns = set(right_df.columns)
-        left_columns = set(left_df.columns) - {left_on}
+        left_columns = set(left_df.columns) - set(left_on)
         common_columns = right_columns.intersection(left_columns)
-        if common_columns:
-            logger.warning(
-                f"There are common columns between the DataFrames: {common_columns}"
-            )
-            return left_df
 
         # check if this is "left" merge
         if how != "left":
             logger.warning("This check only works with a `left` merge")
             return left_df
 
+        # check if there are common columns, which would add column with suffix
+        if common_columns:
+            logger.warning(
+                f"There are common columns between the DataFrames: {common_columns}"
+            )
+            return left_df
+
         # check if the right dataframe has multiple values for the right index
-        right_unique = right_df[right_on].nunique()
-        if right_unique != right_df.shape[0]:
+        # if true, this is a x-to-many relationship
+        if right_df.duplicated(subset=right_on).any():
             logger.warning(
                 "The right DataFrame has multiple values for the right index"
             )
             return left_df
 
         # check if the left_on values are in the right_on values
-        missing_values = set(left_df[left_on].unique()) - set(
-            right_df[right_on].unique()
-        )
+        left_values = {
+            tuple(x)
+            for x in left_df[left_on]
+            .drop_duplicates()
+            .itertuples(index=False, name=None)
+        }
+        right_values = {
+            tuple(x)
+            for x in right_df[right_on]
+            .drop_duplicates()
+            .itertuples(index=False, name=None)
+        }
+        missing_values = left_values - right_values
         if missing_values:
             logger.warning(
-                f"Not all left_on values are not in the "
-                f"right_on values: {missing_values}"
+                f"Not all left_on values are in the right_on values: {missing_values}"
             )
             return left_df
 
@@ -389,3 +418,29 @@ def _convert_object_to_category(df: pd.DataFrame, column: str) -> pd.DataFrame:
     if df[column].dtype == "object":
         df[column] = df[column].astype("category")
     return df
+
+
+def _to_list(val: Union[str, list, dict, None]) -> list:
+    """
+    Convert a string, dict, or None to a list.
+
+    Parameters
+    ----------
+    val : str, list, dict, or None
+        The value to convert.
+
+    Returns
+    -------
+    _l
+        The value as a list.
+
+    """
+    if val is None:
+        _l = []
+    if isinstance(val, str):
+        _l = [val]
+    if isinstance(val, dict):
+        _l = list(val.keys())
+    if isinstance(val, list):
+        _l = val
+    return _l

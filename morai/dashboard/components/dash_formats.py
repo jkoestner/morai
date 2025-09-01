@@ -25,7 +25,7 @@ def get_column_defs(table):
         # specific case for columns
         if any(
             substring in col.lower()
-            for substring in ["smape", "vals", "table_1", "table_2"]
+            for substring in ["smape", "vals", "table_1", "table_2", "qx"]
         ):
             column_defs.append(
                 {

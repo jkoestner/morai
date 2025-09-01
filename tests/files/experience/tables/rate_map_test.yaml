@@ -9,9 +9,55 @@ simple_glm:
   rate: simple_glm
   description: simple_glm output
   keys:
-    - smoker_status
+    # rate
     - sex
+    # multiple
+    - smoker_status
   type:
     workbook: 
       filename: simple_glm.xlsx
       mult_table: True
+graded_glm:
+  rate: graded_glm
+  description: graded glm output
+  keys:
+    # rate
+    - sex
+    # multiple
+    - smoker_status
+  type:
+    workbook: 
+      filename: graded_glm.xlsx
+      mult_table: True
+simple_glm_mi_year:
+  rate: simple_glm_mi_year
+  description: simple_glm output with mi
+  keys:
+    # rate & mi
+    - sex
+    # multiple
+    - smoker_status
+  type:
+    workbook: 
+      filename: simple_glm.xlsx
+      mult_table: True
+  mi_table:
+    mi_filename: simple_mi.csv
+simple_glm_mi_col:
+  rate: simple_glm_mi_col
+  description: simple_glm output with mi
+  keys:
+    # rate & mi
+    - sex
+    # multiple
+    - smoker_status
+    # mi
+    - year
+  type:
+    workbook: 
+      filename: simple_glm.xlsx
+      mult_table: True
+  mi_table:
+    mi_filename: simple_mi.csv
+    mi_year_col: year
+    mi_start_year: 2016

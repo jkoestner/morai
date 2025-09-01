@@ -17,7 +17,9 @@ reference.
 Link: https://github.com/alipphardt/cdc-wonder-api
 """
 
+import re
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from typing import Optional
 
 import pandas as pd
@@ -579,6 +581,19 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
         rows.append(cells)
 
     df = pd.DataFrame(rows, columns=columns)
+
+    # add data_through column
+    dataset = root.find(".//dataset")
+    data_through = None
+    if dataset is not None and "vintage" in dataset.attrib:
+        vintage = dataset.attrib["vintage"]
+        match = re.search(r"([A-Za-z]+ \d{1,2}, \d{4})", vintage)
+        if match:
+            try:
+                data_through = datetime.strptime(match.group(1), "%B %d, %Y")
+            except Exception:
+                data_through = match.group(1)
+    df["data_through"] = data_through
 
     return df
 

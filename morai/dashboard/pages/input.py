@@ -19,6 +19,8 @@ from morai.dashboard.utils import dashboard_helper as dh
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
+# `enable_string_cache` helps with categorical type values
+pl.enable_string_cache()
 
 dash.register_page(__name__, path="/", title="morai - Input", order=0)
 

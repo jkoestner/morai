@@ -24,6 +24,7 @@ from morai.dashboard.components import dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters
 from morai.integrations import cdc
+from morai.models import core
 from morai.utils import custom_logger, helpers, sql
 
 logger = custom_logger.setup_logging(__name__)
@@ -36,8 +37,9 @@ thread_lock = threading.Lock()
 
 # initialize variables
 # provides when to use data from 18 dataset as there is overlap in 99 dataset
+# the 99 dataset ends in 2020 and the 18 dataset starts in 2018
 NEW_DATASET_START_YEAR = 2021
-# training for trend chart
+# training for cod trend and population trend
 TRAIN_START_YEAR = 2015
 TRAIN_END_YEAR = 2019
 # grouping for cod analysis
@@ -217,7 +219,18 @@ def layout():
                             ),
                             dbc.Row(
                                 html.P(
-                                    "The chart shows the amount of deaths by COD over the past few years. ",
+                                    [
+                                        "The chart shows the amount of deaths by COD over the past few years. ",
+                                        html.Br(),
+                                        "The chart also includes an adjustment for the current year by multiplying "
+                                        "the deaths by 365/",
+                                        html.Span(
+                                            "days elapsed",
+                                            id="cod-days-elapsed-text",
+                                            className="text-muted small",
+                                        ),
+                                        ".",
+                                    ]
                                 ),
                             ),
                             dbc.Row(
@@ -267,8 +280,13 @@ def layout():
                             dbc.Row(
                                 html.P(
                                     [
-                                        "Tree map that is a breakout of deaths from the most recent "
-                                        "year in the data",
+                                        "Tree map that is a breakout of deaths from ",
+                                        html.Span(
+                                            "the most recent year",
+                                            id="cod-tree-year-text",
+                                            className="text-muted small",
+                                        ),
+                                        ".",
                                     ]
                                 ),
                             ),
@@ -288,7 +306,13 @@ def layout():
                                 html.P(
                                     [
                                         "These tables show the top causes of death by age "
-                                        "group for the most recent year in the data.",
+                                        "group for ",
+                                        html.Span(
+                                            "the most recent year",
+                                            id="cod-table-year-text",
+                                            className="text-muted small",
+                                        ),
+                                        ".",
                                     ]
                                 ),
                             ),
@@ -338,7 +362,7 @@ def layout():
                             "Cause of Death Analysis",
                         ],
                     ),
-                    # COD Trends Section
+                    # COD Excess Section
                     dbc.AccordionItem(
                         [
                             dbc.Row(
@@ -354,7 +378,20 @@ def layout():
                                     ),
                                     dbc.Col(
                                         html.P(
-                                            "The trends charts is based on a linear regression of 2015-2019 cause of deaths.",
+                                            [
+                                                f"The trends charts is based on a linear regression of {TRAIN_START_YEAR} - {TRAIN_END_YEAR} cause of deaths.",
+                                                html.Br(),
+                                                "The chart also includes an adjustment for the current year by multiplying "
+                                                "the deaths by 365/",
+                                                html.Span(
+                                                    "days elapsed",
+                                                    id="cod-trend-days-elapsed-text",
+                                                    className="text-muted small",
+                                                ),
+                                                html.Br(),
+                                                "Note: The trends should be caveated that they are based on a linear regression, "
+                                                "and there may be population differences that aren't being considered.",
+                                            ]
                                         ),
                                         width=11,
                                     ),
@@ -402,7 +439,83 @@ def layout():
                         ],
                         title=[
                             html.I(className="fas fa-chart-line me-2"),
-                            "Mortality Trends",
+                            "Cause of Death - Excess Trends",
+                        ],
+                    ),
+                    # Population Excess Section
+                    dbc.AccordionItem(
+                        [
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        dbc.Button(
+                                            html.I(className="fas fa-sync-alt"),
+                                            id="button-pop-trends",
+                                            color="primary",
+                                            className="shadow-sm",
+                                        ),
+                                        width=1,
+                                    ),
+                                    dbc.Col(
+                                        html.P(
+                                            [
+                                                f"The trends charts is based on a linear regression of {TRAIN_START_YEAR} - {TRAIN_END_YEAR} population "
+                                                f"using a LeeCarter model.",
+                                                html.Br(),
+                                                "The chart also includes an adjustment for the current year by multiplying "
+                                                "the deaths by 365/",
+                                                html.Span(
+                                                    "days elapsed",
+                                                    id="pop-trend-days-elapsed-text",
+                                                    className="text-muted small",
+                                                ),
+                                                html.Br(),
+                                                f"Note: There is a 2 year lag in updating population statistics. To get a trend of excess deaths that "
+                                                f"reflects updated population a trend from {TRAIN_START_YEAR} - {TRAIN_END_YEAR} was used and was "
+                                                f"extrapolated from the beginning of the 2 year lag to the current year.",
+                                            ]
+                                        ),
+                                        width=11,
+                                    ),
+                                ],
+                                className="mb-3",
+                            ),
+                            dbc.Row(
+                                [
+                                    dbc.Tabs(
+                                        [
+                                            dbc.Tab(
+                                                label="Excess-Chart",
+                                                tab_id="tab-pop-trends-chart",
+                                                label_class_name="fw-bold",
+                                                active_label_class_name="text-primary",
+                                            ),
+                                            dbc.Tab(
+                                                label="Excess-Table",
+                                                tab_id="tab-pop-trends-table",
+                                                label_class_name="fw-bold",
+                                                active_label_class_name="text-primary",
+                                            ),
+                                        ],
+                                        id="tabs-pop-trends",
+                                        active_tab="tab-pop-trends-chart",
+                                        className="mb-3",
+                                    ),
+                                    dcc.Loading(
+                                        id="loading-cdc-pop-trends",
+                                        type="default",
+                                        color="#007bff",
+                                        children=html.Div(
+                                            id="cdc-pop-trends",
+                                            className="bg-white rounded-3 shadow-sm p-3",
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ],
+                        title=[
+                            html.I(className="fas fa-chart-line me-2"),
+                            "Population - Excess Trends",
                         ],
                     ),
                     # Monthly Analysis Section
@@ -626,6 +739,9 @@ def update_cdc_data_async(n_clicks):
         Output("cdc-top-cause-deaths", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
+        Output("cod-days-elapsed-text", "children"),
+        Output("cod-tree-year-text", "children"),
+        Output("cod-table-year-text", "children"),
     ],
     Input("button-cod", "n_clicks"),
     [
@@ -663,6 +779,15 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         col=CATEGORY_COL,
         on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
+
+    # normalize the partial deaths
+    cod_all["deaths"] = cod_all["deaths"].astype(float)
+    data_through = pd.Timestamp(mcd18_cod["data_through"].max())
+    start_of_year = pd.Timestamp(f"{data_through.year}-01-01")
+    days_elapsed = (data_through - start_of_year).days + 1
+    factor_parial_year = 365 / days_elapsed
+    mask = cod_all["year"] == data_through.year
+    cod_all.loc[mask, "deaths"] *= factor_parial_year
     cod_all = dh.filter_data(df=cod_all, callback_context=states_info)
 
     # create totals column
@@ -769,6 +894,9 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         ),
         False,
         "",
+        days_elapsed,
+        most_recent_year,
+        most_recent_year,
     )
 
 
@@ -777,6 +905,7 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         Output("cdc-cod-trends", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
+        Output("cod-trend-days-elapsed-text", "children"),
     ],
     [
         Input("button-cod-trends", "n_clicks"),
@@ -809,6 +938,15 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         col=CATEGORY_COL,
         on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
+
+    # normalize the partial deaths
+    cod_all["deaths"] = cod_all["deaths"].astype(float)
+    data_through = pd.Timestamp(mcd18_cod["data_through"].max())
+    start_of_year = pd.Timestamp(f"{data_through.year}-01-01")
+    days_elapsed = (data_through - start_of_year).days + 1
+    factor_parial_year = 365 / days_elapsed
+    mask = cod_all["year"] == data_through.year
+    cod_all.loc[mask, "deaths"] *= factor_parial_year
 
     # create totals column
     totals = cod_all.groupby("year").sum(numeric_only=True).reset_index()
@@ -888,7 +1026,171 @@ def display_cdc_cod_trends(n_clicks, active_tab):
             columnDefs=columnDefs,
         )
 
-    return tab_content, False, ""
+    return tab_content, False, "", days_elapsed
+
+
+@callback(
+    [
+        Output("cdc-pop-trends", "children"),
+        Output("cdc-toast", "is_open", allow_duplicate=True),
+        Output("cdc-toast", "children", allow_duplicate=True),
+        Output("pop-trend-days-elapsed-text", "children"),
+    ],
+    [
+        Input("button-pop-trends", "n_clicks"),
+        Input("tabs-pop-trends", "active_tab"),
+    ],
+)
+def display_cdc_pop_trends(n_clicks, active_tab):
+    """Create cdc pop trends."""
+    if n_clicks is None:
+        raise dash.exceptions.PreventUpdate
+
+    # initialize
+    db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+    tables = sql.get_tables(db_filepath=db_filepath)
+
+    # check if table does not exist in database
+    if "mcd99_mi" not in tables or "mcd18_mi" not in tables:
+        logger.error("Table `mcd99_mi` or `mcd18_mi` does not exist in database.")
+        return dash.no_update, True, "Table does not exist in database"
+
+    # get the data
+    mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
+    mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
+
+    # filter and concat
+    mcd18_mi = mcd18_mi[mcd18_mi["year"] >= NEW_DATASET_START_YEAR]
+    excess = pd.concat([mcd99_mi, mcd18_mi], ignore_index=True)
+    excess = cdc.map_reference(
+        df=excess,
+        col="value",
+        on_dict={"age_groups": "key"},
+        sheet_name="mapping",
+        category="bin_age_int",
+    )
+    excess = excess.rename(columns={"value": "mapped_age"})
+
+    # normalize the partial deaths
+    excess["deaths"] = excess["deaths"].astype(float)
+    data_through = pd.Timestamp(mcd18_mi["data_through"].max())
+    start_of_year = pd.Timestamp(f"{data_through.year}-01-01")
+    days_elapsed = (data_through - start_of_year).days + 1
+    factor_parial_year = 365 / days_elapsed
+    mask = excess["year"] == data_through.year
+    excess.loc[mask, "deaths"] *= factor_parial_year
+
+    # group by year and mapped age
+    excess_grouped = (
+        excess.groupby(["year", "mapped_age"], observed=True)
+        .sum(numeric_only=True)
+        .reset_index()
+    )
+    excess_grouped = excess_grouped[(excess_grouped["year"] >= TRAIN_START_YEAR)]
+    max_year = excess_grouped["year"].max()
+    base_year = max_year - 2
+
+    # update population for provision years using trend
+    train_df = excess_grouped[
+        (excess_grouped["year"] >= TRAIN_START_YEAR)
+        & (excess_grouped["year"] <= TRAIN_END_YEAR)
+    ]
+    train_df = (
+        train_df.groupby(["year", "mapped_age"])["population"].sum().reset_index()
+    )
+
+    # create the linear age models
+    models = {}
+    for age in train_df["mapped_age"].unique():
+        age_subset = train_df[train_df["mapped_age"] == age]
+        X = (age_subset["year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
+        y = age_subset["population"].values
+        model = LinearRegression().fit(X, y)
+        models[age] = {
+            "model": model,
+            "coef": model.coef_[0],
+            "intercept": model.intercept_,
+        }
+    bases = (
+        excess_grouped[excess_grouped["year"] == base_year]
+        .set_index("mapped_age")["population"]
+        .to_dict()
+    )
+    coefs = {age: m["coef"] / m["intercept"] for age, m in models.items()}
+
+    # update population for provision years
+    for year in [base_year + 1, base_year + 2]:
+        mask = excess_grouped["year"] == year
+        for age in excess_grouped.loc[mask, "mapped_age"].unique():
+            coef = coefs.get(age, 0)
+            base = bases.get(age, 0)
+            idx = (excess_grouped["year"] == year) & (
+                excess_grouped["mapped_age"] == age
+            )
+            excess_grouped.loc[idx, "population"] = (1 + coef) ** (
+                year - base_year
+            ) * base
+
+    # calculate qx_raw
+    excess_grouped["qx_raw"] = excess_grouped["deaths"] / excess_grouped["population"]
+    forecast_years = max_year - TRAIN_END_YEAR
+
+    # model using Lee-Carter
+    train_df = excess_grouped[
+        (excess_grouped["year"] >= TRAIN_START_YEAR)
+        & (excess_grouped["year"] <= TRAIN_END_YEAR)
+    ]
+    model = core.LeeCarter(
+        age_col="mapped_age",
+        year_col="year",
+        actual_col="deaths",
+        expose_col="population",
+        interval=1,
+    )
+    fit_df = model.structure_df(train_df)
+    fit_df = model.fit(fit_df)
+
+    # forecast
+    forecast_df = model.forecast(years=forecast_years)
+    forecast_df = pd.concat(
+        [fit_df[["year", "mapped_age", "qx_lc"]], forecast_df], axis=0
+    ).reset_index()
+    excess_grouped = pd.merge(
+        excess_grouped,
+        forecast_df[["mapped_age", "year", "qx_lc"]],
+        on=["mapped_age", "year"],
+        how="left",
+    )
+    excess_grouped["deaths_lc"] = excess_grouped["population"] * excess_grouped["qx_lc"]
+
+    # create the chart
+    chart = charters.compare_rates(
+        excess_grouped,
+        x_axis="year",
+        rates=["qx_raw", "qx_lc"],
+        weights=["population"],
+    )
+
+    # create the table
+    table = (
+        excess_grouped.groupby(["year"], observed=True)
+        .sum(numeric_only=True)
+        .reset_index()
+    )
+    table["excess_lc_pct"] = table["deaths"] / table["deaths_lc"]
+    table["qx_raw"] = table["deaths"] / table["population"]
+    table["qx_lc"] = table["deaths_lc"] / table["population"]
+
+    if active_tab == "tab-pop-trends-chart":
+        tab_content = dcc.Graph(figure=chart)
+    else:
+        columnDefs = dash_formats.get_column_defs(table)
+        tab_content = dag.AgGrid(
+            rowData=table.to_dict("records"),
+            columnDefs=columnDefs,
+        )
+
+    return tab_content, False, "", days_elapsed
 
 
 @callback(

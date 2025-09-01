@@ -17,6 +17,8 @@ from morai.experience import charters
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
+# `enable_string_cache` helps with categorical type values
+pl.enable_string_cache()
 
 dash.register_page(__name__, path="/explore", title="morai - Explore", order=1)
 
