@@ -74,8 +74,10 @@ class Neural(nn.Module):
         self.label_encoders = {}
         self.to(self.device)
         logger.info(
-            f"initialized Neural model with task: {self.task} "
-            f"and Torch and device: {self.device}"
+            f"initialized Neural model with Torch\n"
+            f"task: {self.task} \n"
+            f"device: {self.device}"
+            f"dropout: {self.dropout}"
         )
 
     def setup_model(self, X_train: pd.DataFrame, dropout: float = 0.0) -> None:
@@ -261,6 +263,7 @@ class Neural(nn.Module):
                 )
 
             else:  # binomial
+                logger.warning("binomial model not tested, use with caution")
                 loss = -(
                     y_torch * F.logsigmoid(z_torch)
                     + (weights_torch - y_torch) * F.logsigmoid(-z_torch)
@@ -273,8 +276,9 @@ class Neural(nn.Module):
             scheduler.step(loss)
 
             # early stopping when loss does not improve for 20 epochs
-            if loss.item() < best_loss:
-                best_loss = loss.item()
+            loss_value = loss.detach().item()
+            if loss_value < best_loss:
+                best_loss = loss_value
                 patience_counter = 0
             else:
                 patience_counter += 1
@@ -283,7 +287,7 @@ class Neural(nn.Module):
                 pbar.close()
                 break
 
-            pbar.set_postfix({"loss": f"{loss.item():.6f}"})
+            pbar.set_postfix({"loss": f"{loss_value:.6f}"})
 
     def predict(
         self,
