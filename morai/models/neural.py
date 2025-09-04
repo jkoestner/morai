@@ -77,7 +77,6 @@ class Neural(nn.Module):
             f"initialized Neural model with Torch\n"
             f"task: {self.task} \n"
             f"device: {self.device}"
-            f"dropout: {self.dropout}"
         )
 
     def setup_model(self, X_train: pd.DataFrame, dropout: float = 0.0) -> None:
@@ -98,6 +97,7 @@ class Neural(nn.Module):
         self.num_cols = num_cols
         logger.info(f"numeric columns: {self.num_cols}")
         logger.info(f"categorical columns: {self.cat_cols}")
+        logger.info(f"dropout: {dropout}")
 
         input_size = len(num_cols)
         total_embedding_dim = self._create_embeddings(X_train)
@@ -263,7 +263,6 @@ class Neural(nn.Module):
                 )
 
             else:  # binomial
-                logger.warning("binomial model not tested, use with caution")
                 loss = -(
                     y_torch * F.logsigmoid(z_torch)
                     + (weights_torch - y_torch) * F.logsigmoid(-z_torch)
