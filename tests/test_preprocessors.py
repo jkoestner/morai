@@ -7,6 +7,71 @@ import polars as pl
 from morai.forecast import preprocessors
 
 
+def test_preprocess_passthrough():
+    """Tests the preprocess passthrough function."""
+    # create df
+    df = pd.DataFrame(
+        {
+            "feature1": [1, 2, 3],
+            "feature2": [1.1, 2.2, 3.3],
+            "feature3": ["a", "b", "c"],
+        }
+    )
+    feature_dict = {"passthrough": ["feature1", "feature2", "feature3"]}
+
+    # preprocess
+    preprocess_dict = preprocessors.preprocess_data(
+        model_data=df, feature_dict=feature_dict
+    )
+    X = preprocess_dict["X"]
+
+    # test values and names
+    pd.testing.assert_frame_equal(
+        X.reset_index(drop=True),
+        df.reset_index(drop=True),
+        check_names=True,
+        check_dtype=False,
+        check_exact=False,
+        rtol=1e-5,
+    )
+
+
+def test_preprocess_ordinal():
+    """Tests the preprocess ordinal function."""
+    # create df
+    df = pd.DataFrame(
+        {
+            "ordinal1": ["low", "medium", "high", "medium", "low"],
+            "ordinal2": ["cold", "warm", "hot", "warm", "cold"],
+        }
+    )
+    feature_dict = {"ordinal": ["ordinal1", "ordinal2"]}
+
+    # preprocess
+    preprocess_dict = preprocessors.preprocess_data(
+        model_data=df, feature_dict=feature_dict
+    )
+    X = preprocess_dict["X"]
+
+    # expected dataset
+    expected_df = pd.DataFrame(
+        {
+            "ordinal1": [1, 2, 0, 2, 1],
+            "ordinal2": [0, 2, 1, 2, 0],
+        }
+    )
+
+    # test values and names
+    pd.testing.assert_frame_equal(
+        X.reset_index(drop=True),
+        expected_df.reset_index(drop=True),
+        check_names=True,
+        check_dtype=False,
+        check_exact=False,
+        rtol=1e-5,
+    )
+
+
 def test_bin_feature():
     """Tests the bin feature function."""
     s = pd.Series([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])

@@ -310,7 +310,7 @@ def calc_relative_risk(
         if relative_to == "reference":
             reference_risks = grouped_df.group_by(
                 relative_cols, maintain_order=True
-            ).agg(pl.col("relative_risk").first().alias("reference_risk"))
+            ).agg(pl.col("relative_risk").min().alias("reference_risk"))
 
             grouped_df = grouped_df.join(reference_risks, on=relative_cols, how="left")
             grouped_df = grouped_df.with_columns(
