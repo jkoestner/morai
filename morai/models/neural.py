@@ -219,6 +219,7 @@ class Neural(nn.Module):
 
         # convert to torch tensors
         X_torch_num, X_torch_cat_idx = self._prepare_input_tensor(X)
+
         y_torch = torch.tensor(
             y.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
@@ -357,7 +358,9 @@ class Neural(nn.Module):
                 self.embedding_dims[cat_feature] = min(50, (vocab_size + 1) // 2)
 
             embed_dim = self.embedding_dims[cat_feature]
-            self.embeddings[cat_feature] = nn.Embedding(vocab_size, embed_dim)
+            self.embeddings[cat_feature] = nn.Embedding(vocab_size, embed_dim).to(
+                self.device
+            )
             total_embedding_dim += embed_dim
 
             # initialize embeddings
