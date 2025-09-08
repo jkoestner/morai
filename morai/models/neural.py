@@ -201,6 +201,7 @@ class Neural(nn.Module):
         # validations
         if self.fc1 is None:
             self.setup_model(X, dropout)
+            self.to(self.device)
         if self.task not in ("poisson", "binomial"):
             raise ValueError("task must be 'poisson' or 'binomial'")
         if not (X.index.equals(y.index) and X.index.equals(weights.index)):
