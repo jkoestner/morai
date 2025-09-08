@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.1](https://github.com/jkoestner/morai/tree/v0.3.1)
+
+[Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.0...v0.3.1)
+
+**Bugs**
+- update version package compatability including polars functional changes
+with version 1.33.0
+
+**Documentation**
+- enhance test coverage
+
 ## [0.3.0](https://github.com/jkoestner/morai/tree/v0.3.0)
 
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.2.0...v0.3.0)

@@ -72,6 +72,117 @@ def test_preprocess_ordinal():
     )
 
 
+def test_preprocess_ohe():
+    """Tests the preprocess ohe function."""
+    # create df
+    df = pd.DataFrame(
+        {
+            "ohe1": ["low", "medium", "high", "medium", "low"],
+            "ohe2": ["cold", "warm", "hot", "warm", "cold"],
+        }
+    )
+    feature_dict = {"ohe": ["ohe1", "ohe2"]}
+
+    # preprocess
+    preprocess_dict = preprocessors.preprocess_data(
+        model_data=df, feature_dict=feature_dict
+    )
+    X = preprocess_dict["X"]
+
+    # expected dataset
+    expected_df = pd.DataFrame(
+        {
+            "ohe1_low": [1, 0, 0, 0, 1],
+            "ohe1_medium": [0, 1, 0, 1, 0],
+            "ohe2_hot": [0, 0, 1, 0, 0],
+            "ohe2_warm": [0, 1, 0, 1, 0],
+        }
+    )
+
+    # test values and names
+    pd.testing.assert_frame_equal(
+        X.reset_index(drop=True),
+        expected_df.reset_index(drop=True),
+        check_names=True,
+        check_dtype=False,
+        check_exact=False,
+        rtol=1e-5,
+    )
+
+
+def test_preprocess_nominal():
+    """Tests the preprocess nominal function."""
+    # create df
+    df = pd.DataFrame(
+        {
+            "nominal1": ["low", "medium", "high", "medium", "low"],
+            "nominal2": ["cold", "warm", "hot", "warm", "cold"],
+            "rate": [0.1, 0.2, 0.3, 0.2, 0.2],
+        }
+    )
+    feature_dict = {"target": ["rate"], "nominal": ["nominal1", "nominal2"]}
+
+    # preprocess
+    preprocess_dict = preprocessors.preprocess_data(
+        model_data=df, feature_dict=feature_dict
+    )
+    X = preprocess_dict["X"]
+
+    # expected dataset
+    expected_df = pd.DataFrame(
+        {
+            "nominal1": [0.15, 0.2, 0.3, 0.2, 0.15],
+            "nominal2": [0.15, 0.2, 0.3, 0.2, 0.15],
+        }
+    )
+
+    # test values and names
+    pd.testing.assert_frame_equal(
+        X.reset_index(drop=True),
+        expected_df.reset_index(drop=True),
+        check_names=True,
+        check_dtype=False,
+        check_exact=False,
+        rtol=1e-5,
+    )
+
+
+def test_preprocess_standardize():
+    """Tests the preprocess standardize function."""
+    # create df
+    df = pd.DataFrame(
+        {
+            "feature1": [1, 2, 3],
+            "feature2": [10, 20, 30],
+        }
+    )
+    feature_dict = {"passthrough": ["feature1", "feature2"]}
+
+    # preprocess
+    preprocess_dict = preprocessors.preprocess_data(
+        model_data=df, feature_dict=feature_dict, standardize=True
+    )
+    X = preprocess_dict["X"]
+
+    # expected dataset
+    expected_df = pd.DataFrame(
+        {
+            "feature1": [-1.22474487, 0, 1.22474487],
+            "feature2": [-1.22474487, 0, 1.22474487],
+        }
+    )
+
+    # test values and names
+    pd.testing.assert_frame_equal(
+        X.reset_index(drop=True),
+        expected_df.reset_index(drop=True),
+        check_names=True,
+        check_dtype=False,
+        check_exact=False,
+        rtol=1e-5,
+    )
+
+
 def test_bin_feature():
     """Tests the bin feature function."""
     s = pd.Series([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
