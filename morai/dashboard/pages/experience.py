@@ -480,8 +480,8 @@ def update_tab_content(
             chart = charters.chart(
                 df=filtered_df,
                 x_axis=x_axis,
-                y_axis=y_axis,
-                color=color,
+                y_axis=y_axis if chart_type != "heatmap" else color,
+                color=color if chart_type != "heatmap" else y_axis,
                 type=chart_type,
                 numerator=numerator,
                 denominator=denominator,

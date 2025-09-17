@@ -125,7 +125,12 @@ def filter_data(
     for col in str_cols:
         str_values = _inputs_parse_id(callback_context, col)
         if str_values:
-            filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
+            # check col type and if numeric convert to int
+            if schema[col] in pl.datatypes.group.NUMERIC_DTYPES:
+                str_values = [float(i) for i in str_values]
+                filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
+            else:
+                filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
 
     # filter numeric columns
     for col in num_cols:
