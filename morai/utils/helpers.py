@@ -108,7 +108,7 @@ def clean_df(
     return data
 
 
-def memory_usage_df(df: pd.DataFrame) -> None:
+def memory_usage_df(df: pd.DataFrame) -> None:  # pragma: no cover
     """
     Calculate the memory usage of the DataFrame.
 
@@ -126,7 +126,7 @@ def memory_usage_df(df: pd.DataFrame) -> None:
     print(f"Memory usage per column:\n{memory_usage_per_column}")
 
 
-def memory_usage_jupyter() -> pd.DataFrame:
+def memory_usage_jupyter() -> pd.DataFrame:  # pragma: no cover
     """
     Calculate the memory usage of objects in the Jupyter notebook.
 
@@ -156,7 +156,9 @@ def memory_usage_jupyter() -> pd.DataFrame:
     return object_sizes
 
 
-def memory_usage_jupyter_cells(notebook: str, top_n: int = 10) -> pd.DataFrame:
+def memory_usage_jupyter_cells(
+    notebook: str, top_n: int = 10
+) -> pd.DataFrame:  # pragma: no cover
     """
     Calculate the memory usage of cells in Jupyter notebook.
 
@@ -206,7 +208,7 @@ def memory_usage_jupyter_cells(notebook: str, top_n: int = 10) -> pd.DataFrame:
     return top_cells.head(top_n)
 
 
-def delete_jupyter_objects(objects: list) -> None:
+def delete_jupyter_objects(objects: list) -> None:  # pragma: no cover
     """
     Delete objects in the Jupyter notebook.
 
@@ -390,6 +392,8 @@ def _weighted_mean(
     """
     if weights is None or len(weights) == 0:
         return values.mean()
+    elif isinstance(weights, list):
+        weights = np.array(weights)
 
     if weights.sum() == 0:
         logger.warning("The sum of the weights is 0, returning NaN")
