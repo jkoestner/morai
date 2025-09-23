@@ -88,8 +88,9 @@ version = { attr = "morai.version.version" }
 [tool.coverage.run]
 data_file = "docs/coverage/.coverage"
 omit = [
-    "morai/dashboard/*", # omit everything in /dashboard
-    "__init__.py",       # omit init files
+    "morai/dashboard/*",  # omit everything in /dashboard
+    "morai/utils/cli.py", # omit cli (entry point)
+    "__init__.py",        # omit init files
 ]
 
 [tool.coverage.html]

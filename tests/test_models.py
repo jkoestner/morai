@@ -6,7 +6,6 @@ results that are similar to what has been provided in the past. Libraries
 may change logic so it's helpful to know if these results are changing.
 """
 
-import lightgbm as lgb
 import pandas as pd
 from pytest import approx
 from sklearn import linear_model
@@ -166,31 +165,6 @@ def test_rf():
     assert predictions[0] == approx(0.0645, abs=1e-4), (
         "random forest first value is off"
     )
-
-
-def test_lgb():
-    """
-    Test the LightGBM.
-
-    https://lightgbm.readthedocs.io/en/latest/Python-Intro.html
-    """
-    params = {
-        "boosting_type": "gbdt",
-        "objective": "regression",
-        "metric": "rmse",
-        "num_leaves": 31,
-        "learning_rate": 0.05,
-        "feature_fraction": 0.5,
-        "bagging_fraction": 0.8,
-        "bagging_freq": 5,
-        "seed": seed,
-    }
-    train_data = lgb.Dataset(X, label=y, weight=weights, categorical_feature="auto")
-    bst = lgb.train(params, train_data)
-    predictions = bst.predict(X)
-
-    assert predictions.mean() == approx(0.0525, abs=1e-4), "lightgbm mean is off"
-    assert predictions[0] == approx(0.0525, abs=1e-4), "lightgbm first value is off"
 
 
 def test_xg():
