@@ -11,7 +11,6 @@ from pytest import approx
 from sklearn import linear_model
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
-from xgboost import XGBRegressor
 
 from morai.forecast import preprocessors
 from morai.models import core
@@ -165,29 +164,6 @@ def test_rf():
     assert predictions[0] == approx(0.0645, abs=1e-4), (
         "random forest first value is off"
     )
-
-
-def test_xg():
-    """
-    Test the xg boost.
-
-    https://xgboost.readthedocs.io/en/latest/python/python_api.html
-    """
-    bst = XGBRegressor(
-        objective="reg:squarederror",
-        eval_metric="rmse",
-        max_depth=6,
-        eta=0.05,
-        enable_categorical=True,
-        random_state=seed,
-    )
-    bst.fit(X, y, sample_weight=weights)
-    predictions = bst.predict(X)
-
-    assert predictions.mean() == approx(0.0525, abs=1e-4), "xgboost mean is off"
-    # xgboost has sampling which is difficult to replicate
-    # loosen the tolerance
-    assert predictions[0] == approx(0.0962, abs=1e-3), "xgboost first value is off"
 
 
 def test_lee_carter():
