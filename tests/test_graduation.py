@@ -44,9 +44,9 @@ def test_whl_1d_age() -> None:
         blending_factor=0.5,
     )
     checksum_grad_rates = grad_rates.sum()
-    assert (
-        round(checksum_grad_rates, 4) == 11.0632
-    ), "The 1d WHL with standard table checksum is incorrect"
+    assert round(checksum_grad_rates, 4) == 11.0632, (
+        "The 1d WHL with standard table checksum is incorrect"
+    )
 
 
 def test_whl_2d() -> None:
@@ -70,3 +70,20 @@ def test_whl_2d() -> None:
     )
     checksum_grad_rates = grad_rates.sum()
     assert round(checksum_grad_rates, 4) == 5.6160, "The 2d WHL checksum is incorrect"
+
+
+def test_exponential():
+    """Tests the exponential graduation."""
+    whl_1d_age_df = pd.read_csv(test_forecast_path / "simple_graduation_1d_age.csv")
+    expo_rates = graduation.exponential(
+        rates=whl_1d_age_df["rate"],
+        weights=whl_1d_age_df["exposure"],
+        ages=whl_1d_age_df["age"],
+        expo_low=0,
+        expo_high=1,
+        calc_ages=whl_1d_age_df["age"],
+    )
+    checksum_expo_rates = expo_rates.sum()
+    assert round(checksum_expo_rates, 2) == 9.57, (
+        "The exponential checksum is incorrect"
+    )

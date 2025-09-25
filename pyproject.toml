@@ -89,6 +89,7 @@ version = { attr = "morai.version.version" }
 data_file = "docs/coverage/.coverage"
 omit = [
     "morai/dashboard/*",  # omit everything in /dashboard
+    "morai/models/r.py",  # omit r (outside of scope for package)
     "morai/utils/cli.py", # omit cli (entry point)
     "__init__.py",        # omit init files
 ]

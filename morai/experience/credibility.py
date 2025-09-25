@@ -322,7 +322,7 @@ def vm20_buhlmann_approx(
     The z value can then be used to blend a measure with a prior measure.
     new_estimate = z * measure + (1 - z) * prior
 
-    Using non-seriatim data that includes the momemnts we can approximate the
+    Using non-seriatim data that includes the moments we can approximate the
     parameters A, B, and C, which are used to calculate the credibility.
 
     A = Σ[(face_amount) * (exposure) * (mortality rate)]
