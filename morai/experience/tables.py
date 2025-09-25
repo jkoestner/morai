@@ -1160,7 +1160,7 @@ def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     Check attained age, issue age, and duration columns.
 
     Removes invalid rows for attained age, duration, and issue age. Will also
-    capp the attained age at the max_age.
+    cap the attained age at the max_age.
 
     attained_age = issue_age + duration - 1
 
@@ -1183,10 +1183,10 @@ def check_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
 
     # check for invalid attained age / duration / issue age combos
     if all(col in df.columns for col in ["attained_age", "issue_age", "duration"]):
-        invalid_mask = df["attained_age"] < df["duration"] - 1
+        invalid_mask = df["attained_age"] <= df["duration"] - 1
         invalid_mask = invalid_mask | (df["attained_age"] < df["issue_age"])
     elif all(col in df.columns for col in ["attained_age", "duration"]):
-        invalid_mask = df["attained_age"] < df["duration"] - 1
+        invalid_mask = df["attained_age"] <= df["duration"] - 1
     elif all(col in df.columns for col in ["attained_age", "issue_age"]):
         invalid_mask = df["attained_age"] < df["issue_age"]
 
@@ -1249,6 +1249,14 @@ def add_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     """
     initial_rows = len(df)
 
+    # check duplicates
+    duplicate_mask = df.duplicated()
+    if duplicate_mask.any():
+        logger.warning(
+            f"there are '{len(df[duplicate_mask])}' duplicate rows in the "
+            f"DataFrame and should be removed."
+        )
+
     # check for invalid attained age / duration / issue age combos
     if all(col in df.columns for col in ["attained_age", "issue_age", "duration"]):
         pass
@@ -1259,29 +1267,17 @@ def add_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     elif all(col in df.columns for col in ["issue_age", "duration"]):
         df["attained_age"] = df["issue_age"] + df["duration"] - 1
     elif all(col in df.columns for col in ["issue_age"]):
-        df_list = [df]
-        for attained_age in range(max_age + 1):
-            df_temp = df.copy()
-            df_temp["attained_age"] = attained_age
-            df_temp["duration"] = df_temp["attained_age"] - df_temp["issue_age"] + 1
-            df_list.append(df_temp)
-        df = pd.concat(df_list, ignore_index=True)
+        attained_ages = pd.DataFrame({"attained_age": range(1, max_age + 1)})
+        df = df.merge(attained_ages, how="cross")
+        df["duration"] = df["attained_age"] - df["issue_age"] + 1
     elif all(col in df.columns for col in ["attained_age"]):
-        df_list = [df]
-        for issue_age in range(max_age + 1):
-            df_temp = df.copy()
-            df_temp["issue_age"] = issue_age
-            df_temp["duration"] = df_temp["attained_age"] - df_temp["issue_age"] + 1
-            df_list.append(df_temp)
-        df = pd.concat(df_list, ignore_index=True)
+        issue_ages = pd.DataFrame({"issue_age": range(1, max_age + 1)})
+        df = df.merge(issue_ages, how="cross")
+        df["duration"] = df["attained_age"] - df["issue_age"] + 1
     elif all(col in df.columns for col in ["duration"]):
-        df_list = [df]
-        for issue_age in range(max_age + 1):
-            df_temp = df.copy()
-            df_temp["issue_age"] = issue_age
-            df_temp["attained_age"] = df_temp["issue_age"] + df_temp["duration"] - 1
-            df_list.append(df_temp)
-        df = pd.concat(df_list, ignore_index=True)
+        issue_ages = pd.DataFrame({"issue_age": range(1, max_age + 1)})
+        df = df.merge(issue_ages, how="cross")
+        df["attained_age"] = df["issue_age"] + df["duration"] - 1
     else:
         raise ValueError(
             "attained_age, issue_age, or duration columns must be provided."
@@ -1347,6 +1343,9 @@ def get_su_table(df: pd.DataFrame, select_period: int) -> pd.DataFrame:
     """
     Calculate the select and ultimate ratio.
 
+    The select and ultimate ratio is calculated by dividing the ultimate values
+    by the select values. The ultimate values are the minimum issue age values.
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -1368,7 +1367,7 @@ def get_su_table(df: pd.DataFrame, select_period: int) -> pd.DataFrame:
         # max duration
         select_period = df["duration"].max()
 
-    # the minimum issue age will have the longest duration values
+    # the minimum issue age will be used for the ultimate values
     logger.debug(
         f"calculating select ultimate ratio for select period: '{select_period}'"
     )
