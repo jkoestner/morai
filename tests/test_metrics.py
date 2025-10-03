@@ -183,7 +183,16 @@ def test_calc_metrics_others():
 
 
 def test_model_results():
-    """Tests the add_model method."""
+    """
+    Tests the model_results class.
+
+    The tests include:
+    - get_scorecard
+    - add_model
+    - remove_model
+    - save_model
+    - load_model
+    """
     data_path = test_forecast_path / "metrics" / "ae_rank_data.csv"
 
     metric_cols = ["ae", "smape", "r2_score", "root_mean_squared_error", "aic", "shape"]
