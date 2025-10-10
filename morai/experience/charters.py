@@ -374,6 +374,8 @@ def relative_risk(
         + helpers._to_list(denominator)
     )
     agg_cols = list(set(agg_cols))
+    risk_col = y_axis
+    weight_col = None
     ratio = False
 
     if y_axis in ["ratio", "risk"]:
@@ -1128,7 +1130,7 @@ def matrix(
     df: pd.DataFrame, threshold: float = 0.5, title: str = "Matrix Heatmap"
 ) -> go.Figure:
     """
-    Create a heatmap of a matrix dataframe.
+    Create a heatmap of a matrix dataframe - mainly used for correlation functions.
 
     Used to show pairwise correlation of features.
 
