@@ -7,9 +7,10 @@ import plotly.graph_objects as go
 import polars as pl
 import pytest
 from pytest import approx
+from sklearn import linear_model
 
 from morai.experience import charters, experience
-from morai.forecast.preprocessors import lazy_bin_feature
+from morai.forecast import preprocessors
 from morai.utils import helpers
 
 # Test data
@@ -25,6 +26,7 @@ df = pd.DataFrame(
 lazy_df = pl.DataFrame(df).lazy()
 test_experience_path = helpers.ROOT_PATH / "tests" / "files" / "experience"
 experience_df = pd.read_csv(test_experience_path / "simple_experience.csv")
+experience_df["actual"] = experience_df["rate"] * experience_df["exposed"]
 lazy_experience_df = pl.DataFrame(experience_df).lazy()
 
 
@@ -452,24 +454,59 @@ def test_frequency():
 
 def test_pdp():
     """Tests the pdp functionality."""
-    from sklearn import linear_model
+    # expected df
+    expected_df = pd.DataFrame(
+        {
+            "sex": ["F", "F", "M", "M"],
+            "smoker_status": ["NS", "S", "NS", "S"],
+            "pred": [0.07, 0.09, 0.11, 0.13],
+            "%_diff": [0.7, 0.9, 1.1, 1.3],
+            "exposed": [100, 100, 200, 200],
+        }
+    )
 
+    # setup data
+    feature_dict = {
+        "target": ["rate"],
+        "passthrough": ["year"],
+        "ordinal": [
+            "sex",
+            "smoker_status",
+        ],
+        "ohe": [],
+        "nominal": [],
+    }
+    preprocess_dict = preprocessors.preprocess_data(
+        experience_df,
+        feature_dict=feature_dict,
+        standardize=False,
+    )
+    X = preprocess_dict["X"]
+    y = preprocess_dict["y"]
+    weights = preprocess_dict["weights"]
+    mapping = preprocess_dict["mapping"]
+    md_encoded = preprocess_dict["md_encoded"]
+
+    # setup model
     model = linear_model.LinearRegression()
-    model.fit(X=experience_df[["smoker_status_encode"]], y=experience_df["smoker_rate"])
+    model.fit(X=X, y=y)
+
+    # test pdp
     pdp = charters.pdp(
         model=model,
-        df=experience_df,
-        x_axis="smoker_status_encode",
-        weight=None,
-        mapping=None,
+        df=md_encoded,
+        x_axis="sex",
+        line_color="smoker_status",
+        weight=weights,
+        mapping=mapping,
+        secondary="exposed",
+        center="global",
         display=False,
     )
-
-    assert pdp.iloc[0]["%_diff"] == approx(0.90, abs=1e-4), (
-        "pdp should show the relative difference, off on first value"
-    )
-    assert pdp.iloc[-1]["%_diff"] == approx(1.10, abs=1e-4), (
-        "pdp should show the relative difference, off on second value"
+    pd.testing.assert_frame_equal(
+        pdp.sort_values(by=["sex", "smoker_status"]).reset_index(drop=True),
+        expected_df.sort_values(by=["sex", "smoker_status"]).reset_index(drop=True),
+        check_dtype=False,
     )
 
 
@@ -519,3 +556,149 @@ def test_matrix():
     assert fig.layout.annotations[0].font.color == "red"
     assert fig.layout.annotations[1].font.color is None
     assert fig.layout.annotations[2].font.color == "red"
+
+
+def test_target():
+    """Tests the target functionality."""
+    expected_target_values = (
+        experience_df.groupby("smoker_status", observed=True)[
+            ["rate", "exposed"]
+        ].apply(lambda x: helpers._weighted_mean(x.iloc[:, 0], weights=x.iloc[:, 1]))
+    ).values
+
+    # pandas
+    fig = charters.target(
+        experience_df,
+        target="rate",
+        features=["sex", "smoker_status", "year"],
+        cols=3,
+        weights="exposed",
+    )
+    assert isinstance(fig.data[0], go.Scatter)
+    assert len(fig.data) == 4
+    assert np.allclose(fig.data[1].y, expected_target_values)
+
+    # polars
+    fig = charters.target(
+        lazy_experience_df,
+        target="rate",
+        features=["sex", "smoker_status", "year"],
+        cols=3,
+        weights="exposed",
+    )
+    assert isinstance(fig.data[0], go.Scatter)
+    assert len(fig.data) == 4
+    assert np.allclose(fig.data[1].y, expected_target_values)
+
+
+def test_target_risk():
+    """Tests the target functionality - risk ratio."""
+    relative_risk_values = experience.calc_relative_risk(
+        df=experience_df,
+        features=["sex"],
+        risk_col=["rate"],
+        weight_col=["exposed"],
+    )["relative_risk"].unique()
+
+    # pandas
+    fig = charters.target(
+        experience_df,
+        target="risk",
+        features=["sex", "smoker_status", "year"],
+        numerator="actual",
+        denominator="exposed",
+        cols=3,
+        add_line=True,
+    )
+    assert len(fig.data) == 8
+    assert np.allclose(fig.data[0].y, relative_risk_values)
+
+    # polars
+    fig = charters.target(
+        lazy_experience_df,
+        target="risk",
+        features=["sex", "smoker_status", "year"],
+        numerator="actual",
+        denominator="exposed",
+        cols=3,
+        add_line=True,
+    )
+    assert len(fig.data) == 8
+    assert np.allclose(fig.data[0].y, relative_risk_values)
+
+
+def test_target_generate_pairwise():
+    """Tests the target functionality - generate pairwise."""
+    expected_target_values = (
+        experience_df[experience_df["sex"] == "F"]
+        .groupby("smoker_status", observed=True)[["rate"]]
+        .mean()
+    ).values.flatten()
+
+    # pandas
+    fig = charters.target(
+        experience_df,
+        target="rate",
+        features=["sex", "smoker_status", "year"],
+        cols=3,
+        weights="exposed",
+        generate_pairwise=True,
+    )
+    assert isinstance(fig.data[0], go.Scatter)
+    assert len(fig.data) == 4
+    assert np.allclose(fig.data[0].y, expected_target_values)
+
+    # polars
+    fig = charters.target(
+        lazy_experience_df,
+        target="rate",
+        features=["sex", "smoker_status", "year"],
+        cols=3,
+        weights="exposed",
+        generate_pairwise=True,
+    )
+    assert isinstance(fig.data[0], go.Scatter)
+    assert len(fig.data) == 4
+    assert np.allclose(fig.data[0].y, expected_target_values)
+
+
+def test_get_stats():
+    """
+    Tests the get_stats functionality.
+
+    Only provides stats for numeric columns.
+    """
+    # pandas
+    stats = charters.get_stats(experience_df, features=["sex", "smoker_status", "year"])
+    assert isinstance(stats, pd.DataFrame)
+    assert stats["feature"].unique() == ["year"]
+    assert (
+        all(col in stats.columns for col in ["null_count", "null_pct", "zero_pct"])
+        == True
+    )
+
+    # polars
+    stats = charters.get_stats(lazy_experience_df, features=["year"])
+    assert isinstance(stats, pd.DataFrame)
+    assert stats["feature"].unique() == ["year"]
+    assert (
+        all(col in stats.columns for col in ["null_count", "null_pct", "zero_pct"])
+        == True
+    )
+
+
+def test_get_category_orders():
+    """Tests the get_category_orders functionality."""
+    expected_category_orders = list(
+        experience_df.groupby("sex")["actual"]
+        .agg("sum")
+        .sort_values(ascending=False)
+        .index.values
+    )
+
+    # pandas
+    category_orders = charters.get_category_orders(
+        df=experience_df, category="sex", measure="rate"
+    )
+    assert isinstance(category_orders, dict)
+    assert category_orders["sex"] == expected_category_orders
