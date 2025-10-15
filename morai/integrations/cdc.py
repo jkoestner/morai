@@ -361,7 +361,7 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
     mi_df["1_year_mi"] = 1 - (mi_df["crude_adj"] / mi_df["crude_adj"].shift(1))
     mi_df[f"{rolling}_year_mi"] = mi_df["1_year_mi"].rolling(window=rolling).mean()
 
-    # calculate whl
+    # calculate whittaker-henderson-lowrie (whl)
     mi_df = mi_df[mi_df["1_year_mi"].notna()]
     mi_df["whl_3"] = graduation.whl(
         rates=mi_df["1_year_mi"], horizontal_order=3, horizontal_lambda=400
@@ -629,6 +629,11 @@ def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
 def _infer_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """
     Infer data types from a DataFrame.
+
+    Adjusts the following columns to numeric
+    - deaths
+    - population
+    - year
 
     Parameters
     ----------
