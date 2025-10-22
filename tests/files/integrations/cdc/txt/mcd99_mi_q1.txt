@@ -1,0 +1,691 @@
+"Notes"	"Ten-Year Age Groups"	"Ten-Year Age Groups Code"	"Gender"	"Gender Code"	"Year"	"Year Code"	Deaths	Population	Crude Rate
+	"< 1 year"	"1"	"Female"	"F"	"1999"	"1999"	3080	391749	786.2
+	"< 1 year"	"1"	"Female"	"F"	"2000"	"2000"	3081	392555	784.9
+	"< 1 year"	"1"	"Female"	"F"	"2001"	"2001"	2943	411809	714.7
+	"< 1 year"	"1"	"Female"	"F"	"2002"	"2002"	3026	403878	749.2
+	"< 1 year"	"1"	"Female"	"F"	"2003"	"2003"	3015	403601	747.0
+	"< 1 year"	"1"	"Female"	"F"	"2004"	"2004"	2981	409387	728.2
+	"< 1 year"	"1"	"Female"	"F"	"2005"	"2005"	3023	410157	737.0
+	"< 1 year"	"1"	"Female"	"F"	"2006"	"2006"	2975	413032	720.3
+	"< 1 year"	"1"	"Female"	"F"	"2007"	"2007"	3105	425913	729.0
+	"< 1 year"	"1"	"Female"	"F"	"2008"	"2008"	2983	428189	696.7
+	"< 1 year"	"1"	"Female"	"F"	"2009"	"2009"	2786	409167	680.9
+	"< 1 year"	"1"	"Female"	"F"	"2010"	"2010"	2659	397346	669.2
+	"< 1 year"	"1"	"Female"	"F"	"2011"	"2011"	2612	398081	656.1
+	"< 1 year"	"1"	"Female"	"F"	"2012"	"2012"	2543	390987	650.4
+	"< 1 year"	"1"	"Female"	"F"	"2013"	"2013"	2469	385495	640.5
+	"< 1 year"	"1"	"Female"	"F"	"2014"	"2014"	2439	384826	633.8
+	"< 1 year"	"1"	"Female"	"F"	"2015"	"2015"	2577	386351	667.0
+	"< 1 year"	"1"	"Female"	"F"	"2016"	"2016"	2495	382360	652.5
+	"< 1 year"	"1"	"Female"	"F"	"2017"	"2017"	2457	378037	649.9
+	"< 1 year"	"1"	"Female"	"F"	"2018"	"2018"	2213	367095	602.8
+	"< 1 year"	"1"	"Female"	"F"	"2019"	"2019"	2212	362550	610.1
+	"< 1 year"	"1"	"Female"	"F"	"2020 "	"2020"	2181	359371	606.9
+	"1-4 years"	"1-4"	"Female"	"F"	"1999"	"1999"	599	1582748	37.8
+	"1-4 years"	"1-4"	"Female"	"F"	"2000"	"2000"	560	1582213	35.4
+	"1-4 years"	"1-4"	"Female"	"F"	"2001"	"2001"	551	1564532	35.2
+	"1-4 years"	"1-4"	"Female"	"F"	"2002"	"2002"	548	1584216	34.6
+	"1-4 years"	"1-4"	"Female"	"F"	"2003"	"2003"	572	1595908	35.8
+	"1-4 years"	"1-4"	"Female"	"F"	"2004"	"2004"	595	1604112	37.1
+	"1-4 years"	"1-4"	"Female"	"F"	"2005"	"2005"	574	1614130	35.6
+	"1-4 years"	"1-4"	"Female"	"F"	"2006"	"2006"	561	1599224	35.1
+	"1-4 years"	"1-4"	"Female"	"F"	"2007"	"2007"	565	1606697	35.2
+	"1-4 years"	"1-4"	"Female"	"F"	"2008"	"2008"	536	1623381	33.0
+	"1-4 years"	"1-4"	"Female"	"F"	"2009"	"2009"	557	1635616	34.1
+	"1-4 years"	"1-4"	"Female"	"F"	"2010"	"2010"	504	1634957	30.8
+	"1-4 years"	"1-4"	"Female"	"F"	"2011"	"2011"	529	1625349	32.5
+	"1-4 years"	"1-4"	"Female"	"F"	"2012"	"2012"	494	1604680	30.8
+	"1-4 years"	"1-4"	"Female"	"F"	"2013"	"2013"	459	1576810	29.1
+	"1-4 years"	"1-4"	"Female"	"F"	"2014"	"2014"	444	1568150	28.3
+	"1-4 years"	"1-4"	"Female"	"F"	"2015"	"2015"	476	1559601	30.5
+	"1-4 years"	"1-4"	"Female"	"F"	"2016"	"2016"	437	1552618	28.1
+	"1-4 years"	"1-4"	"Female"	"F"	"2017"	"2017"	430	1551502	27.7
+	"1-4 years"	"1-4"	"Female"	"F"	"2018"	"2018"	427	1541183	27.7
+	"1-4 years"	"1-4"	"Female"	"F"	"2019"	"2019"	448	1523144	29.4
+	"1-4 years"	"1-4"	"Female"	"F"	"2020 "	"2020"	402	1500366	26.8
+	"5-14 years"	"5-14"	"Female"	"F"	"1999"	"1999"	851	4334556	19.6
+	"5-14 years"	"5-14"	"Female"	"F"	"2000"	"2000"	807	4333021	18.6
+	"5-14 years"	"5-14"	"Female"	"F"	"2001"	"2001"	809	4296133	18.8
+	"5-14 years"	"5-14"	"Female"	"F"	"2002"	"2002"	832	4264717	19.5
+	"5-14 years"	"5-14"	"Female"	"F"	"2003"	"2003"	755	4236414	17.8
+	"5-14 years"	"5-14"	"Female"	"F"	"2004"	"2004"	772	4200285	18.4
+	"5-14 years"	"5-14"	"Female"	"F"	"2005"	"2005"	791	4154578	19.0
+	"5-14 years"	"5-14"	"Female"	"F"	"2006"	"2006"	685	4117101	16.6
+	"5-14 years"	"5-14"	"Female"	"F"	"2007"	"2007"	696	4096117	17.0
+	"5-14 years"	"5-14"	"Female"	"F"	"2008"	"2008"	588	4082581	14.4
+	"5-14 years"	"5-14"	"Female"	"F"	"2009"	"2009"	628	4084144	15.4
+	"5-14 years"	"5-14"	"Female"	"F"	"2010"	"2010"	569	4090634	13.9
+	"5-14 years"	"5-14"	"Female"	"F"	"2011"	"2011"	559	4085156	13.7
+	"5-14 years"	"5-14"	"Female"	"F"	"2012"	"2012"	578	4080271	14.2
+	"5-14 years"	"5-14"	"Female"	"F"	"2013"	"2013"	579	4055980	14.3
+	"5-14 years"	"5-14"	"Female"	"F"	"2014"	"2014"	551	4035674	13.7
+	"5-14 years"	"5-14"	"Female"	"F"	"2015"	"2015"	570	4008571	14.2
+	"5-14 years"	"5-14"	"Female"	"F"	"2016"	"2016"	578	3990366	14.5
+	"5-14 years"	"5-14"	"Female"	"F"	"2017"	"2017"	615	3978684	15.5
+	"5-14 years"	"5-14"	"Female"	"F"	"2018"	"2018"	599	3968437	15.1
+	"5-14 years"	"5-14"	"Female"	"F"	"2019"	"2019"	608	3956114	15.4
+	"5-14 years"	"5-14"	"Female"	"F"	"2020 "	"2020"	619	3947989	15.7
+	"15-24 years"	"15-24"	"Female"	"F"	"1999"	"1999"	2279	4055248	56.2
+	"15-24 years"	"15-24"	"Female"	"F"	"2000"	"2000"	2326	4079958	57.0
+	"15-24 years"	"15-24"	"Female"	"F"	"2001"	"2001"	2268	4129454	54.9
+	"15-24 years"	"15-24"	"Female"	"F"	"2002"	"2002"	2391	4165221	57.4
+	"15-24 years"	"15-24"	"Female"	"F"	"2003"	"2003"	2458	4197779	58.6
+	"15-24 years"	"15-24"	"Female"	"F"	"2004"	"2004"	2430	4223004	57.5
+	"15-24 years"	"15-24"	"Female"	"F"	"2005"	"2005"	2396	4238102	56.5
+	"15-24 years"	"15-24"	"Female"	"F"	"2006"	"2006"	2368	4213564	56.2
+	"15-24 years"	"15-24"	"Female"	"F"	"2007"	"2007"	2334	4230653	55.2
+	"15-24 years"	"15-24"	"Female"	"F"	"2008"	"2008"	2194	4240895	51.7
+	"15-24 years"	"15-24"	"Female"	"F"	"2009"	"2009"	2186	4246123	51.5
+	"15-24 years"	"15-24"	"Female"	"F"	"2010"	"2010"	2048	4246060	48.2
+	"15-24 years"	"15-24"	"Female"	"F"	"2011"	"2011"	1967	4234134	46.5
+	"15-24 years"	"15-24"	"Female"	"F"	"2012"	"2012"	2023	4216438	48.0
+	"15-24 years"	"15-24"	"Female"	"F"	"2013"	"2013"	1882	4185689	45.0
+	"15-24 years"	"15-24"	"Female"	"F"	"2014"	"2014"	1886	4156337	45.4
+	"15-24 years"	"15-24"	"Female"	"F"	"2015"	"2015"	1969	4106560	47.9
+	"15-24 years"	"15-24"	"Female"	"F"	"2016"	"2016"	2069	4037487	51.2
+	"15-24 years"	"15-24"	"Female"	"F"	"2017"	"2017"	2168	3987182	54.4
+	"15-24 years"	"15-24"	"Female"	"F"	"2018"	"2018"	1978	3945651	50.1
+	"15-24 years"	"15-24"	"Female"	"F"	"2019"	"2019"	2032	3908539	52.0
+	"15-24 years"	"15-24"	"Female"	"F"	"2020 "	"2020"	2260	3890712	58.1
+	"25-34 years"	"25-34"	"Female"	"F"	"1999"	"1999"	3334	3868483	86.2
+	"25-34 years"	"25-34"	"Female"	"F"	"2000"	"2000"	3356	3826720	87.7
+	"25-34 years"	"25-34"	"Female"	"F"	"2001"	"2001"	3387	3743595	90.5
+	"25-34 years"	"25-34"	"Female"	"F"	"2002"	"2002"	3327	3714559	89.6
+	"25-34 years"	"25-34"	"Female"	"F"	"2003"	"2003"	3353	3699357	90.6
+	"25-34 years"	"25-34"	"Female"	"F"	"2004"	"2004"	3386	3697532	91.6
+	"25-34 years"	"25-34"	"Female"	"F"	"2005"	"2005"	3356	3700971	90.7
+	"25-34 years"	"25-34"	"Female"	"F"	"2006"	"2006"	3400	3681941	92.3
+	"25-34 years"	"25-34"	"Female"	"F"	"2007"	"2007"	3489	3688184	94.6
+	"25-34 years"	"25-34"	"Female"	"F"	"2008"	"2008"	3285	3703128	88.7
+	"25-34 years"	"25-34"	"Female"	"F"	"2009"	"2009"	3504	3722051	94.1
+	"25-34 years"	"25-34"	"Female"	"F"	"2010"	"2010"	3462	3739585	92.6
+	"25-34 years"	"25-34"	"Female"	"F"	"2011"	"2011"	3576	3770753	94.8
+	"25-34 years"	"25-34"	"Female"	"F"	"2012"	"2012"	3626	3773242	96.1
+	"25-34 years"	"25-34"	"Female"	"F"	"2013"	"2013"	3606	3793003	95.1
+	"25-34 years"	"25-34"	"Female"	"F"	"2014"	"2014"	3703	3830821	96.7
+	"25-34 years"	"25-34"	"Female"	"F"	"2015"	"2015"	3960	3870911	102.3
+	"25-34 years"	"25-34"	"Female"	"F"	"2016"	"2016"	4221	3910799	107.9
+	"25-34 years"	"25-34"	"Female"	"F"	"2017"	"2017"	4368	3945843	110.7
+	"25-34 years"	"25-34"	"Female"	"F"	"2018"	"2018"	4371	3963375	110.3
+	"25-34 years"	"25-34"	"Female"	"F"	"2019"	"2019"	4240	3976651	106.6
+	"25-34 years"	"25-34"	"Female"	"F"	"2020 "	"2020"	5267	3979152	132.4
+	"35-44 years"	"35-44"	"Female"	"F"	"1999"	"1999"	8149	4446747	183.3
+	"35-44 years"	"35-44"	"Female"	"F"	"2000"	"2000"	8337	4433885	188.0
+	"35-44 years"	"35-44"	"Female"	"F"	"2001"	"2001"	8541	4383870	194.8
+	"35-44 years"	"35-44"	"Female"	"F"	"2002"	"2002"	8602	4318757	199.2
+	"35-44 years"	"35-44"	"Female"	"F"	"2003"	"2003"	8502	4254299	199.8
+	"35-44 years"	"35-44"	"Female"	"F"	"2004"	"2004"	8311	4196466	198.0
+	"35-44 years"	"35-44"	"Female"	"F"	"2005"	"2005"	8360	4143351	201.8
+	"35-44 years"	"35-44"	"Female"	"F"	"2006"	"2006"	8193	4083595	200.6
+	"35-44 years"	"35-44"	"Female"	"F"	"2007"	"2007"	7822	4033022	193.9
+	"35-44 years"	"35-44"	"Female"	"F"	"2008"	"2008"	7611	3963274	192.0
+	"35-44 years"	"35-44"	"Female"	"F"	"2009"	"2009"	7458	3882410	192.1
+	"35-44 years"	"35-44"	"Female"	"F"	"2010"	"2010"	7164	3833323	186.9
+	"35-44 years"	"35-44"	"Female"	"F"	"2011"	"2011"	7201	3761707	191.4
+	"35-44 years"	"35-44"	"Female"	"F"	"2012"	"2012"	7051	3720131	189.5
+	"35-44 years"	"35-44"	"Female"	"F"	"2013"	"2013"	7091	3694338	191.9
+	"35-44 years"	"35-44"	"Female"	"F"	"2014"	"2014"	7241	3676501	197.0
+	"35-44 years"	"35-44"	"Female"	"F"	"2015"	"2015"	7404	3662099	202.2
+	"35-44 years"	"35-44"	"Female"	"F"	"2016"	"2016"	7516	3627297	207.2
+	"35-44 years"	"35-44"	"Female"	"F"	"2017"	"2017"	7498	3626279	206.8
+	"35-44 years"	"35-44"	"Female"	"F"	"2018"	"2018"	7497	3633525	206.3
+	"35-44 years"	"35-44"	"Female"	"F"	"2019"	"2019"	7597	3640546	208.7
+	"35-44 years"	"35-44"	"Female"	"F"	"2020 "	"2020"	9435	3654463	258.2
+	"45-54 years"	"45-54"	"Female"	"F"	"1999"	"1999"	14446	3815028	378.7
+	"45-54 years"	"45-54"	"Female"	"F"	"2000"	"2000"	15106	3902643	387.1
+	"45-54 years"	"45-54"	"Female"	"F"	"2001"	"2001"	15757	4044860	389.6
+	"45-54 years"	"45-54"	"Female"	"F"	"2002"	"2002"	16314	4091518	398.7
+	"45-54 years"	"45-54"	"Female"	"F"	"2003"	"2003"	16859	4160337	405.2
+	"45-54 years"	"45-54"	"Female"	"F"	"2004"	"2004"	16852	4224310	398.9
+	"45-54 years"	"45-54"	"Female"	"F"	"2005"	"2005"	17785	4292242	414.4
+	"45-54 years"	"45-54"	"Female"	"F"	"2006"	"2006"	17780	4333912	410.3
+	"45-54 years"	"45-54"	"Female"	"F"	"2007"	"2007"	18004	4382226	410.8
+	"45-54 years"	"45-54"	"Female"	"F"	"2008"	"2008"	18514	4412953	419.5
+	"45-54 years"	"45-54"	"Female"	"F"	"2009"	"2009"	18846	4422883	426.1
+	"45-54 years"	"45-54"	"Female"	"F"	"2010"	"2010"	18563	4421294	419.9
+	"45-54 years"	"45-54"	"Female"	"F"	"2011"	"2011"	19029	4348833	437.6
+	"45-54 years"	"45-54"	"Female"	"F"	"2012"	"2012"	18692	4259151	438.9
+	"45-54 years"	"45-54"	"Female"	"F"	"2013"	"2013"	18497	4181142	442.4
+	"45-54 years"	"45-54"	"Female"	"F"	"2014"	"2014"	18598	4110993	452.4
+	"45-54 years"	"45-54"	"Female"	"F"	"2015"	"2015"	18400	4049999	454.3
+	"45-54 years"	"45-54"	"Female"	"F"	"2016"	"2016"	18302	3989192	458.8
+	"45-54 years"	"45-54"	"Female"	"F"	"2017"	"2017"	17508	3931637	445.3
+	"45-54 years"	"45-54"	"Female"	"F"	"2018"	"2018"	17052	3854247	442.4
+	"45-54 years"	"45-54"	"Female"	"F"	"2019"	"2019"	16181	3771355	429.1
+	"45-54 years"	"45-54"	"Female"	"F"	"2020 "	"2020"	19471	3708027	525.1
+	"55-64 years"	"55-64"	"Female"	"F"	"1999"	"1999"	25449	2797460	909.7
+	"55-64 years"	"55-64"	"Female"	"F"	"2000"	"2000"	25753	2837124	907.7
+	"55-64 years"	"55-64"	"Female"	"F"	"2001"	"2001"	26233	2892788	906.8
+	"55-64 years"	"55-64"	"Female"	"F"	"2002"	"2002"	27019	3036572	889.8
+	"55-64 years"	"55-64"	"Female"	"F"	"2003"	"2003"	28028	3152497	889.1
+	"55-64 years"	"55-64"	"Female"	"F"	"2004"	"2004"	28106	3269215	859.7
+	"55-64 years"	"55-64"	"Female"	"F"	"2005"	"2005"	29092	3390900	857.9
+	"55-64 years"	"55-64"	"Female"	"F"	"2006"	"2006"	29428	3494877	842.0
+	"55-64 years"	"55-64"	"Female"	"F"	"2007"	"2007"	29315	3602820	813.7
+	"55-64 years"	"55-64"	"Female"	"F"	"2008"	"2008"	30665	3693114	830.3
+	"55-64 years"	"55-64"	"Female"	"F"	"2009"	"2009"	31105	3796376	819.3
+	"55-64 years"	"55-64"	"Female"	"F"	"2010"	"2010"	31742	3888760	816.2
+	"55-64 years"	"55-64"	"Female"	"F"	"2011"	"2011"	33145	4018020	824.9
+	"55-64 years"	"55-64"	"Female"	"F"	"2012"	"2012"	33585	4035224	832.3
+	"55-64 years"	"55-64"	"Female"	"F"	"2013"	"2013"	34638	4080290	848.9
+	"55-64 years"	"55-64"	"Female"	"F"	"2014"	"2014"	35872	4119949	870.7
+	"55-64 years"	"55-64"	"Female"	"F"	"2015"	"2015"	36858	4165491	884.8
+	"55-64 years"	"55-64"	"Female"	"F"	"2016"	"2016"	37827	4196174	901.5
+	"55-64 years"	"55-64"	"Female"	"F"	"2017"	"2017"	38748	4224886	917.1
+	"55-64 years"	"55-64"	"Female"	"F"	"2018"	"2018"	38863	4236456	917.3
+	"55-64 years"	"55-64"	"Female"	"F"	"2019"	"2019"	39166	4231864	925.5
+	"55-64 years"	"55-64"	"Female"	"F"	"2020 "	"2020"	46151	4208511	1096.6
+	"65-74 years"	"65-74"	"Female"	"F"	"1999"	"1999"	50864	2368708	2147.3
+	"65-74 years"	"65-74"	"Female"	"F"	"2000"	"2000"	50323	2359183	2133.1
+	"65-74 years"	"65-74"	"Female"	"F"	"2001"	"2001"	48937	2347224	2084.9
+	"65-74 years"	"65-74"	"Female"	"F"	"2002"	"2002"	48231	2339969	2061.2
+	"65-74 years"	"65-74"	"Female"	"F"	"2003"	"2003"	47779	2344604	2037.8
+	"65-74 years"	"65-74"	"Female"	"F"	"2004"	"2004"	46280	2354715	1965.4
+	"65-74 years"	"65-74"	"Female"	"F"	"2005"	"2005"	46631	2369887	1967.6
+	"65-74 years"	"65-74"	"Female"	"F"	"2006"	"2006"	45730	2394427	1909.9
+	"65-74 years"	"65-74"	"Female"	"F"	"2007"	"2007"	45457	2436694	1865.5
+	"65-74 years"	"65-74"	"Female"	"F"	"2008"	"2008"	47092	2507739	1877.9
+	"65-74 years"	"65-74"	"Female"	"F"	"2009"	"2009"	46695	2570113	1816.8
+	"65-74 years"	"65-74"	"Female"	"F"	"2010"	"2010"	47560	2606079	1825.0
+	"65-74 years"	"65-74"	"Female"	"F"	"2011"	"2011"	47953	2664262	1799.9
+	"65-74 years"	"65-74"	"Female"	"F"	"2012"	"2012"	49607	2797892	1773.0
+	"65-74 years"	"65-74"	"Female"	"F"	"2013"	"2013"	52186	2894326	1803.0
+	"65-74 years"	"65-74"	"Female"	"F"	"2014"	"2014"	53198	2992478	1777.7
+	"65-74 years"	"65-74"	"Female"	"F"	"2015"	"2015"	55251	3083697	1791.7
+	"65-74 years"	"65-74"	"Female"	"F"	"2016"	"2016"	56864	3169843	1793.9
+	"65-74 years"	"65-74"	"Female"	"F"	"2017"	"2017"	59208	3247971	1822.9
+	"65-74 years"	"65-74"	"Female"	"F"	"2018"	"2018"	59913	3312681	1808.6
+	"65-74 years"	"65-74"	"Female"	"F"	"2019"	"2019"	60984	3396981	1795.2
+	"65-74 years"	"65-74"	"Female"	"F"	"2020 "	"2020"	74059	3495840	2118.5
+	"75-84 years"	"75-84"	"Female"	"F"	"1999"	"1999"	87442	1699924	5143.9
+	"75-84 years"	"75-84"	"Female"	"F"	"2000"	"2000"	87736	1707659	5137.8
+	"75-84 years"	"75-84"	"Female"	"F"	"2001"	"2001"	86992	1714834	5072.9
+	"75-84 years"	"75-84"	"Female"	"F"	"2002"	"2002"	88330	1718870	5138.8
+	"75-84 years"	"75-84"	"Female"	"F"	"2003"	"2003"	87181	1721479	5064.3
+	"75-84 years"	"75-84"	"Female"	"F"	"2004"	"2004"	84263	1716750	4908.3
+	"75-84 years"	"75-84"	"Female"	"F"	"2005"	"2005"	84785	1712848	4949.9
+	"75-84 years"	"75-84"	"Female"	"F"	"2006"	"2006"	81631	1698563	4805.9
+	"75-84 years"	"75-84"	"Female"	"F"	"2007"	"2007"	79516	1689364	4706.9
+	"75-84 years"	"75-84"	"Female"	"F"	"2008"	"2008"	80732	1683305	4796.0
+	"75-84 years"	"75-84"	"Female"	"F"	"2009"	"2009"	76817	1665169	4613.2
+	"75-84 years"	"75-84"	"Female"	"F"	"2010"	"2010"	76504	1666625	4590.4
+	"75-84 years"	"75-84"	"Female"	"F"	"2011"	"2011"	76567	1671299	4581.3
+	"75-84 years"	"75-84"	"Female"	"F"	"2012"	"2012"	76095	1671620	4552.2
+	"75-84 years"	"75-84"	"Female"	"F"	"2013"	"2013"	76691	1682845	4557.2
+	"75-84 years"	"75-84"	"Female"	"F"	"2014"	"2014"	75697	1697872	4458.3
+	"75-84 years"	"75-84"	"Female"	"F"	"2015"	"2015"	77810	1714535	4538.3
+	"75-84 years"	"75-84"	"Female"	"F"	"2016"	"2016"	76777	1738058	4417.4
+	"75-84 years"	"75-84"	"Female"	"F"	"2017"	"2017"	78699	1777385	4427.8
+	"75-84 years"	"75-84"	"Female"	"F"	"2018"	"2018"	79833	1839979	4338.8
+	"75-84 years"	"75-84"	"Female"	"F"	"2019"	"2019"	80995	1888577	4288.7
+	"75-84 years"	"75-84"	"Female"	"F"	"2020 "	"2020"	97092	1924392	5045.3
+	"85+ years"	"85+"	"Female"	"F"	"1999"	"1999"	102914	680634	15120.3
+	"85+ years"	"85+"	"Female"	"F"	"2000"	"2000"	104492	690014	15143.5
+	"85+ years"	"85+"	"Female"	"F"	"2001"	"2001"	104727	688346	15214.3
+	"85+ years"	"85+"	"Female"	"F"	"2002"	"2002"	105914	685063	15460.5
+	"85+ years"	"85+"	"Female"	"F"	"2003"	"2003"	106569	685796	15539.5
+	"85+ years"	"85+"	"Female"	"F"	"2004"	"2004"	101963	686890	14844.2
+	"85+ years"	"85+"	"Female"	"F"	"2005"	"2005"	106095	697698	15206.4
+	"85+ years"	"85+"	"Female"	"F"	"2006"	"2006"	103412	707685	14612.7
+	"85+ years"	"85+"	"Female"	"F"	"2007"	"2007"	104608	721433	14500.0
+	"85+ years"	"85+"	"Female"	"F"	"2008"	"2008"	107839	730942	14753.4
+	"85+ years"	"85+"	"Female"	"F"	"2009"	"2009"	102839	742450	13851.3
+	"85+ years"	"85+"	"Female"	"F"	"2010"	"2010"	106445	755326	14092.6
+	"85+ years"	"85+"	"Female"	"F"	"2011"	"2011"	108204	771194	14030.7
+	"85+ years"	"85+"	"Female"	"F"	"2012"	"2012"	108981	780721	13959.0
+	"85+ years"	"85+"	"Female"	"F"	"2013"	"2013"	110366	787818	14009.1
+	"85+ years"	"85+"	"Female"	"F"	"2014"	"2014"	107954	792579	13620.6
+	"85+ years"	"85+"	"Female"	"F"	"2015"	"2015"	110726	799771	13844.7
+	"85+ years"	"85+"	"Female"	"F"	"2016"	"2016"	109285	803074	13608.3
+	"85+ years"	"85+"	"Female"	"F"	"2017"	"2017"	110157	823146	13382.4
+	"85+ years"	"85+"	"Female"	"F"	"2018"	"2018"	109869	826263	13297.1
+	"85+ years"	"85+"	"Female"	"F"	"2019"	"2019"	108515	827896	13107.3
+	"85+ years"	"85+"	"Female"	"F"	"2020 "	"2020"	126440	829556	15241.9
+	"Not Stated"	"NS"	"Female"	"F"	"1999"	"1999"	16	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2000"	"2000"	14	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2001"	"2001"	23	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2002"	"2002"	15	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2003"	"2003"	16	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2004"	"2004"	15	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2005"	"2005"	19	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2006"	"2006"	15	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2007"	"2007"	11	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2008"	"2008"	11	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2009"	"2009"	12	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2012"	"2012"	15	Not Applicable	Not Applicable
+	"Not Stated"	"NS"	"Female"	"F"	"2014"	"2014"	12	Not Applicable	Not Applicable
+"---"
+"Dataset: Underlying Cause of Death, 1999-2020"
+"Query Parameters:"
+"Gender: Female"
+"States: Barbour County, AL (01005); Bibb County, AL (01007); Blount County, AL (01009); Bullock County, AL (01011); Butler"
+"County, AL (01013); Calhoun County, AL (01015); Chambers County, AL (01017); Cherokee County, AL (01019); Chilton County, AL"
+"(01021); Choctaw County, AL (01023); Clarke County, AL (01025); Clay County, AL (01027); Cleburne County, AL (01029); Colbert"
+"County, AL (01033); Conecuh County, AL (01035); Coosa County, AL (01037); Covington County, AL (01039); Crenshaw County, AL"
+"(01041); Cullman County, AL (01043); Dale County, AL (01045); Dallas County, AL (01047); DeKalb County, AL (01049); Escambia"
+"County, AL (01053); Etowah County, AL (01055); Fayette County, AL (01057); Franklin County, AL (01059); Geneva County, AL"
+"(01061); Greene County, AL (01063); Hale County, AL (01065); Henry County, AL (01067); Jackson County, AL (01071); Lamar County,"
+"AL (01075); Lauderdale County, AL (01077); Lawrence County, AL (01079); Lowndes County, AL (01085); Macon County, AL (01087);"
+"Marengo County, AL (01091); Marion County, AL (01093); Marshall County, AL (01095); Monroe County, AL (01099); Perry County, AL"
+"(01105); Pickens County, AL (01107); Pike County, AL (01109); Randolph County, AL (01111); Russell County, AL (01113); Sumter"
+"County, AL (01119); Talladega County, AL (01121); Tallapoosa County, AL (01123); Walker County, AL (01127); Washington County,"
+"AL (01129); Wilcox County, AL (01131); Winston County, AL (01133); Aleutians East Borough, AK (02013); Aleutians West Census"
+"Area, AK (02016); Bethel Census Area, AK (02050); Bristol Bay Borough, AK (02060); Denali Borough, AK (02068); Dillingham Census"
+"Area, AK (02070); Lake and Peninsula Borough, AK (02164); Nome Census Area, AK (02180); North Slope Borough, AK (02185);"
+"Northwest Arctic Borough, AK (02188); Wade Hampton Census Area, AK (02270); Yukon-Koyukuk Census Area, AK (02290); Apache"
+"County, AZ (04001); Gila County, AZ (04007); Graham County, AZ (04009); Greenlee County, AZ (04011); La Paz County, AZ (04012);"
+"Mohave County, AZ (04015); Navajo County, AZ (04017); Santa Cruz County, AZ (04023); Yuma County, AZ (04027); Arkansas County,"
+"AR (05001); Ashley County, AR (05003); Boone County, AR (05009); Bradley County, AR (05011); Calhoun County, AR (05013); Carroll"
+"County, AR (05015); Chicot County, AR (05017); Clark County, AR (05019); Clay County, AR (05021); Cleburne County, AR (05023);"
+"Columbia County, AR (05027); Conway County, AR (05029); Crawford County, AR (05033); Crittenden County, AR (05035); Cross"
+"County, AR (05037); Dallas County, AR (05039); Desha County, AR (05041); Drew County, AR (05043); Franklin County, AR (05047);"
+"Fulton County, AR (05049); Greene County, AR (05055); Hempstead County, AR (05057); Hot Spring County, AR (05059); Howard"
+"County, AR (05061); Independence County, AR (05063); Izard County, AR (05065); Jackson County, AR (05067); Jefferson County, AR"
+"(05069); Johnson County, AR (05071); Lafayette County, AR (05073); Lawrence County, AR (05075); Lee County, AR (05077); Lincoln"
+"County, AR (05079); Little River County, AR (05081); Logan County, AR (05083); Madison County, AR (05087); Marion County, AR"
+"(05089); Miller County, AR (05091); Mississippi County, AR (05093); Monroe County, AR (05095); Montgomery County, AR (05097);"
+"Nevada County, AR (05099); Newton County, AR (05101); Ouachita County, AR (05103); Perry County, AR (05105); Phillips County, AR"
+"(05107); Pike County, AR (05109); Poinsett County, AR (05111); Polk County, AR (05113); Pope County, AR (05115); Prairie County,"
+"AR (05117); Randolph County, AR (05121); St. Francis County, AR (05123); Scott County, AR (05127); Searcy County, AR (05129);"
+"Sebastian County, AR (05131); Sevier County, AR (05133); Sharp County, AR (05135); Stone County, AR (05137); Union County, AR"
+"(05139); Van Buren County, AR (05141); White County, AR (05145); Woodruff County, AR (05147); Yell County, AR (05149); Colusa"
+"County, CA (06011); Del Norte County, CA (06015); Fresno County, CA (06019); Glenn County, CA (06021); Imperial County, CA"
+"(06025); Kern County, CA (06029); Kings County, CA (06031); Lake County, CA (06033); Madera County, CA (06039); Merced County,"
+"CA (06047); Modoc County, CA (06049); San Joaquin County, CA (06077); Siskiyou County, CA (06093); Stanislaus County, CA"
+"(06099); Sutter County, CA (06101); Tehama County, CA (06103); Trinity County, CA (06105); Tulare County, CA (06107); Yuba"
+"County, CA (06115); Alamosa County, CO (08003); Baca County, CO (08009); Bent County, CO (08011); Cheyenne County, CO (08017);"
+"Conejos County, CO (08021); Costilla County, CO (08023); Crowley County, CO (08025); Fremont County, CO (08043); Kiowa County,"
+"CO (08061); Kit Carson County, CO (08063); Las Animas County, CO (08071); Lincoln County, CO (08073); Logan County, CO (08075);"
+"Morgan County, CO (08087); Otero County, CO (08089); Prowers County, CO (08099); Pueblo County, CO (08101); Rio Grande County,"
+"CO (08105); Baker County, FL (12003); Bradford County, FL (12007); Calhoun County, FL (12013); Citrus County, FL (12017);"
+"Columbia County, FL (12023); DeSoto County, FL (12027); Dixie County, FL (12029); Franklin County, FL (12037); Gadsden County,"
+"FL (12039); Gilchrist County, FL (12041); Glades County, FL (12043); Gulf County, FL (12045); Hamilton County, FL (12047);"
+"Hardee County, FL (12049); Hendry County, FL (12051); Highlands County, FL (12055); Holmes County, FL (12059); Jackson County,"
+"FL (12063); Jefferson County, FL (12065); Lafayette County, FL (12067); Levy County, FL (12075); Liberty County, FL (12077);"
+"Madison County, FL (12079); Marion County, FL (12083); Okeechobee County, FL (12093); Polk County, FL (12105); Putnam County, FL"
+"(12107); Suwannee County, FL (12121); Taylor County, FL (12123); Union County, FL (12125); Washington County, FL (12133);"
+"Appling County, GA (13001); Atkinson County, GA (13003); Bacon County, GA (13005); Baker County, GA (13007); Baldwin County, GA"
+"(13009); Banks County, GA (13011); Bartow County, GA (13015); Ben Hill County, GA (13017); Berrien County, GA (13019); Bibb"
+"County, GA (13021); Bleckley County, GA (13023); Brantley County, GA (13025); Brooks County, GA (13027); Bulloch County, GA"
+"(13031); Burke County, GA (13033); Butts County, GA (13035); Calhoun County, GA (13037); Camden County, GA (13039); Candler"
+"County, GA (13043); Carroll County, GA (13045); Charlton County, GA (13049); Chattahoochee County, GA (13053); Chattooga County,"
+"GA (13055); Clarke County, GA (13059); Clay County, GA (13061); Clayton County, GA (13063); Clinch County, GA (13065); Coffee"
+"County, GA (13069); Colquitt County, GA (13071); Cook County, GA (13075); Crawford County, GA (13079); Crisp County, GA (13081);"
+"Dade County, GA (13083); Decatur County, GA (13087); Dodge County, GA (13091); Dooly County, GA (13093); Dougherty County, GA"
+"(13095); Early County, GA (13099); Echols County, GA (13101); Elbert County, GA (13105); Emanuel County, GA (13107); Evans"
+"County, GA (13109); Fannin County, GA (13111); Floyd County, GA (13115); Franklin County, GA (13119); Gilmer County, GA (13123);"
+"Glascock County, GA (13125); Gordon County, GA (13129); Grady County, GA (13131); Greene County, GA (13133); Habersham County,"
+"GA (13137); Hancock County, GA (13141); Haralson County, GA (13143); Hart County, GA (13147); Heard County, GA (13149); Irwin"
+"County, GA (13155); Jasper County, GA (13159); Jeff Davis County, GA (13161); Jefferson County, GA (13163); Jenkins County, GA"
+"(13165); Johnson County, GA (13167); Lamar County, GA (13171); Lanier County, GA (13173); Laurens County, GA (13175); Liberty"
+"County, GA (13179); Lincoln County, GA (13181); Long County, GA (13183); Lowndes County, GA (13185); McDuffie County, GA"
+"(13189); Macon County, GA (13193); Madison County, GA (13195); Marion County, GA (13197); Meriwether County, GA (13199); Miller"
+"County, GA (13201); Mitchell County, GA (13205); Monroe County, GA (13207); Montgomery County, GA (13209); Murray County, GA"
+"(13213); Oglethorpe County, GA (13221); Peach County, GA (13225); Pierce County, GA (13229); Pike County, GA (13231); Polk"
+"County, GA (13233); Pulaski County, GA (13235); Putnam County, GA (13237); Quitman County, GA (13239); Rabun County, GA (13241);"
+"Randolph County, GA (13243); Richmond County, GA (13245); Schley County, GA (13249); Screven County, GA (13251); Seminole"
+"County, GA (13253); Spalding County, GA (13255); Stephens County, GA (13257); Stewart County, GA (13259); Sumter County, GA"
+"(13261); Talbot County, GA (13263); Taliaferro County, GA (13265); Tattnall County, GA (13267); Taylor County, GA (13269);"
+"Telfair County, GA (13271); Terrell County, GA (13273); Thomas County, GA (13275); Tift County, GA (13277); Toombs County, GA"
+"(13279); Towns County, GA (13281); Treutlen County, GA (13283); Troup County, GA (13285); Turner County, GA (13287); Twiggs"
+"County, GA (13289); Union County, GA (13291); Upson County, GA (13293); Walker County, GA (13295); Ware County, GA (13299);"
+"Warren County, GA (13301); Washington County, GA (13303); Wayne County, GA (13305); Webster County, GA (13307); Wheeler County,"
+"GA (13309); Whitfield County, GA (13313); Wilcox County, GA (13315); Wilkes County, GA (13317); Wilkinson County, GA (13319);"
+"Worth County, GA (13321); Adams County, ID (16003); Benewah County, ID (16009); Butte County, ID (16023); Camas County, ID"
+"(16025); Canyon County, ID (16027); Cassia County, ID (16031); Clark County, ID (16033); Clearwater County, ID (16035); Custer"
+"County, ID (16037); Elmore County, ID (16039); Gem County, ID (16045); Gooding County, ID (16047); Jerome County, ID (16053);"
+"Lemhi County, ID (16059); Lincoln County, ID (16063); Minidoka County, ID (16067); Oneida County, ID (16071); Owyhee County, ID"
+"(16073); Payette County, ID (16075); Power County, ID (16077); Shoshone County, ID (16079); Twin Falls County, ID (16083);"
+"Washington County, ID (16087); Alexander County, IL (17003); Bond County, IL (17005); Brown County, IL (17009); Bureau County,"
+"IL (17011); Carroll County, IL (17015); Cass County, IL (17017); Christian County, IL (17021); Clay County, IL (17025); Coles"
+"County, IL (17029); Crawford County, IL (17033); Cumberland County, IL (17035); Douglas County, IL (17041); Edgar County, IL"
+"(17045); Edwards County, IL (17047); Fayette County, IL (17051); Franklin County, IL (17055); Fulton County, IL (17057);"
+"Gallatin County, IL (17059); Greene County, IL (17061); Hamilton County, IL (17065); Hancock County, IL (17067); Hardin County,"
+"IL (17069); Henderson County, IL (17071); Iroquois County, IL (17075); Jackson County, IL (17077); Jefferson County, IL (17081);"
+"Johnson County, IL (17087); Knox County, IL (17095); Lawrence County, IL (17101); McDonough County, IL (17109); Macon County, IL"
+"(17115); Marion County, IL (17121); Mason County, IL (17125); Massac County, IL (17127); Montgomery County, IL (17135); Moultrie"
+"County, IL (17139); Perry County, IL (17145); Pike County, IL (17149); Pope County, IL (17151); Pulaski County, IL (17153);"
+"Randolph County, IL (17157); Richland County, IL (17159); Saline County, IL (17165); Schuyler County, IL (17169); Scott County,"
+"IL (17171); Stephenson County, IL (17177); Union County, IL (17181); Vermilion County, IL (17183); Wabash County, IL (17185);"
+"Warren County, IL (17187); Wayne County, IL (17191); White County, IL (17193); Whiteside County, IL (17195); Winnebago County,"
+"IL (17201); Adams County, IN (18001); Blackford County, IN (18009); Cass County, IN (18017); Clay County, IN (18021); Clinton"
+"County, IN (18023); Crawford County, IN (18025); Daviess County, IN (18027); Delaware County, IN (18035); Elkhart County, IN"
+"(18039); Fayette County, IN (18041); Fountain County, IN (18045); Fulton County, IN (18049); Grant County, IN (18053); Greene"
+"County, IN (18055); Henry County, IN (18065); Jackson County, IN (18071); Jay County, IN (18075); Jefferson County, IN (18077);"
+"Jennings County, IN (18079); Knox County, IN (18083); Lagrange County, IN (18087); Lawrence County, IN (18093); Madison County,"
+"IN (18095); Marshall County, IN (18099); Martin County, IN (18101); Miami County, IN (18103); Newton County, IN (18111); Noble"
+"County, IN (18113); Ohio County, IN (18115); Orange County, IN (18117); Owen County, IN (18119); Parke County, IN (18121); Perry"
+"County, IN (18123); Pike County, IN (18125); Pulaski County, IN (18131); Randolph County, IN (18135); Rush County, IN (18139);"
+"Scott County, IN (18143); Starke County, IN (18149); Sullivan County, IN (18153); Switzerland County, IN (18155); Union County,"
+"IN (18161); Vermillion County, IN (18165); Wabash County, IN (18169); Washington County, IN (18175); Wayne County, IN (18177);"
+"Appanoose County, IA (19007); Clarke County, IA (19039); Crawford County, IA (19047); Davis County, IA (19051); Decatur County,"
+"IA (19053); Keokuk County, IA (19107); Lee County, IA (19111); Louisa County, IA (19115); Lucas County, IA (19117); Monroe"
+"County, IA (19135); Montgomery County, IA (19137); Ringgold County, IA (19159); Taylor County, IA (19173); Van Buren County, IA"
+"(19177); Wapello County, IA (19179); Wayne County, IA (19185); Webster County, IA (19187); Allen County, KS (20001); Anderson"
+"County, KS (20003); Chase County, KS (20017); Chautauqua County, KS (20019); Cherokee County, KS (20021); Cowley County, KS"
+"(20035); Elk County, KS (20049); Finney County, KS (20055); Ford County, KS (20057); Greenwood County, KS (20073); Labette"
+"County, KS (20099); Linn County, KS (20107); Lyon County, KS (20111); Montgomery County, KS (20125); Neosho County, KS (20133);"
+"Seward County, KS (20175); Wilson County, KS (20205); Woodson County, KS (20207); Wyandotte County, KS (20209); Adair County, KY"
+"(21001); Allen County, KY (21003); Ballard County, KY (21007); Barren County, KY (21009); Bath County, KY (21011); Bell County,"
+"KY (21013); Bourbon County, KY (21017); Boyd County, KY (21019); Bracken County, KY (21023); Breathitt County, KY (21025);"
+"Breckinridge County, KY (21027); Butler County, KY (21031); Caldwell County, KY (21033); Carlisle County, KY (21039); Carroll"
+"County, KY (21041); Carter County, KY (21043); Casey County, KY (21045); Christian County, KY (21047); Clay County, KY (21051);"
+"Clinton County, KY (21053); Crittenden County, KY (21055); Cumberland County, KY (21057); Edmonson County, KY (21061); Elliott"
+"County, KY (21063); Estill County, KY (21065); Fleming County, KY (21069); Floyd County, KY (21071); Fulton County, KY (21075);"
+"Gallatin County, KY (21077); Garrard County, KY (21079); Grant County, KY (21081); Graves County, KY (21083); Grayson County, KY"
+"(21085); Green County, KY (21087); Greenup County, KY (21089); Harlan County, KY (21095); Harrison County, KY (21097); Hart"
+"County, KY (21099); Henderson County, KY (21101); Henry County, KY (21103); Hickman County, KY (21105); Hopkins County, KY"
+"(21107); Jackson County, KY (21109); Johnson County, KY (21115); Knott County, KY (21119); Knox County, KY (21121); Larue"
+"County, KY (21123); Laurel County, KY (21125); Lawrence County, KY (21127); Lee County, KY (21129); Leslie County, KY (21131);"
+"Letcher County, KY (21133); Lewis County, KY (21135); Lincoln County, KY (21137); Livingston County, KY (21139); Logan County,"
+"KY (21141); Lyon County, KY (21143); McCreary County, KY (21147); Magoffin County, KY (21153); Marion County, KY (21155); Martin"
+"County, KY (21159); Mason County, KY (21161); Menifee County, KY (21165); Mercer County, KY (21167); Metcalfe County, KY"
+"(21169); Monroe County, KY (21171); Montgomery County, KY (21173); Morgan County, KY (21175); Muhlenberg County, KY (21177);"
+"Nelson County, KY (21179); Nicholas County, KY (21181); Ohio County, KY (21183); Owen County, KY (21187); Owsley County, KY"
+"(21189); Pendleton County, KY (21191); Perry County, KY (21193); Pike County, KY (21195); Powell County, KY (21197); Pulaski"
+"County, KY (21199); Robertson County, KY (21201); Rockcastle County, KY (21203); Rowan County, KY (21205); Russell County, KY"
+"(21207); Simpson County, KY (21213); Taylor County, KY (21217); Todd County, KY (21219); Trigg County, KY (21221); Trimble"
+"County, KY (21223); Union County, KY (21225); Washington County, KY (21229); Wayne County, KY (21231); Webster County, KY"
+"(21233); Whitley County, KY (21235); Wolfe County, KY (21237); Acadia Parish, LA (22001); Allen Parish, LA (22003); Assumption"
+"Parish, LA (22007); Avoyelles Parish, LA (22009); Beauregard Parish, LA (22011); Bienville Parish, LA (22013); Caldwell Parish,"
+"LA (22021); Cameron Parish, LA (22023); Catahoula Parish, LA (22025); Claiborne Parish, LA (22027); Concordia Parish, LA"
+"(22029); De Soto Parish, LA (22031); East Carroll Parish, LA (22035); East Feliciana Parish, LA (22037); Evangeline Parish, LA"
+"(22039); Franklin Parish, LA (22041); Grant Parish, LA (22043); Iberia Parish, LA (22045); Iberville Parish, LA (22047); Jackson"
+"Parish, LA (22049); Jefferson Davis Parish, LA (22053); Lafourche Parish, LA (22057); LaSalle Parish, LA (22059); Lincoln"
+"Parish, LA (22061); Madison Parish, LA (22065); Morehouse Parish, LA (22067); Natchitoches Parish, LA (22069); Orleans Parish,"
+"LA (22071); Pointe Coupee Parish, LA (22077); Rapides Parish, LA (22079); Red River Parish, LA (22081); Richland Parish, LA"
+"(22083); Sabine Parish, LA (22085); St. Bernard Parish, LA (22087); St. Helena Parish, LA (22091); St. James Parish, LA (22093);"
+"St. Landry Parish, LA (22097); St. Martin Parish, LA (22099); St. Mary Parish, LA (22101); Tangipahoa Parish, LA (22105); Tensas"
+"Parish, LA (22107); Terrebonne Parish, LA (22109); Union Parish, LA (22111); Vermilion Parish, LA (22113); Washington Parish, LA"
+"(22117); Webster Parish, LA (22119); West Carroll Parish, LA (22123); Winn Parish, LA (22127); Aroostook County, ME (23003);"
+"Oxford County, ME (23017); Piscataquis County, ME (23021); Somerset County, ME (23025); Washington County, ME (23029); Allegany"
+"County, MD (24001); Dorchester County, MD (24019); Garrett County, MD (24023); Somerset County, MD (24039); Baltimore city, MD"
+"(24510); Alcona County, MI (26001); Alger County, MI (26003); Alpena County, MI (26007); Arenac County, MI (26011); Branch"
+"County, MI (26023); Calhoun County, MI (26025); Cheboygan County, MI (26031); Chippewa County, MI (26033); Clare County, MI"
+"(26035); Delta County, MI (26041); Genesee County, MI (26049); Gladwin County, MI (26051); Gogebic County, MI (26053); Gratiot"
+"County, MI (26057); Hillsdale County, MI (26059); Houghton County, MI (26061); Huron County, MI (26063); Ionia County, MI"
+"(26067); Iosco County, MI (26069); Iron County, MI (26071); Isabella County, MI (26073); Kalkaska County, MI (26079); Keweenaw"
+"County, MI (26083); Lake County, MI (26085); Luce County, MI (26095); Mackinac County, MI (26097); Manistee County, MI (26101);"
+"Mason County, MI (26105); Mecosta County, MI (26107); Menominee County, MI (26109); Missaukee County, MI (26113); Montcalm"
+"County, MI (26117); Montmorency County, MI (26119); Muskegon County, MI (26121); Newaygo County, MI (26123); Oceana County, MI"
+"(26127); Ogemaw County, MI (26129); Ontonagon County, MI (26131); Osceola County, MI (26133); Oscoda County, MI (26135); Presque"
+"Isle County, MI (26141); Roscommon County, MI (26143); Saginaw County, MI (26145); St. Joseph County, MI (26149); Sanilac"
+"County, MI (26151); Schoolcraft County, MI (26153); Shiawassee County, MI (26155); Tuscola County, MI (26157); Van Buren County,"
+"MI (26159); Wayne County, MI (26163); Wexford County, MI (26165); Faribault County, MN (27043); Koochiching County, MN (27071);"
+"Mahnomen County, MN (27087); Mower County, MN (27099); Nobles County, MN (27105); Norman County, MN (27107); Pine County, MN"
+"(27115); Todd County, MN (27153); Wadena County, MN (27159); Watonwan County, MN (27165); Adams County, MS (28001); Alcorn"
+"County, MS (28003); Amite County, MS (28005); Attala County, MS (28007); Benton County, MS (28009); Bolivar County, MS (28011);"
+"Calhoun County, MS (28013); Carroll County, MS (28015); Chickasaw County, MS (28017); Choctaw County, MS (28019); Claiborne"
+"County, MS (28021); Clarke County, MS (28023); Clay County, MS (28025); Coahoma County, MS (28027); Copiah County, MS (28029);"
+"Covington County, MS (28031); Forrest County, MS (28035); Franklin County, MS (28037); George County, MS (28039); Greene County,"
+"MS (28041); Grenada County, MS (28043); Holmes County, MS (28051); Humphreys County, MS (28053); Issaquena County, MS (28055);"
+"Itawamba County, MS (28057); Jasper County, MS (28061); Jefferson County, MS (28063); Jefferson Davis County, MS (28065); Jones"
+"County, MS (28067); Kemper County, MS (28069); Lauderdale County, MS (28075); Lawrence County, MS (28077); Leake County, MS"
+"(28079); Leflore County, MS (28083); Lincoln County, MS (28085); Lowndes County, MS (28087); Marion County, MS (28091); Marshall"
+"County, MS (28093); Monroe County, MS (28095); Montgomery County, MS (28097); Neshoba County, MS (28099); Newton County, MS"
+"(28101); Noxubee County, MS (28103); Oktibbeha County, MS (28105); Panola County, MS (28107); Pearl River County, MS (28109);"
+"Perry County, MS (28111); Pike County, MS (28113); Pontotoc County, MS (28115); Prentiss County, MS (28117); Quitman County, MS"
+"(28119); Scott County, MS (28123); Sharkey County, MS (28125); Simpson County, MS (28127); Smith County, MS (28129); Stone"
+"County, MS (28131); Sunflower County, MS (28133); Tallahatchie County, MS (28135); Tate County, MS (28137); Tippah County, MS"
+"(28139); Tishomingo County, MS (28141); Tunica County, MS (28143); Union County, MS (28145); Walthall County, MS (28147); Warren"
+"County, MS (28149); Washington County, MS (28151); Wayne County, MS (28153); Webster County, MS (28155); Wilkinson County, MS"
+"(28157); Winston County, MS (28159); Yalobusha County, MS (28161); Yazoo County, MS (28163); Adair County, MO (29001); Atchison"
+"County, MO (29005); Audrain County, MO (29007); Barry County, MO (29009); Barton County, MO (29011); Bates County, MO (29013);"
+"Benton County, MO (29015); Bollinger County, MO (29017); Butler County, MO (29023); Caldwell County, MO (29025); Carroll County,"
+"MO (29033); Carter County, MO (29035); Cedar County, MO (29039); Chariton County, MO (29041); Clark County, MO (29045); Crawford"
+"County, MO (29055); Dade County, MO (29057); Dallas County, MO (29059); Daviess County, MO (29061); DeKalb County, MO (29063);"
+"Dent County, MO (29065); Douglas County, MO (29067); Dunklin County, MO (29069); Gasconade County, MO (29073); Gentry County, MO"
+"(29075); Grundy County, MO (29079); Harrison County, MO (29081); Henry County, MO (29083); Hickory County, MO (29085); Holt"
+"County, MO (29087); Howard County, MO (29089); Howell County, MO (29091); Iron County, MO (29093); Jasper County, MO (29097);"
+"Knox County, MO (29103); Laclede County, MO (29105); Lawrence County, MO (29109); Lewis County, MO (29111); Linn County, MO"
+"(29115); Livingston County, MO (29117); McDonald County, MO (29119); Macon County, MO (29121); Madison County, MO (29123);"
+"Maries County, MO (29125); Mercer County, MO (29129); Miller County, MO (29131); Mississippi County, MO (29133); Monroe County,"
+"MO (29137); Montgomery County, MO (29139); Morgan County, MO (29141); New Madrid County, MO (29143); Newton County, MO (29145);"
+"Nodaway County, MO (29147); Oregon County, MO (29149); Ozark County, MO (29153); Pemiscot County, MO (29155); Perry County, MO"
+"(29157); Pettis County, MO (29159); Pike County, MO (29163); Polk County, MO (29167); Putnam County, MO (29171); Ralls County,"
+"MO (29173); Randolph County, MO (29175); Reynolds County, MO (29179); Ripley County, MO (29181); St. Clair County, MO (29185);"
+"St. Francois County, MO (29187); Saline County, MO (29195); Schuyler County, MO (29197); Scotland County, MO (29199); Scott"
+"County, MO (29201); Shannon County, MO (29203); Shelby County, MO (29205); Stoddard County, MO (29207); Stone County, MO"
+"(29209); Sullivan County, MO (29211); Texas County, MO (29215); Vernon County, MO (29217); Washington County, MO (29221); Wayne"
+"County, MO (29223); Webster County, MO (29225); Worth County, MO (29227); Wright County, MO (29229); St. Louis city, MO (29510);"
+"Big Horn County, MT (30003); Blaine County, MT (30005); Deer Lodge County, MT (30023); Glacier County, MT (30035); Granite"
+"County, MT (30039); Lincoln County, MT (30053); Mineral County, MT (30061); Phillips County, MT (30071); Powell County, MT"
+"(30077); Roosevelt County, MT (30085); Rosebud County, MT (30087); Sanders County, MT (30089); Treasure County, MT (30103); Box"
+"Butte County, NE (31013); Dakota County, NE (31043); Dawson County, NE (31047); Pawnee County, NE (31133); Richardson County, NE"
+"(31147); Saline County, NE (31151); Churchill County, NV (32001); Esmeralda County, NV (32009); Eureka County, NV (32011);"
+"Humboldt County, NV (32013); Lander County, NV (32015); Lincoln County, NV (32017); Lyon County, NV (32019); Mineral County, NV"
+"(32021); Nye County, NV (32023); Pershing County, NV (32027); Storey County, NV (32029); White Pine County, NV (32033); Coos"
+"County, NH (33007); Cumberland County, NJ (34011); Catron County, NM (35003); Chaves County, NM (35005); Cibola County, NM"
+"(35006); Colfax County, NM (35007); Curry County, NM (35009); DeBaca County, NM (35011); Dona Ana County, NM (35013); Eddy"
+"County, NM (35015); Grant County, NM (35017); Guadalupe County, NM (35019); Harding County, NM (35021); Hidalgo County, NM"
+"(35023); Lea County, NM (35025); Luna County, NM (35029); McKinley County, NM (35031); Mora County, NM (35033); Otero County, NM"
+"(35035); Quay County, NM (35037); Rio Arriba County, NM (35039); Roosevelt County, NM (35041); San Juan County, NM (35045); San"
+"Miguel County, NM (35047); Sierra County, NM (35051); Socorro County, NM (35053); Taos County, NM (35055); Torrance County, NM"
+"(35057); Union County, NM (35059); Valencia County, NM (35061); Allegany County, NY (36003); Bronx County, NY (36005);"
+"Cattaraugus County, NY (36009); Chautauqua County, NY (36013); Chenango County, NY (36017); Delaware County, NY (36025);"
+"Franklin County, NY (36033); Fulton County, NY (36035); Lewis County, NY (36049); Montgomery County, NY (36057); Orleans County,"
+"NY (36073); Oswego County, NY (36075); St. Lawrence County, NY (36089); Steuben County, NY (36101); Wyoming County, NY (36121);"
+"Alexander County, NC (37003); Alleghany County, NC (37005); Anson County, NC (37007); Ashe County, NC (37009); Avery County, NC"
+"(37011); Beaufort County, NC (37013); Bertie County, NC (37015); Bladen County, NC (37017); Burke County, NC (37023); Caldwell"
+"County, NC (37027); Caswell County, NC (37033); Cherokee County, NC (37039); Chowan County, NC (37041); Clay County, NC (37043);"
+"Cleveland County, NC (37045); Columbus County, NC (37047); Davidson County, NC (37057); Duplin County, NC (37061); Edgecombe"
+"County, NC (37065); Franklin County, NC (37069); Gaston County, NC (37071); Graham County, NC (37075); Greene County, NC"
+"(37079); Halifax County, NC (37083); Hertford County, NC (37091); Hoke County, NC (37093); Hyde County, NC (37095); Jackson"
+"County, NC (37099); Jones County, NC (37103); Lee County, NC (37105); Lenoir County, NC (37107); McDowell County, NC (37111);"
+"Madison County, NC (37115); Martin County, NC (37117); Mitchell County, NC (37121); Montgomery County, NC (37123); Nash County,"
+"NC (37127); Northampton County, NC (37131); Person County, NC (37145); Polk County, NC (37149); Randolph County, NC (37151);"
+"Richmond County, NC (37153); Robeson County, NC (37155); Rockingham County, NC (37157); Rowan County, NC (37159); Rutherford"
+"County, NC (37161); Sampson County, NC (37163); Scotland County, NC (37165); Stanly County, NC (37167); Stokes County, NC"
+"(37169); Surry County, NC (37171); Swain County, NC (37173); Tyrrell County, NC (37177); Vance County, NC (37181); Warren"
+"County, NC (37185); Washington County, NC (37187); Wayne County, NC (37191); Wilkes County, NC (37193); Wilson County, NC"
+"(37195); Yadkin County, NC (37197); Yancey County, NC (37199); Adams County, ND (38001); Benson County, ND (38005); Bowman"
+"County, ND (38011); Eddy County, ND (38027); Emmons County, ND (38029); Foster County, ND (38031); Grant County, ND (38037);"
+"Hettinger County, ND (38041); LaMoure County, ND (38045); Logan County, ND (38047); McIntosh County, ND (38051); Nelson County,"
+"ND (38063); Rolette County, ND (38079); Sioux County, ND (38085); Slope County, ND (38087); Walsh County, ND (38099); Adams"
+"County, OH (39001); Allen County, OH (39003); Ashland County, OH (39005); Ashtabula County, OH (39007); Athens County, OH"
+"(39009); Belmont County, OH (39013); Brown County, OH (39015); Carroll County, OH (39019); Clark County, OH (39023); Clinton"
+"County, OH (39027); Columbiana County, OH (39029); Coshocton County, OH (39031); Crawford County, OH (39033); Darke County, OH"
+"(39037); Fayette County, OH (39047); Gallia County, OH (39053); Guernsey County, OH (39059); Hardin County, OH (39065); Harrison"
+"County, OH (39067); Highland County, OH (39071); Hocking County, OH (39073); Holmes County, OH (39075); Huron County, OH"
+"(39077); Jackson County, OH (39079); Jefferson County, OH (39081); Lawrence County, OH (39087); Logan County, OH (39091); Lucas"
+"County, OH (39095); Marion County, OH (39101); Meigs County, OH (39105); Monroe County, OH (39111); Morgan County, OH (39115);"
+"Muskingum County, OH (39119); Noble County, OH (39121); Paulding County, OH (39125); Perry County, OH (39127); Pike County, OH"
+"(39131); Richland County, OH (39139); Ross County, OH (39141); Sandusky County, OH (39143); Scioto County, OH (39145); Seneca"
+"County, OH (39147); Trumbull County, OH (39155); Tuscarawas County, OH (39157); Vinton County, OH (39163); Washington County, OH"
+"(39167); Williams County, OH (39171); Wyandot County, OH (39175); Adair County, OK (40001); Atoka County, OK (40005); Blaine"
+"County, OK (40011); Bryan County, OK (40013); Caddo County, OK (40015); Carter County, OK (40019); Cherokee County, OK (40021);"
+"Choctaw County, OK (40023); Cimarron County, OK (40025); Coal County, OK (40029); Cotton County, OK (40033); Craig County, OK"
+"(40035); Delaware County, OK (40041); Dewey County, OK (40043); Garvin County, OK (40049); Greer County, OK (40055); Harmon"
+"County, OK (40057); Haskell County, OK (40061); Hughes County, OK (40063); Jackson County, OK (40065); Jefferson County, OK"
+"(40067); Johnston County, OK (40069); Kay County, OK (40071); Kiowa County, OK (40075); Latimer County, OK (40077); Le Flore"
+"County, OK (40079); Lincoln County, OK (40081); Love County, OK (40085); McCurtain County, OK (40089); McIntosh County, OK"
+"(40091); Major County, OK (40093); Marshall County, OK (40095); Mayes County, OK (40097); Muskogee County, OK (40101); Nowata"
+"County, OK (40105); Okfuskee County, OK (40107); Okmulgee County, OK (40111); Osage County, OK (40113); Ottawa County, OK"
+"(40115); Pawnee County, OK (40117); Pittsburg County, OK (40121); Pottawatomie County, OK (40125); Pushmataha County, OK"
+"(40127); Seminole County, OK (40133); Sequoyah County, OK (40135); Texas County, OK (40139); Tillman County, OK (40141); Coos"
+"County, OR (41011); Crook County, OR (41013); Douglas County, OR (41019); Gilliam County, OR (41021); Grant County, OR (41023);"
+"Harney County, OR (41025); Jefferson County, OR (41031); Josephine County, OR (41033); Klamath County, OR (41035); Lake County,"
+"OR (41037); Malheur County, OR (41045); Morrow County, OR (41049); Sherman County, OR (41055); Umatilla County, OR (41059);"
+"Wasco County, OR (41065); Wheeler County, OR (41069); Armstrong County, PA (42005); Bedford County, PA (42009); Cameron County,"
+"PA (42023); Clarion County, PA (42031); Clearfield County, PA (42033); Clinton County, PA (42035); Crawford County, PA (42039);"
+"Elk County, PA (42047); Fayette County, PA (42051); Forest County, PA (42053); Fulton County, PA (42057); Greene County, PA"
+"(42059); Huntingdon County, PA (42061); Indiana County, PA (42063); Jefferson County, PA (42065); Juniata County, PA (42067); Mc"
+"Kean County, PA (42083); Mifflin County, PA (42087); Northumberland County, PA (42097); Philadelphia County, PA (42101); Potter"
+"County, PA (42105); Schuylkill County, PA (42107); Snyder County, PA (42109); Somerset County, PA (42111); Venango County, PA"
+"(42121); Abbeville County, SC (45001); Allendale County, SC (45005); Anderson County, SC (45007); Bamberg County, SC (45009);"
+"Barnwell County, SC (45011); Calhoun County, SC (45017); Cherokee County, SC (45021); Chester County, SC (45023); Chesterfield"
+"County, SC (45025); Clarendon County, SC (45027); Colleton County, SC (45029); Darlington County, SC (45031); Dillon County, SC"
+"(45033); Edgefield County, SC (45037); Fairfield County, SC (45039); Florence County, SC (45041); Georgetown County, SC (45043);"
+"Greenwood County, SC (45047); Hampton County, SC (45049); Jasper County, SC (45053); Kershaw County, SC (45055); Lancaster"
+"County, SC (45057); Laurens County, SC (45059); Lee County, SC (45061); McCormick County, SC (45065); Marion County, SC (45067);"
+"Marlboro County, SC (45069); Newberry County, SC (45071); Oconee County, SC (45073); Orangeburg County, SC (45075); Saluda"
+"County, SC (45081); Spartanburg County, SC (45083); Sumter County, SC (45085); Union County, SC (45087); Williamsburg County, SC"
+"(45089); Aurora County, SD (46003); Bennett County, SD (46007); Brule County, SD (46015); Buffalo County, SD (46017); Charles"
+"Mix County, SD (46023); Corson County, SD (46031); Custer County, SD (46033); Day County, SD (46037); Dewey County, SD (46041);"
+"Douglas County, SD (46043); Fall River County, SD (46047); Haakon County, SD (46055); Jackson County, SD (46071); Jerauld"
+"County, SD (46073); Jones County, SD (46075); Marshall County, SD (46091); Mellette County, SD (46095); Roberts County, SD"
+"(46109); Shannon County, SD (46113); Stanley County, SD (46117); Todd County, SD (46121); Ziebach County, SD (46137); Bedford"
+"County, TN (47003); Benton County, TN (47005); Bledsoe County, TN (47007); Bradley County, TN (47011); Campbell County, TN"
+"(47013); Cannon County, TN (47015); Carroll County, TN (47017); Carter County, TN (47019); Chester County, TN (47023); Claiborne"
+"County, TN (47025); Clay County, TN (47027); Cocke County, TN (47029); Coffee County, TN (47031); Crockett County, TN (47033);"
+"Cumberland County, TN (47035); Decatur County, TN (47039); DeKalb County, TN (47041); Dyer County, TN (47045); Fentress County,"
+"TN (47049); Franklin County, TN (47051); Gibson County, TN (47053); Giles County, TN (47055); Grainger County, TN (47057);"
+"Greene County, TN (47059); Grundy County, TN (47061); Hamblen County, TN (47063); Hancock County, TN (47067); Hardeman County,"
+"TN (47069); Hardin County, TN (47071); Hawkins County, TN (47073); Haywood County, TN (47075); Henderson County, TN (47077);"
+"Henry County, TN (47079); Hickman County, TN (47081); Houston County, TN (47083); Humphreys County, TN (47085); Jackson County,"
+"TN (47087); Jefferson County, TN (47089); Johnson County, TN (47091); Lake County, TN (47095); Lauderdale County, TN (47097);"
+"Lawrence County, TN (47099); Lewis County, TN (47101); Lincoln County, TN (47103); McMinn County, TN (47107); McNairy County, TN"
+"(47109); Macon County, TN (47111); Marion County, TN (47115); Marshall County, TN (47117); Meigs County, TN (47121); Monroe"
+"County, TN (47123); Moore County, TN (47127); Morgan County, TN (47129); Obion County, TN (47131); Overton County, TN (47133);"
+"Perry County, TN (47135); Pickett County, TN (47137); Polk County, TN (47139); Putnam County, TN (47141); Rhea County, TN"
+"(47143); Roane County, TN (47145); Scott County, TN (47151); Sequatchie County, TN (47153); Smith County, TN (47159); Stewart"
+"County, TN (47161); Trousdale County, TN (47169); Unicoi County, TN (47171); Union County, TN (47173); Van Buren County, TN"
+"(47175); Warren County, TN (47177); Wayne County, TN (47181); Weakley County, TN (47183); White County, TN (47185); Anderson"
+"County, TX (48001); Andrews County, TX (48003); Angelina County, TX (48005); Atascosa County, TX (48013); Bailey County, TX"
+"(48017); Baylor County, TX (48023); Bee County, TX (48025); Borden County, TX (48033); Bosque County, TX (48035); Bowie County,"
+"TX (48037); Brewster County, TX (48043); Briscoe County, TX (48045); Brooks County, TX (48047); Brown County, TX (48049);"
+"Burleson County, TX (48051); Caldwell County, TX (48055); Calhoun County, TX (48057); Callahan County, TX (48059); Cameron"
+"County, TX (48061); Camp County, TX (48063); Cass County, TX (48067); Castro County, TX (48069); Cherokee County, TX (48073);"
+"Childress County, TX (48075); Cochran County, TX (48079); Coke County, TX (48081); Coleman County, TX (48083); Collingsworth"
+"County, TX (48087); Colorado County, TX (48089); Comanche County, TX (48093); Concho County, TX (48095); Cooke County, TX"
+"(48097); Cottle County, TX (48101); Crane County, TX (48103); Crockett County, TX (48105); Crosby County, TX (48107); Culberson"
+"County, TX (48109); Dallam County, TX (48111); Dawson County, TX (48115); Deaf Smith County, TX (48117); Delta County, TX"
+"(48119); DeWitt County, TX (48123); Dickens County, TX (48125); Dimmit County, TX (48127); Duval County, TX (48131); Eastland"
+"County, TX (48133); Ector County, TX (48135); Edwards County, TX (48137); El Paso County, TX (48141); Erath County, TX (48143);"
+"Falls County, TX (48145); Fannin County, TX (48147); Fisher County, TX (48151); Floyd County, TX (48153); Foard County, TX"
+"(48155); Franklin County, TX (48159); Freestone County, TX (48161); Frio County, TX (48163); Gaines County, TX (48165); Garza"
+"County, TX (48169); Glasscock County, TX (48173); Goliad County, TX (48175); Gonzales County, TX (48177); Gray County, TX"
+"(48179); Gregg County, TX (48183); Grimes County, TX (48185); Hale County, TX (48189); Hall County, TX (48191); Hamilton County,"
+"TX (48193); Hansford County, TX (48195); Hardeman County, TX (48197); Harrison County, TX (48203); Hartley County, TX (48205);"
+"Haskell County, TX (48207); Hemphill County, TX (48211); Henderson County, TX (48213); Hidalgo County, TX (48215); Hill County,"
+"TX (48217); Hockley County, TX (48219); Hopkins County, TX (48223); Houston County, TX (48225); Howard County, TX (48227);"
+"Hudspeth County, TX (48229); Hunt County, TX (48231); Hutchinson County, TX (48233); Irion County, TX (48235); Jasper County, TX"
+"(48241); Jeff Davis County, TX (48243); Jefferson County, TX (48245); Jim Hogg County, TX (48247); Jim Wells County, TX (48249);"
+"Jones County, TX (48253); Karnes County, TX (48255); Kenedy County, TX (48261); Kent County, TX (48263); Kimble County, TX"
+"(48267); King County, TX (48269); Kinney County, TX (48271); Kleberg County, TX (48273); Knox County, TX (48275); Lamar County,"
+"TX (48277); Lamb County, TX (48279); La Salle County, TX (48283); Lavaca County, TX (48285); Lee County, TX (48287); Leon"
+"County, TX (48289); Liberty County, TX (48291); Limestone County, TX (48293); Lipscomb County, TX (48295); Live Oak County, TX"
+"(48297); Loving County, TX (48301); Lynn County, TX (48305); McCulloch County, TX (48307); McLennan County, TX (48309); McMullen"
+"County, TX (48311); Madison County, TX (48313); Marion County, TX (48315); Martin County, TX (48317); Mason County, TX (48319);"
+"Matagorda County, TX (48321); Maverick County, TX (48323); Medina County, TX (48325); Menard County, TX (48327); Milam County,"
+"TX (48331); Mills County, TX (48333); Mitchell County, TX (48335); Montague County, TX (48337); Moore County, TX (48341); Morris"
+"County, TX (48343); Motley County, TX (48345); Nacogdoches County, TX (48347); Navarro County, TX (48349); Newton County, TX"
+"(48351); Nolan County, TX (48353); Nueces County, TX (48355); Ochiltree County, TX (48357); Oldham County, TX (48359); Orange"
+"County, TX (48361); Palo Pinto County, TX (48363); Panola County, TX (48365); Parmer County, TX (48369); Pecos County, TX"
+"(48371); Polk County, TX (48373); Potter County, TX (48375); Presidio County, TX (48377); Rains County, TX (48379); Reagan"
+"County, TX (48383); Real County, TX (48385); Red River County, TX (48387); Reeves County, TX (48389); Refugio County, TX"
+"(48391); Roberts County, TX (48393); Robertson County, TX (48395); Runnels County, TX (48399); Rusk County, TX (48401); Sabine"
+"County, TX (48403); San Augustine County, TX (48405); San Jacinto County, TX (48407); San Patricio County, TX (48409); San Saba"
+"County, TX (48411); Schleicher County, TX (48413); Scurry County, TX (48415); Shackelford County, TX (48417); Shelby County, TX"
+"(48419); Sherman County, TX (48421); Somervell County, TX (48425); Starr County, TX (48427); Stephens County, TX (48429);"
+"Sterling County, TX (48431); Stonewall County, TX (48433); Sutton County, TX (48435); Swisher County, TX (48437); Terrell"
+"County, TX (48443); Terry County, TX (48445); Throckmorton County, TX (48447); Titus County, TX (48449); Trinity County, TX"
+"(48455); Tyler County, TX (48457); Upshur County, TX (48459); Upton County, TX (48461); Uvalde County, TX (48463); Val Verde"
+"County, TX (48465); Van Zandt County, TX (48467); Victoria County, TX (48469); Walker County, TX (48471); Waller County, TX"
+"(48473); Ward County, TX (48475); Webb County, TX (48479); Wharton County, TX (48481); Wheeler County, TX (48483); Wilbarger"
+"County, TX (48487); Willacy County, TX (48489); Winkler County, TX (48495); Wood County, TX (48499); Yoakum County, TX (48501);"
+"Young County, TX (48503); Zapata County, TX (48505); Zavala County, TX (48507); Carbon County, UT (49007); Garfield County, UT"
+"(49017); Kane County, UT (49025); San Juan County, UT (49037); Orleans County, VT (50019); Accomack County, VA (51001);"
+"Alleghany County, VA (51005); Appomattox County, VA (51011); Bath County, VA (51017); Bland County, VA (51021); Brunswick"
+"County, VA (51025); Buchanan County, VA (51027); Buckingham County, VA (51029); Carroll County, VA (51035); Charles City County,"
+"VA (51036); Charlotte County, VA (51037); Craig County, VA (51045); Dickenson County, VA (51051); Dinwiddie County, VA (51053);"
+"Floyd County, VA (51063); Franklin County, VA (51067); Giles County, VA (51071); Grayson County, VA (51077); Greensville County,"
+"VA (51081); Halifax County, VA (51083); Henry County, VA (51089); Highland County, VA (51091); Lee County, VA (51105); Lunenburg"
+"County, VA (51111); Mecklenburg County, VA (51117); Northampton County, VA (51131); Nottoway County, VA (51135); Page County, VA"
+"(51139); Patrick County, VA (51141); Pittsylvania County, VA (51143); Prince Edward County, VA (51147); Pulaski County, VA"
+"(51155); Rockbridge County, VA (51163); Russell County, VA (51167); Scott County, VA (51169); Smyth County, VA (51173);"
+"Southampton County, VA (51175); Surry County, VA (51181); Sussex County, VA (51183); Tazewell County, VA (51185); Wise County,"
+"VA (51195); Wythe County, VA (51197); Bristol city, VA (51520); Buena Vista city, VA (51530); Clifton Forge city, VA (51560);"
+"Covington city, VA (51580); Danville city, VA (51590); Emporia city, VA (51595); Franklin city, VA (51620); Galax city, VA"
+"(51640); Hopewell city, VA (51670); Lexington city, VA (51678); Lynchburg city, VA (51680); Martinsville city, VA (51690);"
+"Norton city, VA (51720); Petersburg city, VA (51730); Radford city, VA (51750); Richmond city, VA (51760); Roanoke city, VA"
+"(51770); Adams County, WA (53001); Cowlitz County, WA (53015); Douglas County, WA (53017); Ferry County, WA (53019); Franklin"
+"County, WA (53021); Grant County, WA (53025); Grays Harbor County, WA (53027); Lewis County, WA (53041); Okanogan County, WA"
+"(53047); Pacific County, WA (53049); Wahkiakum County, WA (53069); Yakima County, WA (53077); Barbour County, WV (54001); Boone"
+"County, WV (54005); Braxton County, WV (54007); Calhoun County, WV (54013); Clay County, WV (54015); Doddridge County, WV"
+"(54017); Fayette County, WV (54019); Gilmer County, WV (54021); Grant County, WV (54023); Greenbrier County, WV (54025);"
+"Hampshire County, WV (54027); Hardy County, WV (54031); Jackson County, WV (54035); Lewis County, WV (54041); Lincoln County, WV"
+"(54043); Logan County, WV (54045); McDowell County, WV (54047); Marshall County, WV (54051); Mason County, WV (54053); Mercer"
+"County, WV (54055); Mineral County, WV (54057); Mingo County, WV (54059); Monroe County, WV (54063); Morgan County, WV (54065);"
+"Nicholas County, WV (54067); Pendleton County, WV (54071); Pleasants County, WV (54073); Pocahontas County, WV (54075); Randolph"
+"County, WV (54083); Ritchie County, WV (54085); Roane County, WV (54087); Summers County, WV (54089); Taylor County, WV (54091);"
+"Tucker County, WV (54093); Tyler County, WV (54095); Upshur County, WV (54097); Wayne County, WV (54099); Webster County, WV"
+"(54101); Wetzel County, WV (54103); Wirt County, WV (54105); Wyoming County, WV (54109); Adams County, WI (55001); Ashland"
+"County, WI (55003); Burnett County, WI (55013); Clark County, WI (55019); Crawford County, WI (55023); Florence County, WI"
+"(55037); Forest County, WI (55041); Iron County, WI (55051); Jackson County, WI (55053); Juneau County, WI (55057); Langlade"
+"County, WI (55067); Marinette County, WI (55075); Marquette County, WI (55077); Menominee County, WI (55078); Price County, WI"
+"(55099); Richland County, WI (55103); Rusk County, WI (55107); Taylor County, WI (55119); Vernon County, WI (55123); Waushara"
+"County, WI (55137)"
+"Group By: Ten-Year Age Groups; Gender; Year"
+"Show Totals: False"
+"Show Zero Values: False"
+"Show Suppressed: False"
+"Calculate Rates Per: 100,000"
+"Rate Options: Default intercensal populations for years 2001-2009 (except Infant Age Groups)"
+"---"
+"Help: See http://wonder.cdc.gov/wonder/help/ucd.html for more information."
+"---"
+"Query Date: Jul 30, 2024 11:44:46 PM"
+"---"
+"Suggested Citation: Centers for Disease Control and Prevention, National Center for Health Statistics. National Vital Statistics"
+"System, Mortality 1999-2020 on CDC WONDER Online Database, released in 2021. Data are from the Multiple Cause of Death Files,"
+"1999-2020, as compiled from data provided by the 57 vital statistics jurisdictions through the Vital Statistics Cooperative"
+"Program. Accessed at http://wonder.cdc.gov/ucd-icd10.html on Jul 30, 2024 11:44:46 PM"
+"---"
+Messages:
+"1. Rows with suppressed Deaths are hidden. Use Quick Options above to show suppressed rows."
+"---"
+Footnotes:
+"1. Data are not available for this year for all of the requested areas. See Caveats below for more information."
+"2. Data discontinuity due to county line boundary changes in requested years. See Caveats below for more information."
+"3. Deaths for Allen Parish, Louisiana are under reported in years 2006 through 2008. See Caveats below for more information."
+"---"
+Caveats:
+"1. As of April 3, 2017, the underlying cause of death has been revised for 125 deaths in 2014. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#2014-Revision."
+"2. Data for Denali Borough, Alaska (FIPS code 02068) are only available for 2003 and later; for computational purposes, counts"
+"and population estimates for 1999-2002 are set to zero. Thus, counts and rates shown in multi-year requests for this entity do"
+"not include any data for years prior to 2003, only data for 2003 and later. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Denali Borough."
+"3. There is a discontinuity in the mortality and population data for Yukon-Koyukuk Census Area (FIPS code 02290) between 2002"
+"and 2003. The discontinuity occurs because part of Yukon-Koyukuk Census Area became Denali Borough, Alaska (FIPS code 02068) and"
+"beginning in 2003, deaths and population counts for this former part of Yukon-Koyukuk are reported for Denali Borough and are no"
+"longer included with data for Yukon-Koyukuk."
+"4. Death rates for Clifton Forge city, Virginia (FIPS code 51560) are available only for 1999-2000. For 2001 and beyond, death"
+"counts and population estimates for Clifton Forge city have been combined with those for Alleghany county, Virginia (FIPS code"
+"51005). Death counts and population estimates for this entity from multi-year requests, only reflect data from 1999 and 2000;"
+"for 2001 and beyond they have been set to zero. More information: http://wonder.cdc.gov/wonder/help/ucd.html#Clifton Forge."
+"5. There is a discontinuity in the mortality and population data for Alleghany, Virginia (FIPS code 51005) between 2000 and"
+"2001. It occurs because for 2001 and beyond, death counts and population estimates for Clifton Forge city, Virginia (FIPS code"
+"51560) have been combined with those for Alleghany county."
+"6. Deaths for Allen Parish, Louisiana (FIPS code 22003] in years 2006 through 2008 are under reported due to problems with"
+"registering the deaths with the Louisiana Vital Statistics Office."
+"7. Data are Suppressed when the data meet the criteria for confidentiality constraints. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Assurance of Confidentiality."
+"8. Death rates are flagged as Unreliable when the rate is calculated with a numerator of 20 or less. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Unreliable."
+"9. Deaths of persons with Age ""Not Stated"" are included in ""All"" counts and rates, but are not distributed among age groups,"
+"so are not included in age-specific counts, age-specific rates or in any age-adjusted rates. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Not Stated."
+"10. The population figures for year 2020 are bridged-race estimates of the July 1 resident population, from the Vintage 2020"
+"postcensal series released by NCHS on September 22, 2021. The population figures for year 2019 are bridged-race estimates of the"
+"July 1 resident population, from the Vintage 2019 postcensal series released by NCHS on July 9, 2020. The population figures for"
+"year 2018 are bridged-race estimates of the July 1 resident population, from the Vintage 2018 postcensal series released by NCHS"
+"on June 25, 2019. The population figures for year 2017 are bridged-race estimates of the July 1 resident population, from the"
+"Vintage 2017 postcensal series released by NCHS on June 27, 2018. The population figures for year 2016 are bridged-race"
+"estimates of the July 1 resident population, from the Vintage 2016 postcensal series released by NCHS on June 26, 2017. The"
+"population figures for year 2015 are bridged-race estimates of the July 1 resident population, from the Vintage 2015 postcensal"
+"series released by NCHS on June 28, 2016. The population figures for year 2014 are bridged-race estimates of the July 1 resident"
+"population, from the Vintage 2014 postcensal series released by NCHS on June 30, 2015. The population figures for year 2013 are"
+"bridged-race estimates of the July 1 resident population, from the Vintage 2013 postcensal series released by NCHS on June 26,"
+"2014. The population figures for year 2012 are bridged-race estimates of the July 1 resident population, from the Vintage 2012"
+"postcensal series released by NCHS on June 13, 2013. The population figures for year 2011 are bridged-race estimates of the July"
+"1 resident population, from the Vintage 2011 postcensal series released by NCHS on July 18, 2012. Population figures for 2010"
+"are April 1 Census counts. The population figures for years 2001 - 2009 are bridged-race estimates of the July 1 resident"
+"population, from the revised intercensal county-level 2000 - 2009 series released by NCHS on October 26, 2012. Population"
+"figures for 2000 are April 1 Census counts. Population figures for 1999 are from the 1990-1999 intercensal series of July 1"
+"estimates. Population figures for the infant age groups are the number of live births. <br/><b>Note:</b> Rates and population"
+"figures for years 2001 - 2009 differ slightly from previously published reports, due to use of the population estimates which"
+"were available at the time of release."
+"11. The population figures used in the calculation of death rates for the age group 'under 1 year' are the estimates of the"
+"resident population that is under one year of age. More information: http://wonder.cdc.gov/wonder/help/ucd.html#Age Group."
