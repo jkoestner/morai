@@ -33,19 +33,19 @@ in greek mythology are known as the fates. They are personifications of destiny.
 The name Morai was chosen as the package is designed to help actuaries review 
 mortality and experience data.
 
-**🔬 Jupyter Notebook:**
-
-- [Data Process](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/01.data_process.ipynb)
-- [Exploratory](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/02.exploratory.ipynb)
-- [Predictive Models](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/06.predictive_model.ipynb)
-- And Others
-
 **📊 Dashboard:**
 
 - [Dashboard](https://morai.koestner.fun)
 - Data Overview: ![dash_data_input](docs/screenshots/morai_data.gif)
 - Data Tables: ![dash_data_tables](docs/screenshots/morai_tables.gif)
 - Data CDC: ![dash_cdc](docs/screenshots/morai_cdc.gif)
+
+**🔬 Jupyter Notebook:**
+
+- [Data Process](http://githubtocolab.com/jkoestner/morai/blob/main/notebooks/01.data_process.ipynb)
+- [Exploratory](http://githubtocolab.com/jkoestner/morai/blob/main/notebooks/02.exploratory.ipynb)
+- [Predictive Models](http://githubtocolab.com/jkoestner/morai/blob/main/notebooks/06.1.predictive_model.ipynb)
+- And Others
 
 ## Installation
 

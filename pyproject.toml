@@ -57,7 +57,7 @@ dev = [
 ]
 
 neural = [
-    "pytorch>=2.0.1",                   # only for neural network class
+    "torch>=2.5.1",                   # only for neural network class
 ]
 
 r = [
