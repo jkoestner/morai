@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          python -m pip install .[dev,r]
+          python -m pip install .[dev,neural,r]
       - name: Set R environment variables
         run: |
           echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"

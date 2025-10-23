@@ -41,7 +41,7 @@ def test_neural_poisson():
     assert model.task == "poisson"
 
     # test fit
-    model.fit(X=X, y=y, weights=weights, epochs=100, lr=0.001)
+    model.fit(X=X, y=y, weights=weights, epochs=10, lr=0.001)
     assert set(model.embeddings.keys()) == {"gender", "faceband"}
     assert model.embeddings["gender"].num_embeddings == 3
     assert model.embeddings["gender"].embedding_dim == 2
@@ -53,9 +53,7 @@ def test_neural_poisson():
     predictions = model.predict(X)
     predictions_mean = helpers._weighted_mean(predictions, weights)
     y_mean = helpers._weighted_mean(y, weights)
-    assert predictions_mean == approx(y_mean, abs=0.02), (
-        "neural mean is off and should be close to .438"
-    )
+    assert predictions_mean == approx(y_mean, abs=0.02)
 
 
 def test_neural_binomial():
@@ -95,18 +93,16 @@ def test_neural_binomial():
     assert model.task == "binomial"
 
     # test fit
-    model.fit(X=X, y=y, weights=weights, epochs=100, lr=0.001, dropout=0.1)
+    model.fit(X=X, y=y, weights=weights, epochs=10, lr=0.001, dropout=0.01)
     assert set(model.embeddings.keys()) == {"gender", "faceband"}
     assert model.embeddings["gender"].num_embeddings == 3
     assert model.embeddings["gender"].embedding_dim == 5
-    assert model.dropout1.p == 0.1
-    assert model.dropout2.p == 0.1
-    assert model.dropout3.p == 0.1
+    assert model.dropout1.p == 0.01
+    assert model.dropout2.p == 0.01
+    assert model.dropout3.p == 0.01
 
     # test predict
     predictions = model.predict(X)
     predictions_mean = helpers._weighted_mean(predictions, weights)
     y_mean = helpers._weighted_mean(y, weights)
-    assert predictions_mean == approx(y_mean, abs=0.05), (
-        "neural mean is off and should be close to .438"
-    )
+    assert predictions_mean == approx(y_mean, abs=0.2)

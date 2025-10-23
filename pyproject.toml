@@ -57,7 +57,6 @@ dev = [
 ]
 
 neural = [
-    "h2o>=3.46.0",                      # only for h2o
     "pytorch>=2.0.1",                   # only for neural network class
 ]
 
