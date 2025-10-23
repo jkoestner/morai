@@ -1,11 +1,15 @@
 """Tests the neural models."""
 
 import pandas as pd
+import pytest
 from pytest import approx
 
 from morai.forecast import preprocessors
-from morai.models import neural
 from morai.utils import helpers
+
+torch = pytest.importorskip("torch", reason="torch required for neural tests")
+
+from morai.models import neural  # noqa: E402
 
 test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast" / "models"
 seed = 42
