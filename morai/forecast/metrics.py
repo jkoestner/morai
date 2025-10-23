@@ -1,6 +1,6 @@
 """Metrics used in the models."""
 
-import json
+import json as std_json
 from io import StringIO
 from typing import Any, Optional, Union
 
@@ -292,15 +292,17 @@ class ModelResults:
             logger.info(f"loading results from {filepath}")
 
             with open(filepath, "r") as file:
-                data = json.load(file)
-            model_df = pd.read_json(StringIO(json.dumps(data["model"])), orient="split")
+                data = std_json.load(file)
+            model_df = pd.read_json(
+                StringIO(std_json.dumps(data["model"])), orient="split"
+            )
             model_df["date_added"] = pd.to_datetime(model_df["date_added"], unit="ms")
             scorecard_df = pd.read_json(
-                StringIO(json.dumps(data["scorecard"])), orient="split"
+                StringIO(std_json.dumps(data["scorecard"])), orient="split"
             )
             scorecard_df.columns = pd.MultiIndex.from_tuples(scorecard_df.columns)
             importance_df = pd.read_json(
-                StringIO(json.dumps(data["importance"])), orient="split"
+                StringIO(std_json.dumps(data["importance"])), orient="split"
             )
 
             self.model = model_df
@@ -434,7 +436,7 @@ class ModelResults:
 
     def save_model(self, filepath: Optional[str] = None) -> None:
         """
-        Save the model.
+        Save the model as a json file.
 
         Parameters
         ----------
@@ -458,9 +460,13 @@ class ModelResults:
         logger.info(f"saving results to {filepath}")
 
         # saving the results
-        model_json = json.loads(self.model.to_json(orient="split", index=False))
-        scorecard_json = json.loads(self.scorecard.to_json(orient="split", index=False))
-        importance_json = json.loads(
+        # ensure path is a string
+        self.model["data_path"] = self.model["data_path"].astype(str)
+        model_json = std_json.loads(self.model.to_json(orient="split", index=False))
+        scorecard_json = std_json.loads(
+            self.scorecard.to_json(orient="split", index=False)
+        )
+        importance_json = std_json.loads(
             self.importance.to_json(orient="split", index=False)
         )
         model_results = {
@@ -469,7 +475,7 @@ class ModelResults:
             "importance": importance_json,
         }
         with open(filepath, "w") as file:
-            json.dump(model_results, file, indent=4)
+            std_json.dump(model_results, file, indent=4)
 
     def get_scorecard(
         self,

@@ -205,7 +205,7 @@ def preprocess_data(
             # sparse=True is used to save memory however many models
             # don't support sparse
             dummies = pd.get_dummies(
-                model_data[col], prefix=col, dtype="int8", sparse=False
+                model_data[col].astype(str), prefix=col, dtype="int8", sparse=False
             )
             X = pd.concat([X, dummies], axis=1)
 

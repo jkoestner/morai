@@ -5,7 +5,7 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 from scipy.linalg import solve
-from scipy.special import expit, logit
+from scipy.special import comb, expit, logit
 
 from morai.utils import custom_logger
 
@@ -115,8 +115,7 @@ def whl(
         N = rates.size
         rows = N
         cols = 1
-        y = rates.copy()
-        weights = weights.copy()
+        y = rates
     elif rates.ndim == 2:
         rows, cols = rates.shape
         N = rows * cols
@@ -145,8 +144,7 @@ def whl(
 
         if rates.shape != standard_rates.shape or rates.shape != standard_weights.shape:
             raise ValueError(
-                "standard_rates and standard_weights must have "
-                "the same shape as rates."
+                "standard_rates and standard_weights must have the same shape as rates."
             )
 
         if rates.ndim == 1:
@@ -193,8 +191,6 @@ def whl(
             The difference matrix.
 
         """
-        from scipy.special import comb
-
         if order == 0:
             return None
 

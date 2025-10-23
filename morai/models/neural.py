@@ -77,7 +77,6 @@ class Neural(nn.Module):
             f"initialized Neural model with Torch\n"
             f"task: {self.task} \n"
             f"device: {self.device}"
-            f"dropout: {self.dropout}"
         )
 
     def setup_model(self, X_train: pd.DataFrame, dropout: float = 0.0) -> None:
@@ -98,6 +97,7 @@ class Neural(nn.Module):
         self.num_cols = num_cols
         logger.info(f"numeric columns: {self.num_cols}")
         logger.info(f"categorical columns: {self.cat_cols}")
+        logger.info(f"dropout: {dropout}")
 
         input_size = len(num_cols)
         total_embedding_dim = self._create_embeddings(X_train)
@@ -200,7 +200,8 @@ class Neural(nn.Module):
         """
         # validations
         if self.fc1 is None:
-            self.setup_model(X, dropout)
+            self.setup_model(X_train=X, dropout=dropout)
+            self.to(self.device)
         if self.task not in ("poisson", "binomial"):
             raise ValueError("task must be 'poisson' or 'binomial'")
         if not (X.index.equals(y.index) and X.index.equals(weights.index)):
@@ -219,6 +220,7 @@ class Neural(nn.Module):
 
         # convert to torch tensors
         X_torch_num, X_torch_cat_idx = self._prepare_input_tensor(X)
+
         y_torch = torch.tensor(
             y.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
@@ -263,7 +265,6 @@ class Neural(nn.Module):
                 )
 
             else:  # binomial
-                logger.warning("binomial model not tested, use with caution")
                 loss = -(
                     y_torch * F.logsigmoid(z_torch)
                     + (weights_torch - y_torch) * F.logsigmoid(-z_torch)
@@ -358,7 +359,9 @@ class Neural(nn.Module):
                 self.embedding_dims[cat_feature] = min(50, (vocab_size + 1) // 2)
 
             embed_dim = self.embedding_dims[cat_feature]
-            self.embeddings[cat_feature] = nn.Embedding(vocab_size, embed_dim)
+            self.embeddings[cat_feature] = nn.Embedding(vocab_size, embed_dim).to(
+                self.device
+            )
             total_embedding_dim += embed_dim
 
             # initialize embeddings

@@ -114,7 +114,7 @@ def get_hmd_data(
 def get_hmd_exposure_and_deaths(
     email: Optional[str] = None,
     password: Optional[str] = None,
-) -> pd.DataFrame:
+) -> pd.DataFrame:  # pragma: no cover
     """
     Get HMD exposure and deaths data.
 

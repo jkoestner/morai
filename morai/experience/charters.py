@@ -374,6 +374,8 @@ def relative_risk(
         + helpers._to_list(denominator)
     )
     agg_cols = list(set(agg_cols))
+    risk_col = y_axis
+    weight_col = None
     ratio = False
 
     if y_axis in ["ratio", "risk"]:
@@ -791,6 +793,9 @@ def pdp(
         The feature to use for the line plot.
     weight : str, optional (default=None)
         The name of the column to use for the weights.
+        Opinion: it is good to test both, trying non-weighted version first to
+        understand relationship. Weighted version may represent real
+        data better.
     secondary : str, optional (default=None)
         The name of the column to use for the secondary y-axis.
     mapping : dict, optional (default=None)
@@ -1128,7 +1133,7 @@ def matrix(
     df: pd.DataFrame, threshold: float = 0.5, title: str = "Matrix Heatmap"
 ) -> go.Figure:
     """
-    Create a heatmap of a matrix dataframe.
+    Create a heatmap of a matrix dataframe - mainly used for correlation functions.
 
     Used to show pairwise correlation of features.
 
@@ -1194,7 +1199,7 @@ def matrix(
 def target(
     df: Union[pd.DataFrame, pl.LazyFrame],
     target: Union[List[str], str],
-    features: Optional[List[str]] = None,
+    features: [List[str]],
     cols: int = 3,
     numerator: Optional[Union[List[str], str]] = None,
     denominator: Optional[Union[List[str], str]] = None,
@@ -1216,8 +1221,8 @@ def target(
         The DataFrame or LazyFrame to use.
     target : list or str
         The target variable.
-    features : list, optional
-        The features to use for the plot. Default is to use all features.
+    features : list
+        The features to use for the plot.
     cols : int, optional
         The number of columns to use for the subplots.
     numerator : list, optional
@@ -1241,14 +1246,6 @@ def target(
     """
     # check if lazy
     is_lazy = isinstance(df, pl.LazyFrame)
-
-    # default parameters
-    if features is None:
-        if is_lazy:
-            schema = df.collect_schema()
-            features = list(schema.keys())
-        else:  # pandas
-            features = df.columns
 
     if normalize is None:
         normalize = []
@@ -1419,7 +1416,7 @@ def target(
             if is_lazy:
                 grouped_data = (
                     df.select([*plot_feature, target, weights])
-                    .groupby(plot_feature)
+                    .group_by(plot_feature)
                     .agg(
                         [
                             (pl.col(target) * pl.col(weights))
@@ -1647,7 +1644,7 @@ def get_stats(df: Union[pd.DataFrame, pl.LazyFrame], features: list) -> pd.DataF
     numeric_cols = stats.select_dtypes(include=["float64", "int64"]).columns
     stats[numeric_cols] = stats[numeric_cols].round(2)
     stats = stats.reset_index()
-    stats = stats.rename(columns={"index": "Feature"})
+    stats = stats.rename(columns={"index": "feature"})
 
     return stats
 

@@ -36,3 +36,28 @@ def test_run_checks() -> None:
     assert (
         check_output.loc[check_output["checks"] == "limit_id", "result"].iloc[0] == 1
     ), "Check should show 1 failure the triangle since it has id of 3"
+
+
+def test_single_check() -> None:
+    """Tests the single check function."""
+    check_dict = validators.get_checks(
+        checks_path=test_validators_path / "test_checks.yaml"
+    )
+    single_check = validators.view_single_check(
+        lzdf=lzdf, check_dict=check_dict, check_name="limit_id"
+    )
+    assert single_check.shape == (1, 3)
+
+
+def test_replace_newlines_in_dict() -> None:
+    """Tests the replace newlines in dict function."""
+    data = {
+        "a": "new\nline",
+        "b": {"b1": "new\nline", "b2": ["line1", {"b21": "new\nline"}]},
+    }
+    expected = {
+        "a": "new line",
+        "b": {"b1": "new line", "b2": ["line1", {"b21": "new line"}]},
+    }
+    result = validators._replace_newlines_in_dict(data, old="\n", new=" ")
+    assert result == expected

@@ -16,6 +16,7 @@ dependencies = [
     "colorama>=0.4.6",
     "fastexcel>=0.14.0",                # only for polars
     "ipywidgets>=8.1.5",
+    "joblib>=1.5.2",
     "jupyterlab>=4.4.3",
     "numpy>=2.2.6",
     "openpyxl>=3.1.5",
@@ -39,10 +40,7 @@ dependencies = [
 
     # models
     "catboost>=1.2.8",                  # only for catboost
-    "graphviz>=0.20.3",                 # only for lightgbm
-    "lightgbm>=4.6.0",                  # only for lightgbm
-    "pygam>=0.10.0",                     # only for pygam (gam)
-    "xgboost>=3.0.2",                   # only for xgboost
+    "pygam>=0.10.0",                    # only for pygam (gam)
 ]
 
 [project.optional-dependencies]
@@ -58,9 +56,8 @@ dev = [
     "sphinx_rtd_theme>=3.0.2",
 ]
 
-ai_adv = [
-    "h2o>=3.46.0",                      # only for h2o
-    "pytorch>=2.0.1",                   # only for neural network class
+neural = [
+    "torch>=2.5.1",                   # only for neural network class
 ]
 
 r = [
@@ -90,8 +87,11 @@ version = { attr = "morai.version.version" }
 [tool.coverage.run]
 data_file = "docs/coverage/.coverage"
 omit = [
-    "morai/dashboard/*", # omit everything in /dashboard
-    "__init__.py",       # omit init files
+    "morai/dashboard/*",        # omit everything in /dashboard
+    "morai/models/r.py",        # omit r (outside of scope for package)
+    "morai/models/neural.py",   # omit neural (outside of scope for package)
+    "morai/utils/cli.py",       # omit cli (entry point)
+    "__init__.py",              # omit init files
 ]
 
 [tool.coverage.html]
@@ -185,4 +185,4 @@ pylint.max-args = 10
 
 [tool.ruff.lint.per-file-ignores]
 "morai/dashboard/pages/*.py" = ["ANN", "E501"]
-"tests/*.py" = ["ANN201"]
+"tests/*.py" = ["ANN001","ANN201"]

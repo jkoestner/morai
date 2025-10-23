@@ -511,6 +511,7 @@ class LeeCarter:
         self.expose_col = expose_col
         self.interval = interval
         # calculations
+        self.age_columns = None
         self.a_x = None
         self.k_t = None
         self.b_x = None
@@ -617,6 +618,7 @@ class LeeCarter:
         k_t = {}
         b_x = {}
         b_x_k_t = {}
+        age_columns = {}
         predictions_list = []
 
         year_start = crude_pivot.index.min()
@@ -639,6 +641,7 @@ class LeeCarter:
             interval_ages = ages[i : i + interval]
             interval_pivot = crude_pivot[interval_ages]
             interval_age_range = f"{interval_ages[0]}-{interval_ages[-1]}"
+            age_columns[interval_age_range] = interval_pivot.columns
             logger.debug(f"interval age range: {interval_age_range}")
 
             # qx is the mortality matrix
@@ -702,6 +705,7 @@ class LeeCarter:
         self.k_t = k_t
         self.b_x = b_x
         self.b_x_k_t = b_x_k_t
+        self.age_columns = age_columns
         self.lc_df = lc_df
         self.interval = interval
 
@@ -1608,6 +1612,8 @@ class GAMStats(BaseEstimator, RegressorMixin):
         """
         Create the smoother for the GAM model.
 
+        Using a default of 10 degrees of freedom and a cubic spline.
+
         Parameters
         ----------
         X : pd.DataFrame
@@ -1647,7 +1653,7 @@ class GAMStats(BaseEstimator, RegressorMixin):
 
         return smoother, X_model
 
-    def search_alpha(self, sample: bool = True, k_folds: int = 5, **kwargs) -> float:
+    def search_alpha(self, sample: bool = True, k_folds: int = 5) -> float:
         """
         Search for the best alpha value for the GAM model.
 
@@ -1660,8 +1666,6 @@ class GAMStats(BaseEstimator, RegressorMixin):
             Sample dataset to speed up search
         k_folds : int, optional
             The number of folds to use for the search
-        kwargs : dict, optional
-            Additional keyword arguments to apply to the search
 
         Returns
         -------
@@ -1699,8 +1703,9 @@ class GAMStats(BaseEstimator, RegressorMixin):
         alpha_best, _ = unfit_model.select_penweight_kfold(
             alphas=alpha_grid, k_folds=k_folds
         )
+        alpha_best = float(np.array(alpha_best).ravel()[0])
         logger.info(f"best alpha value: {alpha_best}")
-        self.unfit_model.alpha = np.array(alpha_best).ravel()
+        self.unfit_model.alpha = alpha_best
 
         return alpha_best
 
@@ -1803,12 +1808,12 @@ class GAMStats(BaseEstimator, RegressorMixin):
             cat_pass_keys = {
                 key: value
                 for key, value in self.mapping.items()
-                if value["type"] == "cat_pass" and key not in self.smoother_cols
+                if value["type"] == "cat_pass" and key not in smoother.variable_names
             }
             other_keys = {
                 key: value
                 for key, value in self.mapping.items()
-                if value["type"] != "cat_pass" and key not in self.smoother_cols
+                if value["type"] != "cat_pass" and key not in smoother.variable_names
             }
             non_categorical_part = " + ".join(other_keys) if other_keys else ""
             categorical_part = (
@@ -1828,7 +1833,7 @@ class GAMStats(BaseEstimator, RegressorMixin):
         else:
             # assumes all linear
             non_smoother_cols = [
-                col for col in X.columns if col not in self.smoother_cols
+                col for col in X.columns if col not in smoother.variable_names
             ]
             formula = f"{y.name} ~ {' + '.join(non_smoother_cols)}"
 
@@ -1843,6 +1848,10 @@ def calc_likelihood_ratio(full_model: Any, reduced_model: Any) -> dict:
 
     In statistics, the likelihood-ratio test assesses the goodness of fit
     of two competing statistical models.
+
+    A higher likelihood ratio indicates a better fit for the full model.
+    A low p-value indicates that the improvement in fit from the full model is
+    unlikely due to random chance. (.05 is a good threshold)
 
     Parameters
     ----------

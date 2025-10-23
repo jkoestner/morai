@@ -96,6 +96,7 @@ def mutual_info(
     n_jobs: Optional[int] = None,
     display: bool = True,
     threshold: float = 0.5,
+    **kwargs: dict,
 ) -> pd.DataFrame:
     """
     Calculate mutual information.
@@ -118,6 +119,8 @@ def mutual_info(
     threshold : float, optional
         The threshold to use for highlighting in the mutual information plot.
         Default is 0.5.
+    **kwargs : dict
+        Additional keyword arguments to pass to mutual_info_regression.
 
     Returns
     -------
@@ -149,11 +152,11 @@ def mutual_info(
     )
 
     def compute_mi(
-        col_i: str, col_j: str, df: pd.DataFrame
+        col_i: str, col_j: str, df: pd.DataFrame, **kwargs: dict
     ) -> Tuple[str, str, np.ndarray]:
         logger.debug(f"Calculating the mutual information for '{col_i}' and '{col_j}'.")
         mi_value = mutual_info_regression(
-            np.copy(df[col_i].values).reshape(-1, 1), np.copy(df[col_j])
+            np.copy(df[col_i].values).reshape(-1, 1), np.copy(df[col_j]), **kwargs
         )
         return (col_i, col_j, mi_value)
 
@@ -163,7 +166,7 @@ def mutual_info(
             n_jobs = cpu_count()
         logger.info(f"Using up to '{n_jobs}' parallel jobs for the computation.")
         results = Parallel(n_jobs=n_jobs)(
-            delayed(compute_mi)(col_i, col_j, df)
+            delayed(compute_mi)(col_i, col_j, df, **kwargs)
             for col_i, col_j in tqdm(
                 list(itertools.combinations(features, 2)),
                 desc="Processing",
@@ -173,7 +176,7 @@ def mutual_info(
     else:
         logger.info("Using sequential computation for the mutual information.")
         results = [
-            compute_mi(col_i, col_j, df)
+            compute_mi(col_i, col_j, df, **kwargs)
             for col_i, col_j in tqdm(
                 list(itertools.combinations(features, 2)),
                 desc="Processing",
@@ -188,7 +191,9 @@ def mutual_info(
     return mi_matrix
 
 
-def cramers_v(confusion_matrix: Union[pd.DataFrame, np.ndarray]) -> float:
+def cramers_v(
+    confusion_matrix: Union[pd.DataFrame, np.ndarray], correction: bool = False
+) -> float:
     """
     Calculate Cramer's V for categorical-categorical association.
 
@@ -198,6 +203,9 @@ def cramers_v(confusion_matrix: Union[pd.DataFrame, np.ndarray]) -> float:
     ----------
     confusion_matrix : pd.DataFrame
         The confusion matrix for the categorical variables.
+    correction : bool, optional
+        Whether to use Yates's continuity correction. Default is False.
+        If this is True, small samples will lead to lower values of Cramer's V.
 
     Returns
     -------
@@ -209,7 +217,7 @@ def cramers_v(confusion_matrix: Union[pd.DataFrame, np.ndarray]) -> float:
     - https://en.wikipedia.org/wiki/Cram%C3%A9r%27s_V
 
     """
-    chi2, p, dof, ex = chi2_contingency(confusion_matrix)
+    chi2, p, dof, ex = chi2_contingency(confusion_matrix, correction=correction)
     n = confusion_matrix.sum().sum()
     phi2 = chi2 / n
     r, k = confusion_matrix.shape

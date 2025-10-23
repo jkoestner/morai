@@ -42,3 +42,27 @@ def test_vm20_buhlmann():
         df=cred_df, amount_col="amount", rate_col="rate", exposure_col="exposure"
     )
     assert partial.iloc[0]["credibility_vm20"] == approx(0.1682, abs=1e-4)
+
+
+def test_vm20_buhlmann_approx():
+    """Checks vm20 buhlmann approximation credibility."""
+    # calculate the moments
+    cred_df["a"] = cred_df["amount"] * cred_df["exposure"] * cred_df["rate"]
+    cred_df["b"] = cred_df["amount"] ** 2 * cred_df["exposure"] * cred_df["rate"]
+    cred_df["c"] = cred_df["amount"] ** 2 * cred_df["exposure"] * cred_df["rate"] ** 2
+
+    # calculate the credibility
+    partial = credibility.vm20_buhlmann_approx(
+        df=cred_df, a_col="a", b_col="b", c_col="c"
+    )
+
+    assert partial.iloc[0]["credibility_vm20_approx"] == approx(0.1682, abs=1e-4)
+
+
+def test_buhlmann():
+    """Checks buhlmann credibility."""
+    partial = credibility.buhlmann(
+        df=pd.DataFrame([{"lapses": 100}]), measure="lapses", k=270
+    )
+    test_partial = 100 / (100 + 270)
+    assert partial.iloc[0]["credibility_bu"] == test_partial

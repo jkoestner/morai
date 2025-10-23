@@ -361,7 +361,7 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
     mi_df["1_year_mi"] = 1 - (mi_df["crude_adj"] / mi_df["crude_adj"].shift(1))
     mi_df[f"{rolling}_year_mi"] = mi_df["1_year_mi"].rolling(window=rolling).mean()
 
-    # calculate whl
+    # calculate whittaker-henderson-lowrie (whl)
     mi_df = mi_df[mi_df["1_year_mi"].notna()]
     mi_df["whl_3"] = graduation.whl(
         rates=mi_df["1_year_mi"], horizontal_order=3, horizontal_lambda=400
@@ -378,6 +378,9 @@ def compare_dfs(
 ) -> pd.DataFrame:
     """
     Compare two DataFrames.
+
+    The comparison groups the dataframes by the columns and then compares the values
+    chosen.
 
     Parameters
     ----------
@@ -422,28 +425,6 @@ def compare_dfs(
     )
 
     return compare_df
-
-
-def _xml_parse_dataid(xml_string: str) -> str:
-    """
-    Parse the data-id from an XML string object.
-
-    Parameters
-    ----------
-    xml_string : str
-        XML string object.
-
-    Returns
-    -------
-    data_id : str
-        Data ID.
-
-    """
-    root = ET.fromstring(xml_string)
-    value = root.find(".//parameter[name='B_1']/value").text
-    data_id = value.split(".")[0]
-
-    return data_id
 
 
 def get_top_deaths_by_age_group(
@@ -501,9 +482,33 @@ def get_top_deaths_by_age_group(
     return (deaths_pivot, names_pivot)
 
 
+def _xml_parse_dataid(xml_string: str) -> str:
+    """
+    Parse the data-id from an XML string object.
+
+    Parameters
+    ----------
+    xml_string : str
+        XML string object.
+
+    Returns
+    -------
+    data_id : str
+        Data ID.
+
+    """
+    root = ET.fromstring(xml_string)
+    value = root.find(".//parameter[name='B_1']/value").text
+    data_id = value.split(".")[0]
+
+    return data_id
+
+
 def _xml_create_df(xml_response: str) -> pd.DataFrame:
     """
     Create a DataFrame from an XML string object.
+
+    This is only for cdc wonder data.
 
     Parameters
     ----------
@@ -602,7 +607,7 @@ def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
     """
     Parse the date column to a datetime object.
 
-    CDC has the "Month" column as a string with the format "Month. (Year)"
+    CDC has the "Month" column as a string with the format "Month., Year"
     when grouping by month and year.
     This function parses the month column to a datetime object.
 
@@ -622,6 +627,7 @@ def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
     parsed_dates = [date.split(" (")[0].strip() for date in df[col]]
     parsed_dates = [date.replace(".", "") for date in parsed_dates]
     parsed_dates = pd.to_datetime(parsed_dates, format="%b, %Y")
+    parsed_dates = pd.Series(parsed_dates)
 
     return parsed_dates
 
@@ -629,6 +635,11 @@ def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
 def _infer_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """
     Infer data types from a DataFrame.
+
+    Adjusts the following columns to numeric
+    - deaths
+    - population
+    - year
 
     Parameters
     ----------

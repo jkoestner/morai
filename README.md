@@ -33,13 +33,6 @@ in greek mythology are known as the fates. They are personifications of destiny.
 The name Morai was chosen as the package is designed to help actuaries review 
 mortality and experience data.
 
-**🔬 Jupyter Notebook:**
-
-- [Data Process](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/01.data_process.ipynb)
-- [Exploratory](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/02.exploratory.ipynb)
-- [Predictive Models](https://nbviewer.org/github/jkoestner/morai/blob/main/notebooks/06.predictive_model.ipynb)
-- And Others
-
 **📊 Dashboard:**
 
 - [Dashboard](https://morai.koestner.fun)
@@ -47,20 +40,40 @@ mortality and experience data.
 - Data Tables: ![dash_data_tables](docs/screenshots/morai_tables.gif)
 - Data CDC: ![dash_cdc](docs/screenshots/morai_cdc.gif)
 
+**🔬 Jupyter Notebook:**
+
+- [Data Process](http://githubtocolab.com/jkoestner/morai/blob/main/notebooks/01.data_process.ipynb)
+- [Exploratory](http://githubtocolab.com/jkoestner/morai/blob/main/notebooks/02.exploratory.ipynb)
+- [Predictive Models](http://githubtocolab.com/jkoestner/morai/blob/main/notebooks/06.1.predictive_model.ipynb)
+- And Others
+
 ## Installation
 
-### Local Install
-To install, this repository can be installed by running the following command in 
-the environment of choice.
+### Install
 
-The following command can be run to install the packages in the pyproject.toml file.
+To install the base package
+
+```
+uv pip install morai
+```
+
+To install optional dependencies
+
+```
+uv pip install morai[dev][neural][r]
+```
+
+### Local Install
+To install, download this repository and run the following command in 
+the environment of choice. Optional dependencies can be installed by adding
+`[dev][neural][r]` to the end of the command.
 
 ```
 uv pip install -e .
 ```
 
 ### Docker Install
-The package can also be run in docker which provides a containerized environment, and can host the web dashboard.
+The package can also be run in docker which provides a containerized environment, hosting the web dashboard.
 
 ```bash
 version: "3.8"
@@ -88,7 +101,7 @@ CLI can be used for easier commands of python scripts for both portfolio or mana
 morai dashboard
 ```
 
-It also can be run locally by going to the dashboard folder and running below.
+It also can be run locally by running below in the root directory of the repository.
 
 ```python
 python -m morai.dashboard.app
