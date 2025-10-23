@@ -97,7 +97,7 @@ def test_get_last_updated():
     """
     with patch("morai.utils.helpers.FILES_PATH", helpers.TESTS_PATH):
         last_updated = cdc.get_last_updated(table_name="mcd18_monthly")
-    assert last_updated == "2025-08-17 00:41:38"
+    assert last_updated == "2025-10-14 23:13:03"
 
 
 def test_get_cdc_reference():
