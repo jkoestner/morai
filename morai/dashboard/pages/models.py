@@ -70,7 +70,7 @@ def layout():
                 is_open=False,
                 dismissable=True,
                 icon="danger",
-                style={"position": "fixed", "top": 100, "right": 10, "width": 350},
+                className="toast",
             ),
             # Main Content Accordion
             dbc.Accordion(
@@ -169,9 +169,10 @@ def layout():
                                                             ]
                                                         ),
                                                     ],
-                                                    className="shadow-sm h-100",
+                                                    className="shadow-sm h-100 mb-3 mb-lg-0",
                                                 ),
-                                                width=3,
+                                                xs=12,
+                                                lg=3,
                                             ),
                                             # Chart Column with Filter Button
                                             dbc.Col(
@@ -199,7 +200,8 @@ def layout():
                                                         ),
                                                     ),
                                                 ],
-                                                width=9,
+                                                xs=12,
+                                                lg=9,
                                             ),
                                         ],
                                         className="g-3",
@@ -254,7 +256,7 @@ def layout():
                 placement="end",
                 scrollable=True,
                 is_open=False,
-                style={"width": "300px"},
+                className="offcanvas",
             ),
         ],
         className="container-fluid px-4 py-3",
@@ -393,7 +395,9 @@ def display_model_results(pathname, model_results):
                                 columnDefs=model_column_defs,
                             ),
                         ],
-                        width=6,
+                        xs=12,
+                        lg=6,
+                        className="mb-3 mb-lg-0",
                     ),
                     dbc.Col(
                         dcc.Markdown(
@@ -403,7 +407,8 @@ def display_model_results(pathname, model_results):
                                 "Select a cell to see value",
                             ),
                         ),
-                        width=6,
+                        xs=12,
+                        lg=6,
                         style={"height": "400px", "overflowY": "auto"},
                     ),
                 ],
@@ -430,7 +435,9 @@ def display_model_results(pathname, model_results):
                                 columnDefs=importance_column_defs,
                             ),
                         ],
-                        width=4,
+                        xs=12,
+                        lg=4,
+                        className="mb-3 mb-lg-0",
                     ),
                     dbc.Col(
                         dcc.Loading(
@@ -438,7 +445,8 @@ def display_model_results(pathname, model_results):
                             type="dot",
                             children=html.Div(id="importance-chart"),
                         ),
-                        width=8,
+                        xs=12,
+                        lg=8,
                         style={"height": "400px", "overflowY": "auto"},
                     ),
                 ],
@@ -457,7 +465,10 @@ def display_model_results(pathname, model_results):
                                 columnDefs=target_column_defs,
                             ),
                         ],
-                        width=2,
+                        xs=12,
+                        md=3,
+                        lg=2,
+                        className="mb-3 mb-md-0",
                     ),
                     dbc.Col(
                         dcc.Loading(
@@ -465,7 +476,9 @@ def display_model_results(pathname, model_results):
                             type="dot",
                             children=html.Div(id="target-chart"),
                         ),
-                        width=10,
+                        xs=12,
+                        md=9,
+                        lg=10,
                         style={"height": "400px", "overflowY": "auto"},
                     ),
                 ],

@@ -10,8 +10,8 @@ logger = custom_logger.setup_logging(__name__)
 
 explore_sidebar = html.Div(
     [
-        html.H5("Navigation"),
-        html.Hr(),
+        html.H5("Navigation", className="hide-mobile"),
+        html.Hr(className="hide-mobile"),
         dbc.Nav(
             [
                 dbc.NavLink(
@@ -44,13 +44,15 @@ explore_sidebar = html.Div(
         ),
     ],
     id="sidebar",
+    className="hide-mobile",
     style={
         "position": "fixed",
         "left": "0px",
         "width": "250px",
-        "top": 0,
+        "top": "60px",
         "bottom": 0,
         "padding": "2rem 1rem",
         "background-color": "#f8f9fa",
+        "overflowY": "auto",
     },
 )

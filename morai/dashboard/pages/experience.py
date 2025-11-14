@@ -227,12 +227,11 @@ def _build_main_content():
                         placement="end",
                         scrollable=True,
                         is_open=False,
-                        style={
-                            "width": "300px",
-                        },
+                        className="offcanvas",
                     ),
                 ],
-                width=9,
+                xs=12,
+                lg=9,
             ),
         ],
         className="g-3",
@@ -287,10 +286,11 @@ def _build_selectors_column():
                     },
                 ),
             ],
-            className="bg-white rounded-3 shadow-sm p-4 border border-light h-100",
+            className="bg-white rounded-3 shadow-sm p-4 border border-light h-100 mb-3 mb-lg-0",
             style={"minWidth": "100%"},
         ),
-        width=3,
+        xs=12,
+        lg=3,
     )
 
 
