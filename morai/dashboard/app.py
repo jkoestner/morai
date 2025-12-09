@@ -79,7 +79,9 @@ navbar = dbc.Navbar(
             dbc.Row(
                 [
                     dbc.Col(
-                        html.Img(src=app.get_asset_url("morai_logo.ico"), height="40px"),
+                        html.Img(
+                            src=app.get_asset_url("morai_logo.ico"), height="40px"
+                        ),
                         width="auto",
                     ),
                     dbc.Col(
@@ -160,4 +162,4 @@ def toggle_navbar_collapse(n, is_open):
 
 if __name__ == "__main__":
     custom_logger.set_log_level("DEBUG", module_prefix="pages")
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0")

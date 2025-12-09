@@ -12,6 +12,7 @@ import polars as pl
 from joblib import Parallel, cpu_count, delayed
 from pandas import CategoricalDtype
 from plotly.subplots import make_subplots
+from scipy.stats import probplot
 from tqdm.auto import tqdm
 
 from morai import models
@@ -160,6 +161,7 @@ def chart(
         grouped_data = grouped_data.collect().to_pandas()
 
     else:  # pandas
+        print(agg_cols)
         if x_bins:
             logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
             df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)
@@ -300,7 +302,7 @@ def relative_risk(
     denominator: Optional[str] = None,
     x_bins: Optional[int] = None,
     relative_to: Optional[str] = "aggregate",
-    relative_cols: Optional[List[str] or str] = None,
+    relative_cols: Optional[List[str] | str] = None,
     subset_dict: Optional[Dict[str, Any]] = None,
     flip_x_color: Optional[bool] = False,
     display: bool = True,
@@ -1199,7 +1201,7 @@ def matrix(
 def target(
     df: Union[pd.DataFrame, pl.LazyFrame],
     target: Union[List[str], str],
-    features: [List[str]],
+    features: List[str],
     cols: int = 3,
     numerator: Optional[Union[List[str], str]] = None,
     denominator: Optional[Union[List[str], str]] = None,
@@ -1207,6 +1209,7 @@ def target(
     normalize: Optional[List[str]] = None,
     add_line: bool = False,
     generate_pairwise: bool = False,
+    y_log: bool = False,
 ) -> go.Figure:
     """
     Create multiplot showing variable relationship with target.
@@ -1237,6 +1240,8 @@ def target(
         Whether to add a line to the chart at y-axis of 1.
     generate_pairwise : bool, optional
         Whether to generate pairwise plots from list of features.
+    y_log : bool, optional
+        Whether to log the y-axis.
 
     Returns
     -------
@@ -1576,12 +1581,19 @@ def target(
             )
             legend_added.add(line_name)
 
+    # y-axis log scale
+    yaxis_type = "-"
+    if y_log:
+        yaxis_type = "log"
+        title += " (y-axis log)"
+
     # update layout
     fig.update_layout(
         height=chart_height * num_rows,
         width=chart_width,
         title_text=title,
         legend=legend,
+        yaxis_type=yaxis_type,
     )
 
     return fig
@@ -1647,6 +1659,66 @@ def get_stats(df: Union[pd.DataFrame, pl.LazyFrame], features: list) -> pd.DataF
     stats = stats.rename(columns={"index": "feature"})
 
     return stats
+
+
+def qq(residuals: pd.Series, distribution: str = "norm") -> go.Figure:
+    """
+    Create a QQ plot for the residuals.
+
+    Parameters
+    ----------
+    residuals : pd.Series
+        The residuals to use.
+    distribution : str, optional (default='norm')
+        The distribution to use for the QQ plot.
+
+    Returns
+    -------
+    fig : Figure
+        The chart
+
+    Notes
+    -----
+    Here are common ways to get the residuals for different models:
+    - GLM:
+      - model.resid_deviance
+      - model.resid_pearson
+
+    """
+    # calculate values
+    (theoretical_quantiles, sample_quantiles), (slope, intercept, r) = probplot(
+        residuals, dist="norm"
+    )
+
+    # create the plot
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=theoretical_quantiles,
+            y=sample_quantiles,
+            mode="markers",
+            name="Sample Quantiles",
+            marker={"color": "blue", "size": 6},
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=theoretical_quantiles,
+            y=slope * theoretical_quantiles + intercept,
+            mode="lines",
+            name="Fit Line",
+            line={"color": "red", "dash": "dash"},
+        )
+    )
+    fig.update_layout(
+        title="Q-Q Plot",
+        xaxis_title="Theoretical Quantiles",
+        yaxis_title="Sample Quantiles",
+        width=600,
+        height=600,
+    )
+
+    return fig
 
 
 def get_category_orders(
