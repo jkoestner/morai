@@ -389,6 +389,20 @@ def test_add_aa_ia_dur_cols():
     assert check_df_dur.shape == (7381, 3)
 
 
+def test_add_ultimate():
+    """Tests the add ultimate function."""
+    select_table = pd.read_csv(test_experience_path / "tables" / "vbt15_select.csv")
+    ultimate_table = pd.read_csv(test_experience_path / "tables" / "vbt15_ultimate.csv")
+    extend_tbl = tables.add_ultimate(select_table, ultimate_table)
+
+    # check issue age 18 for reasonableness
+    npt.assert_almost_equal(
+        extend_tbl.loc[(extend_tbl["issue_age"] == 18), "vals"].sum(),
+        50.65668,
+        decimal=5,
+    )
+
+
 def test_output_table_csv():
     """Tests the output table csv function."""
     rate_table = pd.DataFrame({"a": [1, 2], "b": [3, 4]})

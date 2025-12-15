@@ -1294,6 +1294,111 @@ def add_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
     return df
 
 
+def add_ultimate(
+    select_table: pd.DataFrame, ultimate_table: Optional[pd.DataFrame] = None
+) -> pd.DataFrame:
+    """
+    Extend the select table with the ultimate table.
+
+    Parameters
+    ----------
+    select_table : pd.DataFrame
+        The select table.
+    ultimate_table : optional, pd.DataFrame
+        The ultimate table.
+        If None, the ultimate table is created by using the max rate from the
+        select table for each attained age.
+
+    Returns
+    -------
+    extended_table : pd.DataFrame
+        The extended table with the ultimate rates added.
+
+    """
+    # validate select_table
+    missing_select_cols = [
+        col
+        for col in ["issue_age", "duration", "vals"]
+        if col not in select_table.columns
+    ]
+    if missing_select_cols:
+        raise ValueError(f"select_table must have '{missing_select_cols}' column(s).")
+
+    # get the select groupby columns
+    select_group_cols = [
+        col
+        for col in select_table.columns
+        if col not in ["vals", "issue_age", "duration", "attained_age"]
+    ]
+    select_rows = len(select_table)
+
+    # create ultimate table if not provided
+    if ultimate_table is None:
+        logger.debug("creating ultimate table from max rates of the select table.")
+        select_table = add_aa_ia_dur_cols(select_table)
+        ultimate_table = select_table.groupby(
+            [*select_group_cols, "attained_age"], as_index=False
+        ).agg({"vals": "max"})
+
+    # validate ultimate_table
+    missing_ultimate_cols = [
+        col for col in ["attained_age", "vals"] if col not in ultimate_table.columns
+    ]
+    if missing_ultimate_cols:
+        raise ValueError(
+            f"ultimate_table must have '{missing_ultimate_cols}' column(s)."
+        )
+
+    # get the max attained age
+    max_attained_age = ultimate_table["attained_age"].max()
+
+    # get all combinations needed
+    extension_rows = []
+    unique_groups = select_table[[*select_group_cols, "issue_age"]].drop_duplicates()
+
+    for _, row in unique_groups.iterrows():
+        issue_age = row["issue_age"]
+        max_duration = max_attained_age - issue_age + 1
+        durations = np.arange(1, max_duration + 1)
+        attained_ages = issue_age + durations - 1
+
+        # issue_age dataframe with all durations and attained_ages
+        temp_df = pd.DataFrame({"duration": durations, "attained_age": attained_ages})
+        for col in [*select_group_cols, "issue_age"]:
+            temp_df[col] = row[col]
+
+        extension_rows.append(temp_df)
+
+    full_table = pd.concat(extension_rows, ignore_index=True)
+
+    # merge the select and ultimate tables
+    extended_table = full_table.merge(
+        select_table,
+        on=[*select_group_cols, "issue_age", "duration"],
+        how="left",
+    )
+
+    # fill in missing vals from ultimate table
+    ultimate_merge_cols = [col for col in ultimate_table.columns if col not in ["vals"]]
+    extended_table = extended_table.merge(
+        ultimate_table,
+        on=ultimate_merge_cols,
+        how="left",
+        suffixes=("", "_ultimate"),
+    )
+    extended_table["vals"] = extended_table["vals"].fillna(
+        extended_table["vals_ultimate"]
+    )
+    extended_table = extended_table.drop(columns=["vals_ultimate"])
+    extended_table_rows = len(extended_table)
+    logger.info(
+        f"added '{extended_table_rows - select_rows}' rows to extend the table with "
+        f"a max attained age of '{max_attained_age}'."
+    )
+
+    return extended_table
+
+
 def output_table(
     rate_table: pd.DataFrame,
     filename: str = "table.csv",
