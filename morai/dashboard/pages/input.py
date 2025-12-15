@@ -135,7 +135,9 @@ def layout():
                                                 placeholder="Select a dataset",
                                                 className="shadow-sm",
                                             ),
-                                            width=8,
+                                            xs=12,
+                                            md=8,
+                                            className="mb-3 mb-md-0",
                                         ),
                                         dbc.Col(
                                             dbc.Button(
@@ -149,7 +151,8 @@ def layout():
                                                 color="primary",
                                                 className="w-100 shadow-sm",
                                             ),
-                                            width=4,
+                                            xs=12,
+                                            md=4,
                                         ),
                                     ],
                                     className="g-3",
@@ -188,7 +191,9 @@ def layout():
                                     ],
                                     className="shadow-sm h-100",
                                 ),
-                                width=6,
+                                xs=12,
+                                lg=6,
+                                className="mb-3 mb-lg-0",
                             ),
                             dbc.Col(
                                 dbc.Card(
@@ -214,7 +219,8 @@ def layout():
                                     ],
                                     className="shadow-sm h-100",
                                 ),
-                                width=6,
+                                xs=12,
+                                lg=6,
                             ),
                         ],
                         className="g-4",

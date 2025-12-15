@@ -36,6 +36,7 @@ def layout():
         [
             html.Div(  # Sidebar container
                 sidebars.explore_sidebar,
+                id="explore-sidebar-container",
             ),
             html.Div(  # Main content container
                 [
@@ -178,6 +179,7 @@ def layout():
                         ],
                     ),
                 ],
+                className="main-content",
                 style={"marginLeft": "250px"},
             ),
         ],

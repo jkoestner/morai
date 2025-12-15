@@ -81,7 +81,7 @@ def layout():
                 is_open=False,
                 dismissable=True,
                 icon="danger",
-                style={"position": "fixed", "top": 100, "right": 10, "width": 350},
+                className="toast",
             ),
             # Description Card
             dbc.Card(
@@ -97,7 +97,9 @@ def layout():
                                         ],
                                         className="card-title mb-3",
                                     ),
-                                    width=10,
+                                    xs=12,
+                                    md=10,
+                                    className="mb-3 mb-md-0",
                                 ),
                                 dbc.Col(
                                     [
@@ -124,7 +126,8 @@ def layout():
                                             className="text-center small",
                                         ),
                                     ],
-                                    width=2,
+                                    xs=12,
+                                    md=2,
                                 ),
                             ],
                         ),
