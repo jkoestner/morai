@@ -694,7 +694,7 @@ def update_cdc_data_async(n_clicks):
         try:
             last_updated = pd.to_datetime(cdc.get_last_updated())
             days_since_update = (pd.Timestamp.now() - last_updated).days
-            if days_since_update < 14:
+            if days_since_update < 7:
                 return "recent", None
             refresh_cdc_data()
             new_last_updated = cdc.get_last_updated()
@@ -709,7 +709,7 @@ def update_cdc_data_async(n_clicks):
     if status == "recent":
         return (
             True,
-            "Data was recently updated. Please wait 14 days before updating again.",
+            "Data was recently updated. Please wait 7 days before updating again.",
             "warning",
             "Warning",
             dash.no_update,
