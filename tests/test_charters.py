@@ -81,16 +81,16 @@ def test_chart_bar():
 def test_chart_heatmap():
     """Tests the heatmap chart."""
     # pandas
-    fig = charters.chart(df, "x_axis", "y_axis", color="color", type="heatmap")
+    fig = charters.chart(df, "x_axis", "y_axis", color="numerator", type="heatmap")
     assert isinstance(fig.data[0], go.Heatmap)
     assert len(fig.data) == 1
-    assert fig.layout.title.text == "Heatmap of 'color' by 'x_axis' and 'y_axis'"
+    assert fig.layout.title.text == "Heatmap of 'numerator' by 'x_axis' and 'y_axis'"
 
     # polars
-    fig = charters.chart(lazy_df, "x_axis", "y_axis", color="color", type="heatmap")
+    fig = charters.chart(lazy_df, "x_axis", "y_axis", color="numerator", type="heatmap")
     assert isinstance(fig.data[0], go.Heatmap)
     assert len(fig.data) == 1
-    assert fig.layout.title.text == "Heatmap of 'color' by 'x_axis' and 'y_axis'"
+    assert fig.layout.title.text == "Heatmap of 'numerator' by 'x_axis' and 'y_axis'"
 
 
 def test_chart_histogram():
@@ -128,16 +128,16 @@ def test_chart_area():
 def test_chart_contour():
     """Tests the contour chart."""
     # pandas
-    fig = charters.chart(df, "x_axis", "y_axis", color="color", type="contour")
+    fig = charters.chart(df, "x_axis", "y_axis", color="numerator", type="contour")
     assert isinstance(fig.data[0], go.Contour)
     assert len(fig.data) == 1
-    assert fig.layout.title.text == "Contour of 'color' by 'x_axis' and 'y_axis'"
+    assert fig.layout.title.text == "Contour of 'numerator' by 'x_axis' and 'y_axis'"
 
     # polars
-    fig = charters.chart(lazy_df, "x_axis", "y_axis", color="color", type="contour")
+    fig = charters.chart(lazy_df, "x_axis", "y_axis", color="numerator", type="contour")
     assert isinstance(fig.data[0], go.Contour)
     assert len(fig.data) == 1
-    assert fig.layout.title.text == "Contour of 'color' by 'x_axis' and 'y_axis'"
+    assert fig.layout.title.text == "Contour of 'numerator' by 'x_axis' and 'y_axis'"
 
 
 def test_chart_ratio():

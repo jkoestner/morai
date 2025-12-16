@@ -460,7 +460,7 @@ def lazy_groupby(
             raise ValueError(f"Unsupported aggregation function: '{aggs[i]}'")
 
     # groupby and aggregate
-    grouped_df = df.group_by(groupby_cols).agg(agg_exprs)
+    grouped_df = df.group_by(groupby_cols, maintain_order=True).agg(agg_exprs)
 
     return grouped_df
 
