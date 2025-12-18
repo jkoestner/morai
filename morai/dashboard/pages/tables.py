@@ -1239,13 +1239,13 @@ def get_table_desc(
     if isinstance(table1_id, str):
         try:
             table_1_desc = suppress_logs(tables.get_rate_dict)(table1_id)["description"]
-        except KeyError:
+        except (KeyError, ValueError):
             table_1_desc = table1_id
         try:
             table_1_asof = suppress_logs(tables.get_rate_dict)(table1_id)["notes"][
                 "effective_dt"
             ]
-        except KeyError:
+        except (KeyError, ValueError):
             table_1_asof = "Unknown"
     else:
         soa_xml = mt.get_soa_xml(table1_id)
@@ -1285,13 +1285,13 @@ def get_table_desc(
     if isinstance(table2_id, str):
         try:
             table_2_desc = suppress_logs(tables.get_rate_dict)(table2_id)["description"]
-        except KeyError:
+        except (KeyError, ValueError):
             table_2_desc = table2_id
         try:
             table_2_asof = suppress_logs(tables.get_rate_dict)(table2_id)["notes"][
                 "effective_dt"
             ]
-        except KeyError:
+        except (KeyError, ValueError):
             table_2_asof = "Unknown"
     else:
         soa_xml = mt.get_soa_xml(table2_id)
