@@ -228,6 +228,7 @@ def preprocess_data(
         logger.info("standardizing the data with StandardScaler")
         scaler = StandardScaler()
         scale_features = X.select_dtypes(include="number").columns.to_list()
+        scale_features = [col for col in scale_features if col not in constant_col]
         # fit data
         scaler.fit(X[scale_features])
         # standardize data
@@ -295,7 +296,7 @@ def preprocess_data(
     return preprocess_dict
 
 
-def bin_feature(feature: pd.Series, bins: int) -> pd.Series:
+def bin_feature(feature: pd.Series, bins: int, labels: str = "range") -> pd.Series:
     """
     Bin a feature.
 
@@ -305,6 +306,10 @@ def bin_feature(feature: pd.Series, bins: int) -> pd.Series:
         The numerical series to bin.
     bins : int
         The number of bins to use.
+    labels : str, optional (default="range")
+        The labels to use for the bins.
+        - 'range' : uses a range format (e.g., '01~05')
+        - 'midpoint' : uses the midpoint value of the bin
 
     Returns
     -------
@@ -313,28 +318,42 @@ def bin_feature(feature: pd.Series, bins: int) -> pd.Series:
 
     Examples
     --------
-    >>> feature = pd.Series([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    >>> bins = 2
-    >>> bin_feature(feature, bins)
+    feature = pd.Series([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    bins = 2
+    bin_feature(feature, bins)
+
+    Output:
+    ['01~05' < '06~10']
 
     """
     # test if feature is numeric
     if not pd.api.types.is_numeric_dtype(feature):
         raise ValueError(f"feature: [{feature.name}] is not numeric")
+
+    # validate parameters
+    if labels not in ["range", "midpoint"]:
+        raise ValueError(f"labels must be 'range' or 'midpoint', got '{labels}'")
+
     range_min, range_max = (feature.min() - 1), feature.max()
     bin_edges = np.linspace(range_min, range_max, bins + 1)
 
     # generate lables for the bins
-    max_width = len(str(int(max(bin_edges))))
-    labels = [
-        f"{int(bin_edges[i] + 1):0{max_width}d}~{int(bin_edges[i + 1]):0{max_width}d}"
-        for i in range(len(bin_edges) - 1)
-    ]
+    if labels == "range":
+        max_width = len(str(int(max(bin_edges))))
+        bin_labels = [
+            f"{int(bin_edges[i] + 1):0{max_width}d}~"
+            f"{int(bin_edges[i + 1]):0{max_width}d}"
+            for i in range(len(bin_edges) - 1)
+        ]
+    elif labels == "midpoint":
+        bin_labels = [
+            (bin_edges[i] + 1 + bin_edges[i + 1]) / 2 for i in range(len(bin_edges) - 1)
+        ]
 
     # note that the bins are exclusive on the right side by default
     # include_lowest=True makes the first bin inclusive of the left side
     binned_feature = pd.cut(
-        feature, bins=bin_edges, labels=labels, include_lowest=True, right=True
+        feature, bins=bin_edges, labels=bin_labels, include_lowest=True, right=True
     )
     return binned_feature
 

@@ -1721,6 +1721,202 @@ def qq(residuals: pd.Series, distribution: str = "norm") -> go.Figure:
     return fig
 
 
+def residual_plot(
+    fitted: pd.Series,
+    residuals: pd.Series,
+    n_bins: int = 20,
+) -> go.Figure:
+    """
+    Create a binned residual plot.
+
+    This is mainly used for GLM models to assess goodness of fit.
+
+    Parameters
+    ----------
+    fitted : pd.Series
+        The fitted values (predicted probabilities or predicted values).
+    residuals : pd.Series
+        The residuals to use.
+        Common choices are Pearson or deviance residuals.
+    n_bins : int, optional (default=20)
+        Number of bins to create based on fitted value quantiles.
+
+    Returns
+    -------
+    fig : Figure
+        The chart
+
+    Notes
+    -----
+    The plot shows mean residuals per bin with error bars representing
+    ±2 standard errors. Points should be scattered around zero with most
+    error bars crossing the zero line for a well-fitted model.
+
+    fitted=GLM.model.fittedvalues
+    residuals=GLM.model.resid_pearson
+
+    """
+    # create bins
+    bins = pd.qcut(fitted, q=n_bins, duplicates="drop")
+
+    # calculate binned statistics
+    binned = (
+        pd.DataFrame({"fitted": fitted, "resid": residuals})
+        .assign(bin=bins)
+        .groupby("bin", observed=True)
+        .agg(
+            mean_fitted=("fitted", "mean"),
+            mean_resid=("resid", "mean"),
+            n=("resid", "size"),
+            sd=("resid", "std"),
+        )
+    )
+    binned["se"] = binned["sd"] / np.sqrt(binned["n"])
+    binned["error"] = 2 * binned["se"]
+
+    # create the plot
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=binned["mean_fitted"],
+            y=binned["mean_resid"],
+            error_y={
+                "type": "data",
+                "array": binned["error"],
+                "visible": True,
+                "color": "blue",
+            },
+            mode="markers",
+            name="Binned Residuals",
+            marker={"color": "blue", "size": 8},
+        )
+    )
+    fig.add_hline(
+        y=0,
+        line_dash="dash",
+        line_color="black",
+        line_width=1,
+        annotation_text="",
+    )
+
+    fig.update_layout(
+        title="Binned Residual Plot",
+        xaxis_title="Fitted Values",
+        yaxis_title="Mean Residual",
+        width=700,
+        height=500,
+        showlegend=False,
+    )
+
+    return fig
+
+
+def calibration_plot(
+    fitted: pd.Series,
+    observed: pd.Series,
+    n_bins: int = 20,
+    log: bool = False,
+) -> go.Figure:
+    """
+    Create a calibration plot to assess prediction accuracy.
+
+    Parameters
+    ----------
+    fitted : pd.Series
+        The fitted values (predicted probabilities or rates).
+    observed : pd.Series
+        The observed values (actual outcomes: 0/1 for binomial, counts for Poisson).
+    n_bins : int, optional (default=20)
+        Number of bins to create based on fitted value quantiles.
+    log : bool, optional (default=False)
+        Whether to use a log scale for axes.
+
+    Returns
+    -------
+    fig : Figure
+        The chart
+
+    Notes
+    -----
+    The plot shows observed vs predicted values per bin. Points should fall
+    along the 45-degree line for a well-calibrated model.
+
+    fitted: model.fittedvalues (predicted probabilities)
+    observed: model.model.endog
+
+    """
+    # create bins
+    bins = pd.qcut(fitted, q=n_bins, duplicates="drop")
+
+    # calculate binned statistics
+    binned = (
+        pd.DataFrame({"fitted": fitted, "observed": observed})
+        .assign(bin=bins)
+        .groupby("bin", observed=True)
+        .agg(
+            mean_fitted=("fitted", "mean"),
+            mean_observed=("observed", "mean"),
+            n=("observed", "size"),
+            sd=("observed", "std"),
+        )
+    )
+    binned["se"] = binned["sd"] / np.sqrt(binned["n"])
+    binned["error"] = 2 * binned["se"]
+
+    # create the plot
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=binned["mean_fitted"],
+            y=binned["mean_observed"],
+            error_y={
+                "type": "data",
+                "array": binned["error"],
+                "visible": True,
+                "color": "blue",
+            },
+            mode="markers",
+            name="Observed vs Predicted",
+            marker={"color": "blue", "size": 8},
+        )
+    )
+
+    # perfect calibration line
+    min_val = min(binned["mean_fitted"].min(), binned["mean_observed"].min())
+    max_val = max(binned["mean_fitted"].max(), binned["mean_observed"].max())
+
+    fig.add_trace(
+        go.Scatter(
+            x=[min_val, max_val],
+            y=[min_val, max_val],
+            mode="lines",
+            name="Perfect Calibration",
+            line={"color": "red", "dash": "dash", "width": 2},
+        )
+    )
+
+    fig.update_layout(
+        title="Calibration Plot",
+        xaxis_title="fitted values",
+        yaxis_title="observed values",
+        width=700,
+        height=700,
+        showlegend=True,
+    )
+
+    if log:
+        fig.update_layout(
+            xaxis_type="log",
+            yaxis_type="log",
+            title="Calibration Plot (Log Scale)",
+        )
+
+    # make axes equal for easier visual assessment
+    fig.update_xaxes(scaleanchor="y", scaleratio=1)
+
+    return fig
+
+
 def get_category_orders(
     df: pd.DataFrame,
     category: str,
