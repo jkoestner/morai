@@ -19,6 +19,7 @@ def preprocess_data(
     feature_dict: dict,
     add_constant: bool = False,
     standardize: bool = False,
+    scale_weights: bool = False,
     clean: bool = False,
     preset: Optional[str] = None,
 ) -> dict:
@@ -37,11 +38,15 @@ def preprocess_data(
     add_constant : bool, optional (default=False)
         Whether to add a constant column to the data.
     standardize : bool, optional (default=False)
-        Whether to standardize the data, which uses the StandardScaler.
+        Whether to standardize the X objects, which uses the StandardScaler.
+          - Standard scaler uses (value - mean) / std_dev to normalize the data.
+    scale_weights : bool, optional (default=False)
+        Whether to standardize the weights column.
+          - This uses value / mean(weights) to normalize the weights.
     clean : bool, optional (default=False)
-        Patsy requires the columns to not have special characters. Clean
-        will lowercase and remove special characters and replace with "_" both the
-        X and mapping objects.
+        Clean will lowercase and remove special characters and replace with "_"
+        both the X and mapping objects.
+          - Patsy requires the columns to not have special characters.
     preset : str, optional (default=None)
         There are some preset options that will process the data for features
         considering the model type so the feature_dict doesn't have to be changed
@@ -202,8 +207,6 @@ def preprocess_data(
                 "values": {k: col + "_" + str(k) for k in unique_values[:]},
                 "type": "ohe",
             }
-            # sparse=True is used to save memory however many models
-            # don't support sparse
             dummies = pd.get_dummies(
                 model_data[col].astype(str), prefix=col, dtype="int8", sparse=False
             )
@@ -225,10 +228,18 @@ def preprocess_data(
             mapping[col] = {"values": weighted_avg.to_dict(), "type": "weighted_avg"}
 
     if standardize:
-        logger.info("standardizing the data with StandardScaler")
+        logger.info("standardizing the features with StandardScaler")
         scaler = StandardScaler()
         scale_features = X.select_dtypes(include="number").columns.to_list()
-        scale_features = [col for col in scale_features if col not in constant_col]
+        # remove constant and ohe columns from standardization
+        ohe_cols_expanded = []
+        for col in ohe_cols:
+            ohe_cols_expanded.extend(mapping[col]["values"].values())
+        scale_features = [
+            col
+            for col in scale_features
+            if col not in [constant_col, *ohe_cols_expanded]
+        ]
         # fit data
         scaler.fit(X[scale_features])
         # standardize data
@@ -248,6 +259,10 @@ def preprocess_data(
                     },
                     "type": "standardized",
                 }
+
+    if weights is not None and scale_weights:
+        logger.info("standardizing the weights by dividing by the mean")
+        weights = weights / np.mean(weights)
 
     # create replicatable order of columns
     x_sorted_columns = sorted(X.columns)
@@ -280,6 +295,8 @@ def preprocess_data(
         "standardize": standardize,
         "preset": preset,
         "add_constant": add_constant,
+        "scale_weights": scale_weights,
+        "clean": clean,
     }
 
     preprocess_dict = {

@@ -375,6 +375,9 @@ class GLM(BaseEstimator, RegressorMixin):
         The empirical dispersion is calculated as:
           - pearson chi-squared statistic / degrees of freedom
 
+        The pearson chi-squared statistic is calculated as:
+          - sum of squared pearson residuals
+
         This tells you if the model varies more or less than expected.
 
         Parameters
@@ -429,7 +432,6 @@ class GLM(BaseEstimator, RegressorMixin):
                 else:
                     residuals = self.model.model.endog - fitted_values
             else:
-                print("not regularized")
                 residuals = self.model.resid_pearson
 
         degrees_of_freedom = len(residuals) - len(self.model.params)

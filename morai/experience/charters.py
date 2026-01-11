@@ -834,6 +834,7 @@ def pdp(
     x_axis_type = "passthrough"
     line_color_type = "passthrough"
     x_axis_cols = None
+    line_color_cols = None
 
     grouped_features = [x_axis]
     weights = None
@@ -854,8 +855,10 @@ def pdp(
     if mapping and x_axis in mapping:
         x_axis_type = mapping[x_axis]["type"]
         if x_axis_type == "ohe":
+            # values dict: {original_value: ohe_column_name}
             x_axis_cols = list(mapping[x_axis]["values"].values())
             x_axis_values = list(mapping[x_axis]["values"].keys())
+            df[x_axis] = _reconstruct_col_from_ohe_expanded(df, x_axis, mapping)
         else:
             x_axis_values = list(df[x_axis].unique())
     elif x_axis in df.select_dtypes(exclude=[np.number]).columns:
@@ -870,11 +873,20 @@ def pdp(
 
     # line_color processing
     if line_color:
-        line_color_type = mapping[line_color]["type"]
-        if line_color_type == "ohe":
-            raise ValueError("One hot encoding not supported for line_color.")
+        if mapping and line_color in mapping:
+            line_color_type = mapping[line_color]["type"]
+            if line_color_type == "ohe":
+                # values dict: {original_value: ohe_column_name}
+                line_color_cols = list(mapping[line_color]["values"].values())
+                line_color_values = list(mapping[line_color]["values"].keys())
+                df[line_color] = _reconstruct_col_from_ohe_expanded(
+                    df, line_color, mapping
+                )
+            else:
+                line_color_values = X[line_color].unique()
+        else:
+            line_color_values = X[line_color].unique()
         logger.info(f"Line feature: [{line_color}] type: [{line_color_type}]")
-        line_color_values = X[line_color].unique()
     else:
         line_color = "Overall"
         df[line_color] = "Overall"
@@ -934,6 +946,8 @@ def pdp(
                 x_axis_cols,
                 value,
                 line_color,
+                line_color_type,
+                line_color_cols,
                 line_value,
                 quick,
                 weights,
@@ -959,6 +973,8 @@ def pdp(
                 x_axis_cols,
                 value,
                 line_color,
+                line_color_type,
+                line_color_cols,
                 line_value,
                 quick,
                 weights,
@@ -1960,6 +1976,8 @@ def _pdp_make_prediction(
     x_axis_cols: Optional[List[str]],
     value: Any,
     line_color: str,
+    line_color_type: str,
+    line_color_cols: Optional[List[str]],
     line_value: Any,
     quick: bool,
     weights: Optional[pd.Series],
@@ -1967,21 +1985,29 @@ def _pdp_make_prediction(
     """Make predictions for PDP."""
     X_temp = X.copy()
 
-    # Handle one-hot encoding
+    # set x_axis values
     if x_axis_type == "ohe":
         for col in x_axis_cols[1:]:
             X_temp[col] = 0
-        # the dropped first column is a reference column and should have a value of 0
-        if value != x_axis_cols[0][len(x_axis + "_") :]:
-            X_temp[x_axis + "_" + value] = 1
+        target_col = f"{x_axis}_{value}"
+        if target_col in x_axis_cols:
+            X_temp[target_col] = 1
     else:
         X_temp.iloc[:, X_temp.columns.get_loc(x_axis)] = value
 
-    # Set line color values
+    # set line_color values
     if line_color and line_color != "Overall":
-        X_temp.iloc[:, X_temp.columns.get_loc(line_color)] = line_value
+        # handle ohe
+        if line_color_type == "ohe":
+            for col in line_color_cols:
+                X_temp[col] = 0
+            target_col = f"{line_color}_{line_value}"
+            if target_col in line_color_cols:
+                X_temp[target_col] = 1
+        else:
+            X_temp.iloc[:, X_temp.columns.get_loc(line_color)] = line_value
 
-    # Make predictions
+    # make predictions
     if quick:
         pred = model.predict(X_temp)[0]
     else:
@@ -1994,3 +2020,59 @@ def _pdp_make_prediction(
         line_color: line_value,
         "pred": pred,
     }
+
+
+def _reconstruct_col_from_ohe_expanded(
+    df: pd.DataFrame,
+    feature_name: str,
+    mapping: Dict[str, Dict[str, Union[str, Dict[str, str]]]],
+) -> pd.Series:
+    """
+    Reconstruct a categorical column from one-hot expanded columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the OHE columns
+    feature_name : str
+        The original feature name (used for reference category detection)
+    mapping : dict
+        A mapping dictionary that will lookup an encoded features original
+        values.
+
+    Returns
+    -------
+    pd.Series
+        Reconstructed categorical column
+
+    """
+    values_mapping = mapping[feature_name]["values"]
+
+    # initialize
+    ohe_col_values = pd.Series(index=df.index, dtype=object)
+
+    # find the original value for each row
+    for original_value, ohe_col in values_mapping.items():
+        if ohe_col in df.columns:
+            mask = df[ohe_col] == 1
+            ohe_col_values.loc[mask] = original_value
+
+    # update the na's to the reference category, which should be the missing column
+    if ohe_col_values.isna().any():
+        ohe_cols_expanded = [
+            col for col in values_mapping.values() if col in df.columns
+        ]
+        all_zeros_mask = (df[ohe_cols_expanded] == 0).all(axis=1)
+        # find the ohe_column not in the dataframe
+        for original_value, ohe_col in values_mapping.items():
+            if ohe_col not in df.columns:
+                ohe_col_values.loc[all_zeros_mask & ohe_col_values.isna()] = (
+                    original_value
+                )
+                break
+        # all columns exist so use first category as reference for all zeros
+        else:
+            first_category = next(iter(values_mapping.keys()))
+            ohe_col_values.loc[ohe_col_values.isna()] = first_category
+
+    return ohe_col_values

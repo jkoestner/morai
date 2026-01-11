@@ -10,6 +10,7 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+import plotly
 import torch
 import torch.nn.functional as F
 from torch import nn, optim
@@ -31,6 +32,11 @@ class Neural(nn.Module):
     -----
     The model architecture is:
         fc1 -> relu1 -> fc2 -> relu2 -> fc3 -> relu3 -> output
+    The number of layers are:
+        - fc1: input_size -> 32
+        - fc2: 32 -> 32
+        - fc3: 32 -> 16
+        - output: 16 -> 1
     The training uses loss likelihoods for the loss function based on the task.
     The task can be either "poisson" or "binomial".
 
@@ -39,7 +45,7 @@ class Neural(nn.Module):
     def __init__(
         self,
         task: str = "poisson",
-        cat_cols: Optional[list] = None,
+        embedding_cols: Optional[list] = None,
         embedding_dims: Optional[Dict[str, int]] = None,
     ) -> None:
         """
@@ -49,7 +55,7 @@ class Neural(nn.Module):
         ----------
         task : str, optional
             Either "poisson" or "binomial"
-        cat_cols : list, optional
+        embedding_cols : list, optional
             Categorical columns
         embedding_dims : dict, optional
             Dictionary mapping categorical feature names to their embedding dimensions
@@ -61,9 +67,9 @@ class Neural(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.task = task
         self.feature_names = None
-        if cat_cols is None:
-            cat_cols = []
-        self.cat_cols = cat_cols
+        if embedding_cols is None:
+            embedding_cols = []
+        self.embedding_cols = embedding_cols
         self.num_cols = []
         if embedding_dims is None:
             embedding_dims = {}
@@ -92,11 +98,11 @@ class Neural(nn.Module):
 
         """
         # get input size
-        num_cols = [col for col in X_train.columns if col not in self.cat_cols]
+        num_cols = [col for col in X_train.columns if col not in self.embedding_cols]
         self.feature_names = X_train.columns
         self.num_cols = num_cols
         logger.info(f"numeric columns: {self.num_cols}")
-        logger.info(f"categorical columns: {self.cat_cols}")
+        logger.info(f"embedding columns: {self.embedding_cols}")
         logger.info(f"dropout: {dropout}")
 
         input_size = len(num_cols)
@@ -119,7 +125,7 @@ class Neural(nn.Module):
         self.output = nn.Linear(16, 1)
 
     def forward(
-        self, X_torch_num: torch.Tensor, X_torch_cat_idx: [torch.Tensor]
+        self, X_torch_num: torch.Tensor, X_torch_embed_idx: [torch.Tensor]
     ) -> torch.Tensor:
         """
         Forward function to be called from nn.Module.
@@ -130,8 +136,8 @@ class Neural(nn.Module):
         ----------
         X_torch_num : torch.Tensor
             Numeric features
-        X_torch_cat_idx : list
-            Index of Categorical features
+        X_torch_embed_idx : list
+            Index of embedding features
 
         Returns
         -------
@@ -139,10 +145,10 @@ class Neural(nn.Module):
             The output tensor
 
         """
-        if self.cat_cols:
+        if self.embedding_cols:
             embedding_vectors = [
                 self.embeddings[col](idx)
-                for col, idx in zip(self.cat_cols, X_torch_cat_idx, strict=True)
+                for col, idx in zip(self.embedding_cols, X_torch_embed_idx, strict=True)
             ]
             x = torch.cat(embedding_vectors, dim=1)
         else:
@@ -175,7 +181,7 @@ class Neural(nn.Module):
         y: pd.Series,
         weights: pd.Series,
         epochs: int = 100,
-        lr: float = 1e-3,
+        lr: float = 0.001,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -219,7 +225,7 @@ class Neural(nn.Module):
         y = y * weights
 
         # convert to torch tensors
-        X_torch_num, X_torch_cat_idx = self._prepare_input_tensor(X)
+        X_torch_num, X_torch_embed_idx = self._prepare_input_tensor(X)
 
         y_torch = torch.tensor(
             y.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
@@ -251,7 +257,7 @@ class Neural(nn.Module):
             opt.zero_grad()
 
             # convert to torch tensors, prepare fresh
-            z_torch = self(X_torch_num, X_torch_cat_idx)
+            z_torch = self(X_torch_num, X_torch_embed_idx)
 
             if self.task == "poisson":
                 logE = torch.log(weights_torch).clamp(min=-30.0)
@@ -310,9 +316,9 @@ class Neural(nn.Module):
         """
         # make prediction
         self.eval()
-        X_torch_num, X_torch_cat_idx = self._prepare_input_tensor(X)
+        X_torch_num, X_torch_embed_idx = self._prepare_input_tensor(X)
         with torch.no_grad():
-            z_torch = self(X_torch_num, X_torch_cat_idx).cpu().numpy()
+            z_torch = self(X_torch_num, X_torch_embed_idx).cpu().numpy()
 
         # convert to rate
         if self.task == "poisson":
@@ -330,6 +336,11 @@ class Neural(nn.Module):
         """
         Create embeddings for categorical features.
 
+        When to use embeddings is important to think about. Embeddings are
+        useful when there are high-cardinatility categorical features with
+        complex relationships (e.g. >10). If there are only a few categories,
+        a different encoding may be more appropriate.
+
         Parameters
         ----------
         X : pd.DataFrame
@@ -344,28 +355,41 @@ class Neural(nn.Module):
         # set up embeddings
         total_embedding_dim = 0
 
-        for cat_feature in self.cat_cols:
+        for embed_feature in self.embedding_cols:
             # create label encoder
-            unique_values = X[cat_feature].dropna().unique()
-            self.label_encoders[cat_feature] = {
+            unique_values = X[embed_feature].dropna().unique()
+            self.label_encoders[embed_feature] = {
                 "__UNK__": 0,
                 **{val: idx + 1 for idx, val in enumerate(unique_values)},
             }
-            vocab_size = len(self.label_encoders[cat_feature])
+            vocab_size = len(self.label_encoders[embed_feature])
 
-            if cat_feature not in self.embedding_dims:
+            # warn if embeddings may not be appropriate (e.g. <=10 unique values)
+            if vocab_size <= 3:
+                raise ValueError(
+                    f"embedding feature '{embed_feature}' has only 2 unique values "
+                    f"and not suitable for embedding; consider ordinal or "
+                    f"one-hot encoding instead"
+                )
+            elif vocab_size <= 11:
+                logger.warning(
+                    f"embedding feature '{embed_feature}' has only {vocab_size - 1} "
+                    f"unique values and may be better suited for one-hot encoding"
+                )
+
+            if embed_feature not in self.embedding_dims:
                 # use a rule of thumb for embedding dimensions
                 # capping at 50, and generally half the vocabulary size
-                self.embedding_dims[cat_feature] = min(50, (vocab_size + 1) // 2)
+                self.embedding_dims[embed_feature] = min(50, (vocab_size + 1) // 2)
 
-            embed_dim = self.embedding_dims[cat_feature]
-            self.embeddings[cat_feature] = nn.Embedding(vocab_size, embed_dim).to(
+            embed_dim = self.embedding_dims[embed_feature]
+            self.embeddings[embed_feature] = nn.Embedding(vocab_size, embed_dim).to(
                 self.device
             )
             total_embedding_dim += embed_dim
 
             # initialize embeddings
-            nn.init.xavier_uniform_(self.embeddings[cat_feature].weight)
+            nn.init.xavier_uniform_(self.embeddings[embed_feature].weight)
 
         if total_embedding_dim > 0:
             logger.info(f"created embeddings for `{self.embedding_dims}`")
@@ -389,7 +413,7 @@ class Neural(nn.Module):
         -------
         X_torch_num : torch.Tensor
             Numeric features
-        X_torch_cat_idx : list
+        X_torch_embed_idx : list
             Index of Categorical features
 
         """
@@ -401,10 +425,10 @@ class Neural(nn.Module):
                 X[self.num_cols].to_numpy(), dtype=torch.float32, device=self.device
             )
 
-        # categorical features
-        X_torch_cat_idx = []
-        for cat_col in self.cat_cols:
-            mapped_values = X[cat_col].map(self.label_encoders[cat_col])
+        # embedding features
+        X_torch_embed_idx = []
+        for embed_col in self.embedding_cols:
+            mapped_values = X[embed_col].map(self.label_encoders[embed_col])
             # handle missing values by adding 0 to categories if needed
             if (
                 isinstance(mapped_values.dtype, pd.CategoricalDtype)
@@ -414,6 +438,104 @@ class Neural(nn.Module):
 
             # label encode
             idx = mapped_values.fillna(0).astype("int64").to_numpy()
-            X_torch_cat_idx.append(torch.from_numpy(idx).to(self.device))
+            X_torch_embed_idx.append(torch.from_numpy(idx).to(self.device))
 
-        return X_torch_num, X_torch_cat_idx
+        return X_torch_num, X_torch_embed_idx
+
+    def get_embedding_analysis(self, embed_col: str) -> pd.DataFrame:
+        """
+        Get embedding weights for a embedding column.
+
+        Parameters
+        ----------
+        embed_col : str
+            The embedding column name
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with embedding name as index and embedding dimensions as columns
+
+        """
+        if embed_col not in self.embeddings:
+            raise ValueError(f"No embedding found for '{embed_col}'")
+
+        # Get the embedding weights
+        weights = self.embeddings[embed_col].weight.detach().cpu().numpy()
+
+        # Reverse the label encoder to get embedding names
+        idx_to_label = {v: k for k, v in self.label_encoders[embed_col].items()}
+        labels = [idx_to_label.get(i, f"idx_{i}") for i in range(weights.shape[0])]
+
+        return pd.DataFrame(
+            weights, index=labels, columns=[f"dim_{i}" for i in range(weights.shape[1])]
+        )
+
+    def plot_embedding_similarity(
+        self, embed_col: str
+    ) -> "plotly.graph_objects.Figure":
+        """Plot a heatmap of cosine similarities between category embeddings."""
+        import plotly.express as px
+        from sklearn.metrics.pairwise import cosine_similarity
+
+        df = self.get_embedding_analysis(embed_col)
+        # Skip the __UNK__ token
+        df = df.drop("__UNK__", errors="ignore")
+
+        sim_matrix = cosine_similarity(df.values)
+        sim_df = pd.DataFrame(sim_matrix, index=df.index, columns=df.index)
+
+        fig = px.imshow(
+            sim_df,
+            title=f"Embedding Similarity: {embed_col}",
+            color_continuous_scale="RdBu_r",
+            zmin=-1,
+            zmax=1,
+        )
+        return fig
+
+    def plot_embeddings_2d(
+        self, embed_col: str, method: str = "pca"
+    ) -> "plotly.graph_objects.Figure":
+        """
+        Plot embeddings in 2D using PCA or t-SNE.
+
+        Parameters
+        ----------
+        embed_col : str
+            The embedding column name
+        method : str
+            'pca' or 'tsne'
+
+        """
+        import plotly.express as px
+        from sklearn.decomposition import PCA
+        from sklearn.manifold import TSNE
+
+        df = self.get_embedding_analysis(embed_col)
+        df = df.drop("__UNK__", errors="ignore")
+
+        if df.shape[1] < 2:
+            raise ValueError("Need at least 2 embedding dimensions for 2D plot")
+
+        if method == "pca":
+            reducer = PCA(n_components=2)
+        else:
+            perplexity = min(30, max(5, len(df) - 1))
+            reducer = TSNE(n_components=2, perplexity=perplexity, random_state=42)
+
+        coords = reducer.fit_transform(df.values)
+
+        plot_df = pd.DataFrame(
+            {"x": coords[:, 0], "y": coords[:, 1], "category": df.index}
+        )
+
+        fig = px.scatter(
+            plot_df,
+            x="x",
+            y="y",
+            text="category",
+            title=f"{embed_col} Embeddings ({method.upper()})",
+        )
+        fig.update_traces(textposition="top center")
+        return fig
