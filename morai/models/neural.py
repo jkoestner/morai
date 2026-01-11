@@ -1,10 +1,4 @@
-"""
-Creates neural models for forecasting mortality rates.
-
-The neural network does not perform well on small tabular data. The relationships
-it finds do not line up with the relationships in the data.
-
-"""
+"""Creates neural models for forecasting mortality rates."""
 
 from typing import Dict, Optional, Tuple
 
@@ -56,7 +50,7 @@ class Neural(nn.Module):
         task : str, optional
             Either "poisson" or "binomial"
         embedding_cols : list, optional
-            Categorical columns
+            Categorical columns to create embeddings for
         embedding_dims : dict, optional
             Dictionary mapping categorical feature names to their embedding dimensions
             e.g., {"age_group": 8, "region": 4}
@@ -152,7 +146,7 @@ class Neural(nn.Module):
             ]
             x = torch.cat(embedding_vectors, dim=1)
         else:
-            # no categorical columns, make a zero tensor
+            # no embedding columns, make a zero tensor
             n = X_torch_num.size(0) if X_torch_num is not None else 0
             x = torch.zeros(
                 (n, 0),
@@ -183,6 +177,7 @@ class Neural(nn.Module):
         epochs: int = 100,
         lr: float = 0.001,
         dropout: float = 0.0,
+        seed: Optional[int] = None,
     ) -> None:
         """
         Fit the model.
@@ -202,6 +197,8 @@ class Neural(nn.Module):
             slower learning, higher values will result in faster learning
         dropout : float, optional
             Dropout rate for the model
+        seed : int, optional
+            Random seed for reproducibility
 
         """
         # validations
@@ -220,6 +217,12 @@ class Neural(nn.Module):
             X = X.loc[~bad]
             y = y.loc[~bad]
             weights = weights.loc[~bad]
+
+        # set seed for weight initialization and dropout masks
+        if seed is not None:
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
 
         # convert y_train from rate to deaths
         y = y * weights
