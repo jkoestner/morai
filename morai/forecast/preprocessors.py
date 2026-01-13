@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OrdinalEncoder, StandardScaler
+from sklearn.preprocessing import OrdinalEncoder, SplineTransformer, StandardScaler
 
 from morai.utils import custom_logger, helpers
 from morai.utils.custom_logger import suppress_logs
@@ -34,12 +34,13 @@ def preprocess_data(
         The model data with the features, target, and weights.
     feature_dict : dict
         A feature dictionary with multiple options (passthrough, cat_pass, ordinal,
-        nominal, ohe)
+        nominal, ohe, spline)
     add_constant : bool, optional (default=False)
         Whether to add a constant column to the data.
     standardize : bool, optional (default=False)
         Whether to standardize the X objects, which uses the StandardScaler.
           - Standard scaler uses (value - mean) / std_dev to normalize the data.
+          - This will not standardize the one hot encoded columns.
     scale_weights : bool, optional (default=False)
         Whether to standardize the weights column.
           - This uses value / mean(weights) to normalize the weights.
@@ -64,11 +65,13 @@ def preprocess_data(
         - weights : the weights column (no processing)
         - mapping : the mapping of the features to the encoding. this includes after
           standardization.
-        - md_encoded : the model_data with the encoded features
+        - md_encoded : the model_data with the encoded features, which will include
+          any additional columns that were not in the "features".
         - features : the features that were used in the model
 
     """
     # initializing the variables
+    feature_dict = feature_dict.copy()
     mapping = {}
     y = None
     weights = None
@@ -84,9 +87,16 @@ def preprocess_data(
             "ordinal",
             "nominal",
             "ohe",
+            "spline",
         ]
         if key not in acceptable_keys:
             logger.warning(f"{key} not in the acceptable categories")
+
+    # keep spline_dict and update feature_dict to have splines in same format
+    spline_dict = feature_dict.get("spline", {})
+    feature_dict.pop("spline", None)
+    if spline_dict:
+        feature_dict["spline"] = list(spline_dict.keys())
 
     # check if the features are in the model_data
     model_feature_dict = {}
@@ -117,8 +127,14 @@ def preprocess_data(
     ordinal_cols = model_feature_dict.get("ordinal", [])
     nominal_cols = model_feature_dict.get("nominal", [])
     ohe_cols = model_feature_dict.get("ohe", [])
+    spline_cols = model_feature_dict.get("spline", [])
     model_features = (
-        passthrough_cols + cat_pass_cols + ordinal_cols + nominal_cols + ohe_cols
+        passthrough_cols
+        + cat_pass_cols
+        + ordinal_cols
+        + nominal_cols
+        + ohe_cols
+        + spline_cols
     )
 
     # check for nans
@@ -140,7 +156,7 @@ def preprocess_data(
             "using 'tree' preset which doesn't need to use 'nominal' "
             "or 'ohe' and instead uses 'ordinal'"
         )
-        ordinal_cols = ordinal_cols + nominal_cols + ohe_cols
+        ordinal_cols = ordinal_cols + nominal_cols + ohe_cols + spline_cols
         nominal_cols = None
         ohe_cols = None
     elif preset == "pass":
@@ -197,9 +213,9 @@ def preprocess_data(
                 "type": "ordinal",
             }
 
-    # nominal - one hot encoded
+    # ohe - one hot encoded
     if ohe_cols:
-        logger.info(f"nominal - one hot encoded (dropping first col): {ohe_cols}")
+        logger.info(f"ohe - one hot encoded (dropping first col): {ohe_cols}")
         X = X.drop(columns=ohe_cols)
         for col in ohe_cols:
             unique_values = sorted(model_data[col].unique())
@@ -227,6 +243,48 @@ def preprocess_data(
             X[col] = pd.to_numeric(model_data[col].map(weighted_avg))
             mapping[col] = {"values": weighted_avg.to_dict(), "type": "weighted_avg"}
 
+    # spline - spline transformed
+    if spline_cols:
+        logger.info(f"spline - b-spline basis expansion: {spline_cols}")
+
+        # defaults matching sklearn SplineTransformer
+        SPLINE_DEFAULTS = {
+            "n_knots": 10,
+            "degree": 3,
+            "knots": "quantile",
+        }
+
+        for spline_col in spline_cols:
+            col_params = spline_dict.get(spline_col, {})
+            n_knots = col_params.get("n_knots", SPLINE_DEFAULTS["n_knots"])
+            degree = col_params.get("degree", SPLINE_DEFAULTS["degree"])
+            knots = col_params.get("knots", SPLINE_DEFAULTS["knots"])
+
+            # create and fit the spline transformer
+            transformer = SplineTransformer(
+                n_knots=n_knots,
+                degree=degree,
+                knots=knots,
+                include_bias=False,
+            )
+            spline_features = transformer.fit_transform(X[[spline_col]])
+
+            # create column names and update spline_dict
+            number_of_splines = spline_features.shape[1]
+            spline_col_names = [
+                f"s({spline_col})_{i + 1}" for i in range(number_of_splines)
+            ]
+            knots_augmented = transformer.bsplines_[0].t
+            interior_knots = knots_augmented[degree + 1 : -(degree + 1)]
+            spline_dict[spline_col]["spline_columns"] = spline_col_names
+            spline_dict[spline_col]["knot_positions"] = interior_knots.tolist()
+            spline_dict[spline_col]["transformer"] = transformer
+            X = X.drop(columns=[spline_col])
+            spline_df = pd.DataFrame(
+                spline_features, columns=spline_col_names, index=X.index
+            )
+            X = pd.concat([X, spline_df], axis=1)
+
     if standardize:
         logger.info("standardizing the features with StandardScaler")
         scaler = StandardScaler()
@@ -235,10 +293,13 @@ def preprocess_data(
         ohe_cols_expanded = []
         for col in ohe_cols:
             ohe_cols_expanded.extend(mapping[col]["values"].values())
+        spline_cols_expanded = []
+        for col in spline_cols:
+            spline_cols_expanded.extend(spline_dict[col]["spline_columns"])
         scale_features = [
             col
             for col in scale_features
-            if col not in [constant_col, *ohe_cols_expanded]
+            if col not in [constant_col, *ohe_cols_expanded, *spline_cols_expanded]
         ]
         # fit data
         scaler.fit(X[scale_features])
@@ -304,6 +365,7 @@ def preprocess_data(
         "feature_dict": feature_dict,
         "model_features": model_features,
         "mapping": mapping,
+        "spline_dict": spline_dict,
         "X": X,
         "y": y,
         "weights": weights,

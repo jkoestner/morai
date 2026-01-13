@@ -161,7 +161,6 @@ def chart(
         grouped_data = grouped_data.collect().to_pandas()
 
     else:  # pandas
-        print(agg_cols)
         if x_bins:
             logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
             df[x_axis] = preprocessors.bin_feature(df[x_axis], x_bins)

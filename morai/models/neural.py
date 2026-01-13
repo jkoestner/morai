@@ -5,6 +5,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 import plotly
+import plotly.graph_objects as go
 import torch
 import torch.nn.functional as F
 from torch import nn, optim
@@ -174,9 +175,13 @@ class Neural(nn.Module):
         X: pd.DataFrame,
         y: pd.Series,
         weights: pd.Series,
+        X_test: pd.DataFrame = None,
+        y_test: pd.Series = None,
+        weights_test: pd.Series = None,
         epochs: int = 100,
         lr: float = 0.001,
         dropout: float = 0.0,
+        weight_decay: float = 0.0001,
         seed: Optional[int] = None,
     ) -> None:
         """
@@ -190,13 +195,21 @@ class Neural(nn.Module):
             The training labels
         weights : pd.Series
             The weights for the training data
-        epochs : int, optional
+        X_test : pd.DataFrame
+            The testing data
+        y_test : pd.Series
+            The testing labels
+        weights_test : pd.Series
+            The weights for the testing data
+        epochs : int, optional (default=100)
             The number of epochs to train the model for, by default 100
-        lr : float, optional
+        lr : float, optional (default=0.001)
             The learning rate, by default 0.001. Lower values will result in
             slower learning, higher values will result in faster learning
-        dropout : float, optional
+        dropout : float, optional (default=0.0)
             Dropout rate for the model
+        weight_decay : float, optional (default=1e-4)
+            similar to L2 regularization to prevent overfitting
         seed : int, optional
             Random seed for reproducibility
 
@@ -220,33 +233,43 @@ class Neural(nn.Module):
 
         # set seed for weight initialization and dropout masks
         if seed is not None:
+            logger.info(f"setting seed: `{seed}`")
             torch.manual_seed(seed)
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(seed)
 
         # convert y_train from rate to deaths
         y = y * weights
+        y_test = y_test * weights_test
 
         # convert to torch tensors
         X_torch_num, X_torch_embed_idx = self._prepare_input_tensor(X)
+        X_torch_test_num, X_torch_test_embed_idx = self._prepare_input_tensor(X_test)
 
         y_torch = torch.tensor(
             y.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
+        y_torch_test = torch.tensor(
+            y_test.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
+        )
         weights_torch = torch.tensor(
             weights.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
+        weights_torch_test = torch.tensor(
+            weights_test.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
+        )
+        train_losses, test_losses, learning_rates = [], [], []
 
         # setup optimizer and a learning rate scheduler to reduce learning rate
         # when loss plateaus
-        opt = optim.Adam(self.parameters(), lr=lr, weight_decay=1e-4)
+        opt = optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             opt, mode="min", factor=0.5, patience=10
         )
 
         # initialize prediction to global rate
         overall_mu = float(y.sum() / weights.sum())
-        print(f"overall_mu: {overall_mu}")
+        logger.info(f"overall_mu: {overall_mu}")
         with torch.no_grad():
             self.output.bias.fill_(np.log(max(overall_mu, 1e-12)).astype(np.float32))
 
@@ -256,6 +279,7 @@ class Neural(nn.Module):
 
         pbar = tqdm(range(epochs), desc="Training", leave=True)
         for epoch in pbar:
+            # training forward pass
             self.train()
             opt.zero_grad()
 
@@ -272,12 +296,37 @@ class Neural(nn.Module):
                     full=False,
                     reduction="mean",
                 )
-
             else:  # binomial
                 loss = -(
                     y_torch * F.logsigmoid(z_torch)
                     + (weights_torch - y_torch) * F.logsigmoid(-z_torch)
                 ).mean()
+
+            # test loss - no gradients needed
+            with torch.no_grad():
+                self.eval()
+                z_torch_test = self(X_torch_test_num, X_torch_test_embed_idx)
+                if self.task == "poisson":
+                    logE_test = torch.log(weights_torch_test).clamp(min=-30.0)
+                    loglam_test = z_torch_test + logE_test
+                    test_loss = F.poisson_nll_loss(
+                        input=loglam_test,
+                        target=y_torch_test,
+                        log_input=True,
+                        full=False,
+                        reduction="mean",
+                    )
+                else:
+                    test_loss = -(
+                        y_torch_test * F.logsigmoid(z_torch_test)
+                        + (weights_torch_test - y_torch_test)
+                        * F.logsigmoid(-z_torch_test)
+                    ).mean()
+                self.train()  # switch back to training mode
+
+            train_losses.append(loss.detach().item())
+            test_losses.append(test_loss.detach().item())
+            learning_rates.append(opt.param_groups[0]["lr"])
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=5.0)
@@ -285,7 +334,7 @@ class Neural(nn.Module):
 
             scheduler.step(loss)
 
-            # early stopping when loss does not improve for 20 epochs
+            # early stopping when loss does not improve
             loss_value = loss.detach().item()
             if loss_value < best_loss:
                 best_loss = loss_value
@@ -297,7 +346,49 @@ class Neural(nn.Module):
                 pbar.close()
                 break
 
-            pbar.set_postfix({"loss": f"{loss_value:.6f}"})
+            pbar.set_postfix(
+                {
+                    "loss": f"{loss_value:.6f}",
+                    "counter": patience_counter,
+                    "lr": opt.param_groups[0]["lr"],
+                }
+            )
+
+        # create loss plot
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                y=train_losses,
+                mode="lines+markers",
+                name="Train Loss",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                y=test_losses,
+                mode="lines+markers",
+                name="Test Loss",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                y=learning_rates,
+                mode="lines",
+                name="Learning Rate",
+                yaxis="y2",
+            )
+        )
+        fig.update_layout(
+            title="Neural Network Training",
+            xaxis_title="Epoch",
+            yaxis_title="Loss",
+            yaxis2={
+                "title": "Learning Rate",
+                "overlaying": "y",
+                "side": "right",
+            },
+        )
+        return fig
 
     def predict(
         self,
