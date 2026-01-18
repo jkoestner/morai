@@ -377,10 +377,10 @@ class Neural(nn.Module):
             torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
             opt.step()
 
-            scheduler.step(loss)
+            loss_value = loss.detach().item()
+            scheduler.step(loss_value)
 
             # early stopping when loss does not improve
-            loss_value = loss.detach().item()
             if loss_value < best_loss:
                 best_loss = loss_value
                 patience_counter = 0
@@ -557,6 +557,7 @@ class Neural(nn.Module):
         # get weights
         weights_df = self.embedding_get_weights(embed_col)
         weights_df = weights_df.drop("__UNK__", errors="ignore")
+        weights_df = weights_df.sort_index()
 
         # compute cosine similarity
         sim_matrix = cosine_similarity(weights_df.values)
