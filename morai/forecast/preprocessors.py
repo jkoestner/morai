@@ -286,20 +286,19 @@ def preprocess_data(
             X = pd.concat([X, spline_df], axis=1)
 
     if standardize:
-        logger.info("standardizing the features with StandardScaler")
+        logger.info(
+            "standardizing the features with StandardScaler (that excludes OHE)"
+        )
         scaler = StandardScaler()
         scale_features = X.select_dtypes(include="number").columns.to_list()
         # remove constant and ohe columns from standardization
         ohe_cols_expanded = []
         for col in ohe_cols:
             ohe_cols_expanded.extend(mapping[col]["values"].values())
-        spline_cols_expanded = []
-        for col in spline_cols:
-            spline_cols_expanded.extend(spline_dict[col]["spline_columns"])
         scale_features = [
             col
             for col in scale_features
-            if col not in [constant_col, *ohe_cols_expanded, *spline_cols_expanded]
+            if col not in [constant_col, *ohe_cols_expanded]
         ]
         # fit data
         scaler.fit(X[scale_features])

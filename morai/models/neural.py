@@ -1,13 +1,17 @@
 """Creates neural models for forecasting mortality rates."""
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
-import plotly
+import plotly.express as px
 import plotly.graph_objects as go
+import shap
 import torch
 import torch.nn.functional as F
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from sklearn.metrics.pairwise import cosine_similarity
 from torch import nn, optim
 from tqdm.auto import tqdm
 
@@ -25,15 +29,27 @@ class Neural(nn.Module):
 
     Notes
     -----
-    The model architecture is:
-        fc1 -> relu1 -> fc2 -> relu2 -> fc3 -> relu3 -> output
-    The number of layers are:
+    The model uses a hybrid architecture with two parallel paths that are summed
+    to produce the final output:
+
+    1. Wide Path (Linear/GLM):
+       - Captures direct linear relationships and the baseline rate.
+       - Architecture: input -> wide_linear -> output
+
+    The layers are:
+        - wide_linear: input_size -> 1
+
+    2. Deep Path (Non-linear interactions):
+       - Captures complex interactions and residuals.
+       - Architecture: fc1 -> relu1 -> fc2 -> relu2 -> fc3 -> relu3 -> deep_output
+
+    The layers are:
         - fc1: input_size -> 32
         - fc2: 32 -> 32
         - fc3: 32 -> 16
-        - output: 16 -> 1
-    The training uses loss likelihoods for the loss function based on the task.
-    The task can be either "poisson" or "binomial".
+        - deep_output: 16 -> 1
+
+    prediction = wide_linear(x) + deep_output(x)
 
     """
 
@@ -70,6 +86,7 @@ class Neural(nn.Module):
             embedding_dims = {}
         self.embedding_dims = embedding_dims
         self.embeddings = nn.ModuleDict()
+        self.wide_linear = None
         self.fc1 = self.fc2 = self.fc3 = self.output = None
         self.relu1 = self.relu2 = self.relu3 = None
         self.label_encoders = {}
@@ -96,7 +113,7 @@ class Neural(nn.Module):
         num_cols = [col for col in X_train.columns if col not in self.embedding_cols]
         self.feature_names = X_train.columns
         self.num_cols = num_cols
-        logger.info(f"numeric columns: {self.num_cols}")
+        logger.info(f"non-embedding columns: {self.num_cols}")
         logger.info(f"embedding columns: {self.embedding_cols}")
         logger.info(f"dropout: {dropout}")
 
@@ -105,6 +122,10 @@ class Neural(nn.Module):
         input_size += total_embedding_dim
 
         # create layers
+        # wide
+        self.wide_linear = nn.Linear(input_size, 1)
+
+        # deep
         self.fc1 = nn.Linear(input_size, 32)
         self.relu1 = nn.ReLU()
         self.dropout1 = nn.Dropout(dropout)
@@ -118,6 +139,9 @@ class Neural(nn.Module):
         self.dropout3 = nn.Dropout(dropout)
 
         self.output = nn.Linear(16, 1)
+        with torch.no_grad():
+            self.output.weight.fill_(0.0)
+            self.output.bias.fill_(0.0)
 
     def forward(
         self, X_torch_num: torch.Tensor, X_torch_embed_idx: [torch.Tensor]
@@ -159,16 +183,21 @@ class Neural(nn.Module):
         if X_torch_num is not None:
             x = torch.cat([x, X_torch_num], dim=1)
 
+        # copy input for wide linear
+        x_clone = x.clone()
+
         # forward pass
+        x_wide = self.wide_linear(x_clone).squeeze(-1)
+
         x = self.relu1(self.fc1(x))
         x = self.dropout1(x)
         x = self.relu2(self.fc2(x))
         x = self.dropout2(x)
         x = self.relu3(self.fc3(x))
         x = self.dropout3(x)
-        x = self.output(x).squeeze(-1)
+        x_deep = self.output(x).squeeze(-1)
 
-        return x
+        return x_wide + x_deep
 
     def fit(
         self,
@@ -182,6 +211,8 @@ class Neural(nn.Module):
         lr: float = 0.001,
         dropout: float = 0.0,
         weight_decay: float = 0.0001,
+        warmup_epochs: int = 50,
+        max_patience: int = 20,
         seed: Optional[int] = None,
     ) -> None:
         """
@@ -210,10 +241,18 @@ class Neural(nn.Module):
             Dropout rate for the model
         weight_decay : float, optional (default=1e-4)
             similar to L2 regularization to prevent overfitting
+        warmup_epochs : int, optional (default=50)
+            Number of epochs to wait before starting early stopping
+        max_patience : int, optional (default=20)
+            Number of epochs with no improvement to wait before stopping training
         seed : int, optional
             Random seed for reproducibility
 
         """
+        # defaults
+        MAX_NORM = 5.0
+        MAX_NEGATIVE_LOG = -30.0
+
         # validations
         if self.fc1 is None:
             self.setup_model(X_train=X, dropout=dropout)
@@ -271,7 +310,11 @@ class Neural(nn.Module):
         overall_mu = float(y.sum() / weights.sum())
         logger.info(f"overall_mu: {overall_mu}")
         with torch.no_grad():
-            self.output.bias.fill_(np.log(max(overall_mu, 1e-12)).astype(np.float32))
+            self.wide_linear.bias.fill_(
+                np.log(max(overall_mu, 1e-12)).astype(np.float32)
+            )
+            self.output.bias.fill_(0.0)
+            self.output.weight.mul_(0.01)
 
         # train with loss likelihoods
         best_loss = float("inf")
@@ -287,7 +330,7 @@ class Neural(nn.Module):
             z_torch = self(X_torch_num, X_torch_embed_idx)
 
             if self.task == "poisson":
-                logE = torch.log(weights_torch).clamp(min=-30.0)
+                logE = torch.log(weights_torch).clamp(min=MAX_NEGATIVE_LOG)
                 loglam = z_torch + logE
                 loss = F.poisson_nll_loss(
                     input=loglam,
@@ -307,7 +350,9 @@ class Neural(nn.Module):
                 self.eval()
                 z_torch_test = self(X_torch_test_num, X_torch_test_embed_idx)
                 if self.task == "poisson":
-                    logE_test = torch.log(weights_torch_test).clamp(min=-30.0)
+                    logE_test = torch.log(weights_torch_test).clamp(
+                        min=MAX_NEGATIVE_LOG
+                    )
                     loglam_test = z_torch_test + logE_test
                     test_loss = F.poisson_nll_loss(
                         input=loglam_test,
@@ -329,7 +374,7 @@ class Neural(nn.Module):
             learning_rates.append(opt.param_groups[0]["lr"])
 
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=5.0)
+            torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
             opt.step()
 
             scheduler.step(loss)
@@ -339,9 +384,9 @@ class Neural(nn.Module):
             if loss_value < best_loss:
                 best_loss = loss_value
                 patience_counter = 0
-            else:
+            elif epoch >= warmup_epochs:
                 patience_counter += 1
-            if patience_counter >= 20:
+            if patience_counter >= max_patience:
                 logger.info(f"early stopping at epoch {epoch + 1}")
                 pbar.close()
                 break
@@ -392,22 +437,60 @@ class Neural(nn.Module):
 
     def predict(
         self,
-        X: pd.DataFrame,
-    ) -> pd.Series:
+        X: Union[pd.DataFrame, np.ndarray],
+    ) -> np.ndarray:
         """
         Predict the target.
 
         Parameters
         ----------
-        X : pd.DataFrame
+        X : pd.DataFrame or np.ndarray
             The features
+            If np.ndarray, must have the same column order as training data
+            and embedding columns contain encoded integer indices.
 
         Returns
         -------
-        predictions : pd.Series
+        predictions : np.ndarray
             The predictions
 
         """
+        # initialize
+        embedding_cols_mapped_back = []
+
+        # convert array to DataFrame if needed
+        if isinstance(X, np.ndarray):
+            X = pd.DataFrame(X, columns=self.feature_names)
+
+        # ensure non-embedding columns are numeric
+        for col in self.num_cols:
+            if col in X.columns and X[col].dtype == "object":
+                X[col] = pd.to_numeric(X[col], errors="coerce")
+
+        # map embedding columns back to strings if needed
+        for col in self.embedding_cols:
+            # check string
+            if X[col].dtype == "object" or isinstance(X[col].iloc[0], str):
+                valid_values = set(self.label_encoders[col].keys())
+                X[col] = X[col].apply(
+                    lambda x, valid_values=valid_values: x
+                    if x in valid_values
+                    else "__UNK__"
+                )
+            # map integers back to strings
+            else:
+                embedding_cols_mapped_back.append(col)
+                reverse_encoder = {v: k for k, v in self.label_encoders[col].items()}
+                max_idx = max(self.label_encoders[col].values())
+                indices = X[col].astype(float).round().astype(int).clip(0, max_idx)
+                X[col] = indices.map(reverse_encoder).fillna("__UNK__")
+
+        if embedding_cols_mapped_back:
+            logger.warning(
+                f"mapped embedding columns `{embedding_cols_mapped_back}` "
+                f"from integer indices back to strings for prediction"
+            )
+
         # make prediction
         self.eval()
         X_torch_num, X_torch_embed_idx = self._prepare_input_tensor(X)
@@ -418,13 +501,130 @@ class Neural(nn.Module):
         if self.task == "poisson":
             mu = np.exp(z_torch)
             q = mu
-            predictions = pd.Series(np.clip(q, 1e-9, 1 - 1e-9))
+            predictions = np.clip(q, 1e-9, 1 - 1e-9)
 
         else:  # binomial
             q = 1.0 / (1.0 + np.exp(-z_torch))
-            predictions = pd.Series(np.clip(q, 1e-9, 1 - 1e-9))
+            predictions = np.clip(q, 1e-9, 1 - 1e-9)
 
         return predictions
+
+    def embedding_get_weights(self, embed_col: str) -> pd.DataFrame:
+        """
+        Get embedding weights for a embedding column.
+
+        Parameters
+        ----------
+        embed_col : str
+            The embedding column name
+
+        Returns
+        -------
+        weights_df : pd.DataFrame
+            DataFrame with embedding name as index and embedding dimensions as columns
+
+        """
+        if embed_col not in self.embeddings:
+            raise ValueError(f"No embedding found for '{embed_col}'")
+
+        # get the weights
+        weights = self.embeddings[embed_col].weight.detach().cpu().numpy()
+        idx_to_label = {v: k for k, v in self.label_encoders[embed_col].items()}
+        labels = [idx_to_label.get(i, f"idx_{i}") for i in range(weights.shape[0])]
+        weights_df = pd.DataFrame(
+            weights, index=labels, columns=[f"dim_{i}" for i in range(weights.shape[1])]
+        )
+
+        return weights_df
+
+    def embedding_plot_similarity(self, embed_col: str) -> go.Figure:
+        """
+        Plot a heatmap of cosine similarities between category embeddings.
+
+        This is useful to understand similarities between 2 categories.
+
+        Parameters
+        ----------
+        embed_col : str
+            The embedding column name
+
+        Returns
+        -------
+        similarity_fig : Figure
+            Heatmap figure of cosine similarities
+
+        """
+        # get weights
+        weights_df = self.embedding_get_weights(embed_col)
+        weights_df = weights_df.drop("__UNK__", errors="ignore")
+
+        # compute cosine similarity
+        sim_matrix = cosine_similarity(weights_df.values)
+        sim_df = pd.DataFrame(
+            sim_matrix, index=weights_df.index, columns=weights_df.index
+        )
+
+        # plot
+        similarity_fig = px.imshow(
+            sim_df,
+            title=f"Embedding Similarity: {embed_col}",
+            color_continuous_scale="RdBu_r",
+            zmin=-1,
+            zmax=1,
+        )
+        return similarity_fig
+
+    def embedding_plot_2d(self, embed_col: str, method: str = "tsne") -> go.Figure:
+        """
+        Plot embeddings in 2D using PCA or t-SNE.
+
+        This is useful to visualize the embedding space.
+        - t-SNE is good for visualizing clusters. The closer the points are,
+            the more similar the categories are.
+
+        Parameters
+        ----------
+        embed_col : str
+            The embedding column name
+        method : str, optional (default='tsne')
+            'pca' or 'tsne'
+
+        Returns
+        -------
+        embedding_fig : Figure
+            2D scatter plot of embeddings
+
+        """
+        # get weights
+        weights_df = self.embedding_get_weights(embed_col)
+        weights_df = weights_df.drop("__UNK__", errors="ignore")
+        if weights_df.shape[1] < 2:
+            raise ValueError("Need at least 2 embedding dimensions for 2D plot")
+
+        # reduce dimensions
+        if method == "pca":
+            reducer = PCA(n_components=2)
+        else:
+            perplexity = min(30, max(5, len(weights_df) - 1))
+            reducer = TSNE(n_components=2, perplexity=perplexity, random_state=42)
+
+        coords = reducer.fit_transform(weights_df.values)
+
+        plot_df = pd.DataFrame(
+            {"x": coords[:, 0], "y": coords[:, 1], "category": weights_df.index}
+        )
+
+        # plot
+        embedding_fig = px.scatter(
+            plot_df,
+            x="x",
+            y="y",
+            text="category",
+            title=f"{embed_col} Embeddings ({method.upper()})",
+        )
+        embedding_fig.update_traces(textposition="top center")
+
+        return embedding_fig
 
     def _create_embeddings(self, X: pd.DataFrame) -> int:
         """
@@ -536,100 +736,158 @@ class Neural(nn.Module):
 
         return X_torch_num, X_torch_embed_idx
 
-    def get_embedding_analysis(self, embed_col: str) -> pd.DataFrame:
+
+class Shap:
+    """
+    A wrapper class for SHAP explainability for the Neural model.
+
+    The wrapper may be expanded in the future to include other explainability methods.
+
+    Higher SHAP values increase the prediction, lower SHAP values decrease the
+    prediction. Magnitude of SHAP values indicates the strength of the feature's effect.
+
+    Usage:
+    --------------
+    Shap = Shap(
+        model=neural_model,
+        background_df=X_train,
+        n_samples=100,
+        seed=42,
+    )
+    shap_values = Shap.compute_values(
+        explain_df=X_test,
+        n_samples=100,
+        seed=42,
+    )
+    """
+
+    def __init__(
+        self,
+        model: Neural,
+        background_df: pd.DataFrame,
+        n_samples: int = 100,
+        seed: Optional[int] = None,
+    ) -> None:
         """
-        Get embedding weights for a embedding column.
+        Initialize the SHAP wrapper.
 
         Parameters
         ----------
-        embed_col : str
-            The embedding column name
+        model : Neural
+            The trained Neural model
+        background_df : pd.DataFrame
+            The background_df data to use as background for SHAP
+            Typically this is the training data
+        n_samples : int, optional (default=100)
+            Number of background samples to use
+        seed : int, optional
+            Random seed for reproducibility when sampling background data
+
+        """
+        self.model = model
+        self.n_samples = n_samples
+        self.seed = seed
+
+        self.sample_background_df = None
+        self.sample_explain_df = None
+        self.shap_values = None
+
+        self.explainer = self._create_explainer(background_df=background_df)
+
+    def _create_explainer(self, background_df: pd.DataFrame) -> shap.KernelExplainer:
+        """
+        Create a SHAP KernelExplainer for the Neural model.
+
+        The KernelExplainer is model-agnostic and works well with embeddings by
+        treating the model as a black box. It uses a background dataset to
+        compute expected values.
+
+        Parameters
+        ----------
+        background_df : pd.DataFrame
+            The background_df data to use as background for SHAP
+            Typically this is the training data
 
         Returns
         -------
-        pd.DataFrame
-            DataFrame with embedding name as index and embedding dimensions as columns
+        explainer : shap.KernelExplainer
+            An explainer object for computing SHAP values
 
         """
-        if embed_col not in self.embeddings:
-            raise ValueError(f"No embedding found for '{embed_col}'")
+        # initiate variables
+        model = self.model
+        n_samples = self.n_samples
+        seed = self.seed
 
-        # Get the embedding weights
-        weights = self.embeddings[embed_col].weight.detach().cpu().numpy()
+        # validations
+        if model.fc1 is None:
+            raise ValueError("Model must be fitted before creating explainer")
 
-        # Reverse the label encoder to get embedding names
-        idx_to_label = {v: k for k, v in self.label_encoders[embed_col].items()}
-        labels = [idx_to_label.get(i, f"idx_{i}") for i in range(weights.shape[0])]
+        # sample background data
+        sample_background_df = background_df.sample(
+            n=n_samples, random_state=seed
+        ).copy()
 
-        return pd.DataFrame(
-            weights, index=labels, columns=[f"dim_{i}" for i in range(weights.shape[1])]
+        # create explainer
+        seed_str = f" and a seed of `{seed}`" if seed is not None else ""
+        logger.info(
+            f"creating SHAP KernelExplainer with `{n_samples}` "
+            f"background samples{seed_str}"
         )
 
-    def plot_embedding_similarity(
-        self, embed_col: str
-    ) -> "plotly.graph_objects.Figure":
-        """Plot a heatmap of cosine similarities between category embeddings."""
-        import plotly.express as px
-        from sklearn.metrics.pairwise import cosine_similarity
+        explainer = shap.KernelExplainer(model.predict, sample_background_df)
 
-        df = self.get_embedding_analysis(embed_col)
-        # Skip the __UNK__ token
-        df = df.drop("__UNK__", errors="ignore")
+        # save variables
+        self.sample_background_df = sample_background_df
 
-        sim_matrix = cosine_similarity(df.values)
-        sim_df = pd.DataFrame(sim_matrix, index=df.index, columns=df.index)
+        return explainer
 
-        fig = px.imshow(
-            sim_df,
-            title=f"Embedding Similarity: {embed_col}",
-            color_continuous_scale="RdBu_r",
-            zmin=-1,
-            zmax=1,
-        )
-        return fig
-
-    def plot_embeddings_2d(
-        self, embed_col: str, method: str = "pca"
-    ) -> "plotly.graph_objects.Figure":
+    def compute_values(
+        self,
+        explain_df: pd.DataFrame,
+        n_samples: int = 100,
+        seed: Optional[int] = None,
+    ) -> shap.Explanation:
         """
-        Plot embeddings in 2D using PCA or t-SNE.
+        Compute SHAP values for a dataset.
 
         Parameters
         ----------
-        embed_col : str
-            The embedding column name
-        method : str
-            'pca' or 'tsne'
+        explain_df : pd.DataFrame
+            Data to explain
+            Typically this is a different slice of training data or testing data
+        n_samples : int, optional (default=100)
+            Number of samples to explain. If None, explains all rows.
+            For large datasets, consider using a subset.
+        seed : int, optional
+            Random seed for reproducibility when sampling
+
+        Returns
+        -------
+        shap_values : shap.Explanation
+            An explanation object containing SHAP values to be used for
+            analysis and plotting.
 
         """
-        import plotly.express as px
-        from sklearn.decomposition import PCA
-        from sklearn.manifold import TSNE
+        # initiate variables
+        explainer = self.explainer
 
-        df = self.get_embedding_analysis(embed_col)
-        df = df.drop("__UNK__", errors="ignore")
-
-        if df.shape[1] < 2:
-            raise ValueError("Need at least 2 embedding dimensions for 2D plot")
-
-        if method == "pca":
-            reducer = PCA(n_components=2)
+        # sample explain data
+        if n_samples is None:
+            sample_explain_df = explain_df.copy()
         else:
-            perplexity = min(30, max(5, len(df) - 1))
-            reducer = TSNE(n_components=2, perplexity=perplexity, random_state=42)
+            sample_explain_df = explain_df.sample(n=n_samples, random_state=seed).copy()
 
-        coords = reducer.fit_transform(df.values)
-
-        plot_df = pd.DataFrame(
-            {"x": coords[:, 0], "y": coords[:, 1], "category": df.index}
+        # compute shap values and create explanation object
+        seed_str = f" and a seed of `{seed}`" if seed is not None else ""
+        logger.info(
+            f"calculating shap_values with `{n_samples}` explainer samples{seed_str}"
         )
 
-        fig = px.scatter(
-            plot_df,
-            x="x",
-            y="y",
-            text="category",
-            title=f"{embed_col} Embeddings ({method.upper()})",
-        )
-        fig.update_traces(textposition="top center")
-        return fig
+        shap_values = explainer(sample_explain_df)
+
+        # save variables
+        self.sample_explain_df = sample_explain_df
+        self.shap_values = shap_values
+
+        return shap_values
