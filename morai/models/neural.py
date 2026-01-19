@@ -252,6 +252,10 @@ class Neural(nn.Module):
         # defaults
         MAX_NORM = 5.0
         MAX_NEGATIVE_LOG = -30.0
+        best_loss = float("inf")
+        best_state = None
+        best_epoch = 0
+        patience_counter = 0
 
         # validations
         if self.fc1 is None:
@@ -317,9 +321,6 @@ class Neural(nn.Module):
             self.output.weight.mul_(0.01)
 
         # train with loss likelihoods
-        best_loss = float("inf")
-        patience_counter = 0
-
         pbar = tqdm(range(epochs), desc="Training", leave=True)
         for epoch in pbar:
             # training forward pass
@@ -383,7 +384,9 @@ class Neural(nn.Module):
             # early stopping when loss does not improve
             if loss_value < best_loss:
                 best_loss = loss_value
+                best_epoch = epoch + 1
                 patience_counter = 0
+                best_state = self.state_dict().copy()
             elif epoch >= warmup_epochs:
                 patience_counter += 1
             if patience_counter >= max_patience:
@@ -398,6 +401,14 @@ class Neural(nn.Module):
                     "lr": opt.param_groups[0]["lr"],
                 }
             )
+
+        # load best state
+        if best_state is not None:
+            self.load_state_dict(best_state)
+        logger.info(
+            f"training complete with best_epoch: `{best_epoch}` "
+            f"and best_loss: `{best_loss}`"
+        )
 
         # create loss plot
         fig = go.Figure()
@@ -565,6 +576,9 @@ class Neural(nn.Module):
             sim_matrix, index=weights_df.index, columns=weights_df.index
         )
 
+        # create truncated labels
+        truncated_labels = [str(label)[:5] for label in sim_df.index]
+
         # plot
         similarity_fig = px.imshow(
             sim_df,
@@ -573,6 +587,17 @@ class Neural(nn.Module):
             zmin=-1,
             zmax=1,
         )
+
+        # update axes with truncated labels (full names still in hover)
+        similarity_fig.update_xaxes(
+            ticktext=truncated_labels,
+            tickvals=list(range(len(truncated_labels))),
+        )
+        similarity_fig.update_yaxes(
+            ticktext=truncated_labels,
+            tickvals=list(range(len(truncated_labels))),
+        )
+
         return similarity_fig
 
     def embedding_plot_2d(self, embed_col: str, method: str = "tsne") -> go.Figure:

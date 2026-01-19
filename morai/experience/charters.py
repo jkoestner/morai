@@ -760,6 +760,7 @@ def pdp(
     weight: Optional[str] = None,
     secondary: Optional[str] = None,
     mapping: Optional[Dict[str, Dict[str, Union[str, Dict[str, str]]]]] = None,
+    spline_dict: Optional[Dict[str, Any]] = None,
     x_bins: Optional[int] = None,
     center: str = "global",
     quick: bool = False,
@@ -802,6 +803,8 @@ def pdp(
     mapping : dict, optional (default=None)
         A mapping dictionary that will lookup an encoded features original
         values.
+    spline_dict: dict, optional (default=None)
+        A dictionary containing spline transformation info for features.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
     center : str, optional (default='global')
@@ -834,6 +837,7 @@ def pdp(
     line_color_type = "passthrough"
     x_axis_cols = None
     line_color_cols = None
+    x_axis_transformer = None
 
     grouped_features = [x_axis]
     weights = None
@@ -851,13 +855,20 @@ def pdp(
         raise ValueError("DataFrame is empty.")
 
     # x_axis processing
-    if mapping and x_axis in mapping:
+    if spline_dict and x_axis in spline_dict:
+        x_axis_type = "spline"
+        x_axis_cols = spline_dict[x_axis]["spline_columns"]
+        x_axis_transformer = spline_dict[x_axis]["transformer"]
+        if pd.api.types.is_integer_dtype(df[x_axis].dtype):
+            df[x_axis] = df[x_axis].astype(float)
+        x_axis_values = np.linspace(df[x_axis].min(), df[x_axis].max(), 100)
+    elif mapping and x_axis in mapping:
         x_axis_type = mapping[x_axis]["type"]
         if x_axis_type == "ohe":
             # values dict: {original_value: ohe_column_name}
             x_axis_cols = list(mapping[x_axis]["values"].values())
-            x_axis_values = list(mapping[x_axis]["values"].keys())
             df[x_axis] = _reconstruct_col_from_ohe_expanded(df, x_axis, mapping)
+            x_axis_values = list(df[x_axis].unique())
         else:
             x_axis_values = list(df[x_axis].unique())
     elif x_axis in df.select_dtypes(exclude=[np.number]).columns:
@@ -881,10 +892,11 @@ def pdp(
                 df[line_color] = _reconstruct_col_from_ohe_expanded(
                     df, line_color, mapping
                 )
+                line_color_values = df[line_color].unique()
             else:
-                line_color_values = X[line_color].unique()
+                line_color_values = df[line_color].unique()
         else:
-            line_color_values = X[line_color].unique()
+            line_color_values = df[line_color].unique()
         logger.info(f"Line feature: [{line_color}] type: [{line_color_type}]")
     else:
         line_color = "Overall"
@@ -943,6 +955,7 @@ def pdp(
                 x_axis,
                 x_axis_type,
                 x_axis_cols,
+                x_axis_transformer,
                 value,
                 line_color,
                 line_color_type,
@@ -970,6 +983,7 @@ def pdp(
                 x_axis,
                 x_axis_type,
                 x_axis_cols,
+                x_axis_transformer,
                 value,
                 line_color,
                 line_color_type,
@@ -1062,15 +1076,16 @@ def pdp(
     if secondary:
         logger.info(f"Adding secondary to chart: [{secondary}]")
 
-        for index, line_color_value in enumerate(pdp_df[line_color].unique()):
+        for index, line_color_value in enumerate(secondary_df[line_color].unique()):
             color_index = index % num_colors
-            df_subset = pdp_df[pdp_df[line_color] == line_color_value]
+            df_subset = secondary_df[secondary_df[line_color] == line_color_value]
             fig.add_trace(
                 go.Bar(
                     x=df_subset[x_axis],
                     y=df_subset[secondary],
                     name=line_color_value,
                     marker={"color": colorscale[color_index]},
+                    showlegend=False,
                 ),
                 row=2,
                 col=1,
@@ -1973,6 +1988,7 @@ def _pdp_make_prediction(
     x_axis: str,
     x_axis_type: str,
     x_axis_cols: Optional[List[str]],
+    x_axis_transformer: Any,
     value: Any,
     line_color: str,
     line_color_type: str,
@@ -1991,6 +2007,10 @@ def _pdp_make_prediction(
         target_col = f"{x_axis}_{value}"
         if target_col in x_axis_cols:
             X_temp[target_col] = 1
+    elif x_axis_type == "spline":
+        spline_values = x_axis_transformer.transform(pd.DataFrame({x_axis: [value]}))
+        for i, col in enumerate(x_axis_cols):
+            X_temp[col] = spline_values[0, i]
     else:
         X_temp.iloc[:, X_temp.columns.get_loc(x_axis)] = value
 
