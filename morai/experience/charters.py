@@ -1057,7 +1057,7 @@ def pdp(
                 x=df_subset[x_axis],
                 y=df_subset["%_diff"],
                 mode="lines",
-                name=line_color_value,
+                name=str(line_color_value),
                 line={"color": colorscale[color_index]},
             ),
             row=1,
@@ -1083,7 +1083,7 @@ def pdp(
                 go.Bar(
                     x=df_subset[x_axis],
                     y=df_subset[secondary],
-                    name=line_color_value,
+                    name=str(line_color_value),
                     marker={"color": colorscale[color_index]},
                     showlegend=False,
                 ),

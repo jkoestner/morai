@@ -257,6 +257,15 @@ class Neural(nn.Module):
         best_epoch = 0
         patience_counter = 0
 
+        # set seed for weight initialization and dropout masks
+        if seed is not None:
+            logger.info(f"setting seed: `{seed}`")
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+                torch.backends.cudnn.deterministic = True
+                torch.backends.cudnn.benchmark = False
+
         # validations
         if self.fc1 is None:
             self.setup_model(X_train=X, dropout=dropout)
@@ -273,13 +282,6 @@ class Neural(nn.Module):
             X = X.loc[~bad]
             y = y.loc[~bad]
             weights = weights.loc[~bad]
-
-        # set seed for weight initialization and dropout masks
-        if seed is not None:
-            logger.info(f"setting seed: `{seed}`")
-            torch.manual_seed(seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
 
         # convert y_train from rate to deaths
         y = y * weights
