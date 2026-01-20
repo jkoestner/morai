@@ -7,7 +7,7 @@
 **Enhancements**
 - improve web dashboard with mobile device
 - add residual analytic plots (qq plot, residual plot, calibration plot) in `charters`
-- enhance pdp plot with ohe functionality in `charters`
+- enhance pdp plot with ohe and spline functionality in `charters`
 - add penalty options for GLM models (L1, L2, elasticnet) in `core`
 - add spline creation in `preprocessing`
 - improve neural network model in `neural`
@@ -17,6 +17,7 @@
 
 **Documentation**
 - update notebooks
+- add CLAUDE.md
 
 ## [0.3.1](https://github.com/jkoestner/morai/tree/v0.3.1)
 
