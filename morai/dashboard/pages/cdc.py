@@ -81,7 +81,7 @@ def layout():
                 is_open=False,
                 dismissable=True,
                 icon="danger",
-                style={"position": "fixed", "top": 100, "right": 10, "width": 350},
+                className="toast",
             ),
             # Description Card
             dbc.Card(
@@ -97,7 +97,9 @@ def layout():
                                         ],
                                         className="card-title mb-3",
                                     ),
-                                    width=10,
+                                    xs=12,
+                                    md=10,
+                                    className="mb-3 mb-md-0",
                                 ),
                                 dbc.Col(
                                     [
@@ -124,7 +126,8 @@ def layout():
                                             className="text-center small",
                                         ),
                                     ],
-                                    width=2,
+                                    xs=12,
+                                    md=2,
                                 ),
                             ],
                         ),
@@ -691,7 +694,7 @@ def update_cdc_data_async(n_clicks):
         try:
             last_updated = pd.to_datetime(cdc.get_last_updated())
             days_since_update = (pd.Timestamp.now() - last_updated).days
-            if days_since_update < 14:
+            if days_since_update < 7:
                 return "recent", None
             refresh_cdc_data()
             new_last_updated = cdc.get_last_updated()
@@ -706,7 +709,7 @@ def update_cdc_data_async(n_clicks):
     if status == "recent":
         return (
             True,
-            "Data was recently updated. Please wait 14 days before updating again.",
+            "Data was recently updated. Please wait 7 days before updating again.",
             "warning",
             "Warning",
             dash.no_update,

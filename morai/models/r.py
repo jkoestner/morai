@@ -4,9 +4,11 @@ from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 from rpy2.robjects.packages import importr
+from scipy import stats
 from sklearn.base import BaseEstimator, RegressorMixin
 
 from morai.utils import custom_logger
@@ -41,6 +43,7 @@ class GAMR(BaseEstimator, RegressorMixin):
         self.link = None
         self.formula = None
         self.model = None
+        self.feature_names = None
         self.coefs = None
         self.is_fitted_ = False
 
@@ -116,11 +119,45 @@ class GAMR(BaseEstimator, RegressorMixin):
 
         # setting up model
         X = self._clean_data(X)
-        formula = self.get_formula(X=X, y=y, spline_dict=spline_dict)
-        ro.globalenv["data"] = pd.concat([X, y], axis=1)
-        ro.globalenv["weights"] = weights if weights is not None else ro.r("NULL")
+
+        # binomial and poisson need special handling for weights
+        if distribution == "binomial" and weights is not None:
+            successes = np.round(y * weights).astype(int)
+            failures = np.round(weights - successes).astype(int)
+            ro.globalenv["successes"] = successes
+            ro.globalenv["failures"] = failures
+
+            # create the formula
+            ro.r("y_matrix <- cbind(successes, failures)")
+            formula = self.get_formula(X=X, y=y, spline_dict=spline_dict)
+            formula = formula.replace(f"{y.name} ~", "y_matrix ~")
+
+            ro.globalenv["data"] = X
+            ro.globalenv["weights"] = ro.r("NULL")  # weights encoded in y_matrix
+
+        elif distribution == "poisson" and weights is not None:
+            if y.max() <= 1:  # likely a rate
+                counts = np.round(y * weights).astype(int)
+            else:
+                counts = y
+            ro.globalenv["counts"] = counts
+            ro.globalenv["log_exposure"] = np.log(weights)
+
+            # create the formula
+            formula = self.get_formula(X=X, y=y, spline_dict=spline_dict)
+            formula = formula.replace(f"{y.name} ~", "counts ~")
+            formula += " + offset(log_exposure)"
+            ro.globalenv["data"] = X
+            ro.globalenv["weights"] = ro.r("NULL")
+
+        else:
+            # quasibinomial, quasipoisson, gaussian, etc.
+            formula = self.get_formula(X=X, y=y, spline_dict=spline_dict)
+            ro.globalenv["data"] = pd.concat([X, y], axis=1)
+            ro.globalenv["weights"] = weights if weights is not None else ro.r("NULL")
+
         ro.globalenv["formula"] = ro.r(formula)
-        ro.globalenv["family"] = ro.r(f"{distribution}(link={link})")
+        ro.globalenv["family"] = ro.r(f"{distribution}(link='{link}')")
 
         # fit the model
         model_text = (
@@ -128,7 +165,7 @@ class GAMR(BaseEstimator, RegressorMixin):
             f", drop.intercept=TRUE{extra_text})"
         )
         logger.info("fitting the model:")
-        logger.info(f"> {model_text}`")
+        logger.info(f"> {model_text}")
         ro.r(model_text)
         logger.info("model fitted")
         self.is_fitted_ = True
@@ -144,6 +181,7 @@ class GAMR(BaseEstimator, RegressorMixin):
             self.y = y
             self.weights = weights
             self.model = model
+            self.feature_names = X.columns.tolist()
             self.coefs = coefs
             self.formula = formula
 
@@ -238,11 +276,26 @@ class GAMR(BaseEstimator, RegressorMixin):
         coefs = self.coefs
         smooth = None
         expand_smooth = None
+        confidence = 0.95
 
-        # get coefficients
+        # get parametric coefficients
+        # get p table
+        # calculate confidence intervals
+        coefs = pandas2ri.rpy2py_dataframe(
+            self.ro("as.data.frame(summary(model)$p.table)")
+        )
+        coefs.columns = ["coef", "std_err", "z", "p_value"]
+
+        z_crit = stats.norm.ppf(1 - (1 - confidence) / 2)
+        coefs["ci_lower"] = coefs["coef"] - z_crit * coefs["std_err"]
+        coefs["ci_upper"] = coefs["coef"] + z_crit * coefs["std_err"]
+        coefs = coefs[["coef", "std_err", "z", "p_value", "ci_lower", "ci_upper"]]
+
+        # get smooth term coefficients
         smooth = pandas2ri.rpy2py_dataframe(
             self.ro("as.data.frame(summary(model)$s.table)")
         )
+
         # get smooth alpha values
         alpha_vals = []
         num_smooths = int(self.ro("length(model$smooth)")[0])
@@ -265,6 +318,23 @@ class GAMR(BaseEstimator, RegressorMixin):
             "n_obs": int(self.ro("length(model$y)")[0]),
             "weights": not np.allclose(np.array(self.ro("model$prior.weights")), 1.0),
         }
+
+        # format parametric table
+        coefs_str = coefs.copy()
+        coefs_str["coef"] = coefs_str["coef"].map("{:.6f}".format)
+        coefs_str["std_err"] = coefs_str["std_err"].map("{:.6f}".format)
+        coefs_str["z"] = coefs_str["z"].map("{:.3f}".format)
+        coefs_str["p_value"] = coefs_str["p_value"].map("{:.4f}".format)
+        coefs_str["ci_lower"] = coefs_str["ci_lower"].map("{:.6f}".format)
+        coefs_str["ci_upper"] = coefs_str["ci_upper"].map("{:.6f}".format)
+        coefs_str.columns = [
+            "coef",
+            "std err",
+            "z",
+            "P>|z|",
+            f"[{(1 - confidence) / 2:.3f}",
+            f"{1 - (1 - confidence) / 2:.3f}]",
+        ]
 
         if expand:
             coef_names = list(self.ro("names(model$coefficients)"))
@@ -295,7 +365,7 @@ class GAMR(BaseEstimator, RegressorMixin):
                 self.formula,
                 "",
                 "Parametric Coefficients:",
-                coefs.to_string(),
+                coefs_str.to_string(),
                 "",
                 "Smooth Terms:",
                 smooth.to_string(),
@@ -330,10 +400,59 @@ class GAMR(BaseEstimator, RegressorMixin):
 
         X = self._clean_data(X)
         ro.globalenv["newdata"] = X
-        predictions = ro.r("predict(model, newdata=newdata, type='response')")
-        logger.info("predicted rates")
+
+        if self.family == "poisson" and "offset(log_exposure)" in self.formula:
+            # set log_exposure to 0 to get rate predictions
+            ro.globalenv["log_exposure"] = np.zeros(len(X))
+            predictions = np.array(
+                ro.r("predict(model, newdata=newdata, type='response')")
+            )
+        else:
+            predictions = np.array(
+                ro.r("predict(model, newdata=newdata, type='response')")
+            )
+
+        logger.debug("predicted rates")
 
         return predictions
+
+    def get_odds(self, display: bool = False) -> pd.DataFrame:
+        """
+        Get the odds ratio.
+
+        Parameters
+        ----------
+        display : bool, optional
+            Whether to display the odds ratio
+
+        Returns
+        -------
+        odds_ratio : pd.DataFrame
+            The odds ratio
+
+        """
+        if not self.is_fitted_:
+            raise ValueError("model is not fitted use fit method")
+
+        logger.info("generating odds ratio from model")
+        odds_ratio = np.exp(self.coefs)
+
+        # displaying chart of odds ratio
+        if display:
+            coef_df = pd.DataFrame(
+                {"feature": self.coefs.index[1:], "coefficient": self.coefs[1:]}
+            )
+            coef_df = coef_df.sort_values("coefficient", ascending=False)
+
+            odds_ratio = px.bar(
+                coef_df,
+                x="feature",
+                y="coefficient",
+                title="Feature Importance",
+                labels={"coefficient": "Coefficient Value", "feature": "Features"},
+            )
+
+        return odds_ratio
 
     def ro(self, input: Any) -> ro:
         """

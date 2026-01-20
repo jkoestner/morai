@@ -87,7 +87,7 @@ def layout():
                 is_open=False,
                 dismissable=True,
                 icon="danger",
-                style={"position": "fixed", "top": 100, "right": 10, "width": 350},
+                className="toast",
             ),
             # Description Card
             dbc.Card(
@@ -136,7 +136,10 @@ def layout():
                             color="primary",
                             className="w-100 shadow-sm",
                         ),
-                        width=2,
+                        xs=12,
+                        sm=6,
+                        md=4,
+                        lg=2,
                     ),
                 ],
                 className="mb-4",
@@ -172,11 +175,13 @@ def layout():
                                                         value="soa table",
                                                         className="mb-3",
                                                     ),
-                                                    width=3,
+                                                    xs=12,
+                                                    md=3,
                                                 ),
                                                 dbc.Col(
                                                     html.Div(id="table-1-card"),
-                                                    width=9,
+                                                    xs=12,
+                                                    md=9,
                                                 ),
                                             ],
                                             className="mb-3",
@@ -207,7 +212,9 @@ def layout():
                             ],
                             className="shadow-sm h-100",
                         ),
-                        width=6,
+                        xs=12,
+                        lg=6,
+                        className="mb-3 mb-lg-0",
                     ),
                     dbc.Col(
                         dbc.Card(
@@ -237,11 +244,13 @@ def layout():
                                                         value="soa table",
                                                         className="mb-3",
                                                     ),
-                                                    width=3,
+                                                    xs=12,
+                                                    md=3,
                                                 ),
                                                 dbc.Col(
                                                     html.Div(id="table-2-card"),
-                                                    width=9,
+                                                    xs=12,
+                                                    md=9,
                                                 ),
                                             ],
                                             className="mb-3",
@@ -272,7 +281,8 @@ def layout():
                             ],
                             className="shadow-sm h-100",
                         ),
-                        width=6,
+                        xs=12,
+                        lg=6,
                     ),
                 ],
                 className="mb-4",
@@ -331,7 +341,9 @@ def layout():
                                                 className="bg-white rounded-3 shadow-sm p-3",
                                             ),
                                         ),
-                                        width=6,
+                                        xs=12,
+                                        lg=6,
+                                        className="mb-3 mb-lg-0",
                                     ),
                                     dbc.Col(
                                         dcc.Loading(
@@ -343,7 +355,8 @@ def layout():
                                                 className="bg-white rounded-3 shadow-sm p-3",
                                             ),
                                         ),
-                                        width=6,
+                                        xs=12,
+                                        lg=6,
                                     ),
                                 ],
                                 className="mb-4",
@@ -377,8 +390,9 @@ def layout():
                                             id="slider-container",
                                             style={"display": "none"},
                                         ),
-                                        width=6,
-                                        className="mx-auto",
+                                        xs=12,
+                                        lg=6,
+                                        className="mx-auto mb-3 mb-lg-0",
                                     ),
                                     dbc.Col(
                                         dcc.Loading(
@@ -390,7 +404,8 @@ def layout():
                                                 className="bg-white rounded-3 shadow-sm p-3",
                                             ),
                                         ),
-                                        width=6,
+                                        xs=12,
+                                        lg=6,
                                     ),
                                 ],
                                 className="mb-4",
@@ -420,7 +435,9 @@ def layout():
                                                 className="bg-white rounded-3 shadow-sm p-3",
                                             ),
                                         ),
-                                        width=6,
+                                        xs=12,
+                                        lg=6,
+                                        className="mb-3 mb-lg-0",
                                     ),
                                     dbc.Col(
                                         dcc.Loading(
@@ -432,7 +449,8 @@ def layout():
                                                 className="bg-white rounded-3 shadow-sm p-3",
                                             ),
                                         ),
-                                        width=6,
+                                        xs=12,
+                                        lg=6,
                                     ),
                                 ],
                                 className="mb-4",
@@ -1221,13 +1239,13 @@ def get_table_desc(
     if isinstance(table1_id, str):
         try:
             table_1_desc = suppress_logs(tables.get_rate_dict)(table1_id)["description"]
-        except KeyError:
+        except (KeyError, ValueError):
             table_1_desc = table1_id
         try:
             table_1_asof = suppress_logs(tables.get_rate_dict)(table1_id)["notes"][
                 "effective_dt"
             ]
-        except KeyError:
+        except (KeyError, ValueError):
             table_1_asof = "Unknown"
     else:
         soa_xml = mt.get_soa_xml(table1_id)
@@ -1267,13 +1285,13 @@ def get_table_desc(
     if isinstance(table2_id, str):
         try:
             table_2_desc = suppress_logs(tables.get_rate_dict)(table2_id)["description"]
-        except KeyError:
+        except (KeyError, ValueError):
             table_2_desc = table2_id
         try:
             table_2_asof = suppress_logs(tables.get_rate_dict)(table2_id)["notes"][
                 "effective_dt"
             ]
-        except KeyError:
+        except (KeyError, ValueError):
             table_2_asof = "Unknown"
     else:
         soa_xml = mt.get_soa_xml(table2_id)

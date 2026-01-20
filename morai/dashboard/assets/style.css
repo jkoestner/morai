@@ -10,3 +10,174 @@
 .center-aligned-group-header .ag-header-group-cell-label {
     justify-content: center;
 }
+
+/* ====================================
+   RESPONSIVE DESIGN - MOBILE FIRST
+   ==================================== */
+
+/* Mobile-specific styles (default - mobile first) */
+body {
+    font-size: 14px;
+}
+
+.container-fluid {
+    padding-left: 15px !important;
+    padding-right: 15px !important;
+}
+
+/* Sidebar - hidden by default on mobile */
+#sidebar {
+    display: none;
+    position: fixed;
+    left: -250px;
+    width: 250px;
+    transition: left 0.3s ease-in-out;
+    z-index: 1000;
+}
+
+#sidebar.show {
+    display: block;
+    left: 0;
+}
+
+/* Main content - no margin on mobile */
+.main-content {
+    margin-left: 0 !important;
+}
+
+/* Toast notifications - responsive width */
+.toast {
+    width: 90vw !important;
+    max-width: 350px !important;
+    right: 5vw !important;
+}
+
+/* Offcanvas - full width on mobile */
+.offcanvas {
+    width: 100% !important;
+    max-width: 300px !important;
+}
+
+/* Tables - horizontal scroll on mobile */
+.ag-theme-alpine {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* Cards - full width on mobile */
+.card {
+    margin-bottom: 1rem;
+}
+
+/* Buttons - full width on mobile */
+.btn-mobile-full {
+    width: 100%;
+}
+
+/* Navbar toggler */
+.navbar-toggler {
+    display: block;
+}
+
+/* ====================================
+   TABLET STYLES (min-width: 768px)
+   ==================================== */
+@media (min-width: 768px) {
+    body {
+        font-size: 15px;
+    }
+
+    .container-fluid {
+        padding-left: 20px !important;
+        padding-right: 20px !important;
+    }
+
+    /* Toast notifications */
+    .toast {
+        width: 350px !important;
+        right: 10px !important;
+    }
+
+    /* Offcanvas */
+    .offcanvas {
+        width: 300px !important;
+    }
+
+    /* Buttons - auto width on tablet+ */
+    .btn-mobile-full {
+        width: auto;
+    }
+}
+
+/* ====================================
+   DESKTOP STYLES (min-width: 992px)
+   ==================================== */
+@media (min-width: 992px) {
+    body {
+        font-size: 16px;
+    }
+
+    /* Sidebar - always visible on desktop */
+    #sidebar {
+        display: block !important;
+        position: fixed;
+        left: 0;
+    }
+
+    /* Main content with sidebar margin */
+    .main-content {
+        margin-left: 250px !important;
+    }
+
+    /* Navbar toggler - hide on desktop */
+    .navbar-toggler {
+        display: none;
+    }
+}
+
+/* ====================================
+   LARGE DESKTOP (min-width: 1200px)
+   ==================================== */
+@media (min-width: 1200px) {
+    .container-fluid {
+        padding-left: 30px !important;
+        padding-right: 30px !important;
+    }
+}
+
+/* ====================================
+   UTILITY CLASSES
+   ==================================== */
+
+/* Hide on mobile */
+@media (max-width: 767px) {
+    .hide-mobile {
+        display: none !important;
+    }
+}
+
+/* Hide on desktop */
+@media (min-width: 992px) {
+    .hide-desktop {
+        display: none !important;
+    }
+}
+
+/* Responsive text sizes */
+@media (max-width: 767px) {
+    h1, .h1 { font-size: 1.75rem; }
+    h2, .h2 { font-size: 1.5rem; }
+    h3, .h3 { font-size: 1.25rem; }
+    h4, .h4 { font-size: 1.1rem; }
+    h5, .h5 { font-size: 1rem; }
+}
+
+/* Scrollable tables on mobile */
+@media (max-width: 767px) {
+    .table-responsive {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}

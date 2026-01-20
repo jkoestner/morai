@@ -12,6 +12,7 @@ import polars as pl
 from joblib import Parallel, cpu_count, delayed
 from pandas import CategoricalDtype
 from plotly.subplots import make_subplots
+from scipy.stats import probplot
 from tqdm.auto import tqdm
 
 from morai import models
@@ -300,7 +301,7 @@ def relative_risk(
     denominator: Optional[str] = None,
     x_bins: Optional[int] = None,
     relative_to: Optional[str] = "aggregate",
-    relative_cols: Optional[List[str] or str] = None,
+    relative_cols: Optional[List[str] | str] = None,
     subset_dict: Optional[Dict[str, Any]] = None,
     flip_x_color: Optional[bool] = False,
     display: bool = True,
@@ -759,6 +760,7 @@ def pdp(
     weight: Optional[str] = None,
     secondary: Optional[str] = None,
     mapping: Optional[Dict[str, Dict[str, Union[str, Dict[str, str]]]]] = None,
+    spline_dict: Optional[Dict[str, Any]] = None,
     x_bins: Optional[int] = None,
     center: str = "global",
     quick: bool = False,
@@ -801,6 +803,8 @@ def pdp(
     mapping : dict, optional (default=None)
         A mapping dictionary that will lookup an encoded features original
         values.
+    spline_dict: dict, optional (default=None)
+        A dictionary containing spline transformation info for features.
     x_bins : int, optional (default=None)
         The number of bins to use for the x-axis.
     center : str, optional (default='global')
@@ -832,6 +836,8 @@ def pdp(
     x_axis_type = "passthrough"
     line_color_type = "passthrough"
     x_axis_cols = None
+    line_color_cols = None
+    x_axis_transformer = None
 
     grouped_features = [x_axis]
     weights = None
@@ -849,11 +855,20 @@ def pdp(
         raise ValueError("DataFrame is empty.")
 
     # x_axis processing
-    if mapping and x_axis in mapping:
+    if spline_dict and x_axis in spline_dict:
+        x_axis_type = "spline"
+        x_axis_cols = spline_dict[x_axis]["spline_columns"]
+        x_axis_transformer = spline_dict[x_axis]["transformer"]
+        if pd.api.types.is_integer_dtype(df[x_axis].dtype):
+            df[x_axis] = df[x_axis].astype(float)
+        x_axis_values = np.linspace(df[x_axis].min(), df[x_axis].max(), 100)
+    elif mapping and x_axis in mapping:
         x_axis_type = mapping[x_axis]["type"]
         if x_axis_type == "ohe":
+            # values dict: {original_value: ohe_column_name}
             x_axis_cols = list(mapping[x_axis]["values"].values())
-            x_axis_values = list(mapping[x_axis]["values"].keys())
+            df[x_axis] = _reconstruct_col_from_ohe_expanded(df, x_axis, mapping)
+            x_axis_values = list(df[x_axis].unique())
         else:
             x_axis_values = list(df[x_axis].unique())
     elif x_axis in df.select_dtypes(exclude=[np.number]).columns:
@@ -868,11 +883,21 @@ def pdp(
 
     # line_color processing
     if line_color:
-        line_color_type = mapping[line_color]["type"]
-        if line_color_type == "ohe":
-            raise ValueError("One hot encoding not supported for line_color.")
+        if mapping and line_color in mapping:
+            line_color_type = mapping[line_color]["type"]
+            if line_color_type == "ohe":
+                # values dict: {original_value: ohe_column_name}
+                line_color_cols = list(mapping[line_color]["values"].values())
+                line_color_values = list(mapping[line_color]["values"].keys())
+                df[line_color] = _reconstruct_col_from_ohe_expanded(
+                    df, line_color, mapping
+                )
+                line_color_values = df[line_color].unique()
+            else:
+                line_color_values = df[line_color].unique()
+        else:
+            line_color_values = df[line_color].unique()
         logger.info(f"Line feature: [{line_color}] type: [{line_color_type}]")
-        line_color_values = X[line_color].unique()
     else:
         line_color = "Overall"
         df[line_color] = "Overall"
@@ -930,8 +955,11 @@ def pdp(
                 x_axis,
                 x_axis_type,
                 x_axis_cols,
+                x_axis_transformer,
                 value,
                 line_color,
+                line_color_type,
+                line_color_cols,
                 line_value,
                 quick,
                 weights,
@@ -955,8 +983,11 @@ def pdp(
                 x_axis,
                 x_axis_type,
                 x_axis_cols,
+                x_axis_transformer,
                 value,
                 line_color,
+                line_color_type,
+                line_color_cols,
                 line_value,
                 quick,
                 weights,
@@ -1026,7 +1057,7 @@ def pdp(
                 x=df_subset[x_axis],
                 y=df_subset["%_diff"],
                 mode="lines",
-                name=line_color_value,
+                name=str(line_color_value),
                 line={"color": colorscale[color_index]},
             ),
             row=1,
@@ -1045,15 +1076,16 @@ def pdp(
     if secondary:
         logger.info(f"Adding secondary to chart: [{secondary}]")
 
-        for index, line_color_value in enumerate(pdp_df[line_color].unique()):
+        for index, line_color_value in enumerate(secondary_df[line_color].unique()):
             color_index = index % num_colors
-            df_subset = pdp_df[pdp_df[line_color] == line_color_value]
+            df_subset = secondary_df[secondary_df[line_color] == line_color_value]
             fig.add_trace(
                 go.Bar(
                     x=df_subset[x_axis],
                     y=df_subset[secondary],
-                    name=line_color_value,
+                    name=str(line_color_value),
                     marker={"color": colorscale[color_index]},
+                    showlegend=False,
                 ),
                 row=2,
                 col=1,
@@ -1199,7 +1231,7 @@ def matrix(
 def target(
     df: Union[pd.DataFrame, pl.LazyFrame],
     target: Union[List[str], str],
-    features: [List[str]],
+    features: List[str],
     cols: int = 3,
     numerator: Optional[Union[List[str], str]] = None,
     denominator: Optional[Union[List[str], str]] = None,
@@ -1207,6 +1239,7 @@ def target(
     normalize: Optional[List[str]] = None,
     add_line: bool = False,
     generate_pairwise: bool = False,
+    y_log: bool = False,
 ) -> go.Figure:
     """
     Create multiplot showing variable relationship with target.
@@ -1237,6 +1270,8 @@ def target(
         Whether to add a line to the chart at y-axis of 1.
     generate_pairwise : bool, optional
         Whether to generate pairwise plots from list of features.
+    y_log : bool, optional
+        Whether to log the y-axis.
 
     Returns
     -------
@@ -1576,12 +1611,19 @@ def target(
             )
             legend_added.add(line_name)
 
+    # y-axis log scale
+    yaxis_type = "-"
+    if y_log:
+        yaxis_type = "log"
+        title += " (y-axis log)"
+
     # update layout
     fig.update_layout(
         height=chart_height * num_rows,
         width=chart_width,
         title_text=title,
         legend=legend,
+        yaxis_type=yaxis_type,
     )
 
     return fig
@@ -1649,6 +1691,262 @@ def get_stats(df: Union[pd.DataFrame, pl.LazyFrame], features: list) -> pd.DataF
     return stats
 
 
+def qq(residuals: pd.Series, distribution: str = "norm") -> go.Figure:
+    """
+    Create a QQ plot for the residuals.
+
+    Parameters
+    ----------
+    residuals : pd.Series
+        The residuals to use.
+    distribution : str, optional (default='norm')
+        The distribution to use for the QQ plot.
+
+    Returns
+    -------
+    fig : Figure
+        The chart
+
+    Notes
+    -----
+    Here are common ways to get the residuals for different models:
+    - GLM:
+      - model.resid_deviance
+      - model.resid_pearson
+
+    """
+    # calculate values
+    (theoretical_quantiles, sample_quantiles), (slope, intercept, r) = probplot(
+        residuals, dist="norm"
+    )
+
+    # create the plot
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=theoretical_quantiles,
+            y=sample_quantiles,
+            mode="markers",
+            name="Sample Quantiles",
+            marker={"color": "blue", "size": 6},
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=theoretical_quantiles,
+            y=slope * theoretical_quantiles + intercept,
+            mode="lines",
+            name="Fit Line",
+            line={"color": "red", "dash": "dash"},
+        )
+    )
+    fig.update_layout(
+        title="Q-Q Plot",
+        xaxis_title="Theoretical Quantiles",
+        yaxis_title="Sample Quantiles",
+        width=600,
+        height=600,
+    )
+
+    return fig
+
+
+def residual_plot(
+    fitted: pd.Series,
+    residuals: pd.Series,
+    n_bins: int = 20,
+) -> go.Figure:
+    """
+    Create a binned residual plot.
+
+    This is mainly used for GLM models to assess goodness of fit.
+
+    Parameters
+    ----------
+    fitted : pd.Series
+        The fitted values (predicted probabilities or predicted values).
+    residuals : pd.Series
+        The residuals to use.
+        Common choices are Pearson or deviance residuals.
+    n_bins : int, optional (default=20)
+        Number of bins to create based on fitted value quantiles.
+
+    Returns
+    -------
+    fig : Figure
+        The chart
+
+    Notes
+    -----
+    The plot shows mean residuals per bin with error bars representing
+    ±2 standard errors. Points should be scattered around zero with most
+    error bars crossing the zero line for a well-fitted model.
+
+    fitted=GLM.model.fittedvalues
+    residuals=GLM.model.resid_pearson
+
+    """
+    # create bins
+    bins = pd.qcut(fitted, q=n_bins, duplicates="drop")
+
+    # calculate binned statistics
+    binned = (
+        pd.DataFrame({"fitted": fitted, "resid": residuals})
+        .assign(bin=bins)
+        .groupby("bin", observed=True)
+        .agg(
+            mean_fitted=("fitted", "mean"),
+            mean_resid=("resid", "mean"),
+            n=("resid", "size"),
+            sd=("resid", "std"),
+        )
+    )
+    binned["se"] = binned["sd"] / np.sqrt(binned["n"])
+    binned["error"] = 2 * binned["se"]
+
+    # create the plot
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=binned["mean_fitted"],
+            y=binned["mean_resid"],
+            error_y={
+                "type": "data",
+                "array": binned["error"],
+                "visible": True,
+                "color": "blue",
+            },
+            mode="markers",
+            name="Binned Residuals",
+            marker={"color": "blue", "size": 8},
+        )
+    )
+    fig.add_hline(
+        y=0,
+        line_dash="dash",
+        line_color="black",
+        line_width=1,
+        annotation_text="",
+    )
+
+    fig.update_layout(
+        title="Binned Residual Plot",
+        xaxis_title="Fitted Values",
+        yaxis_title="Mean Residual",
+        width=700,
+        height=500,
+        showlegend=False,
+    )
+
+    return fig
+
+
+def calibration_plot(
+    fitted: pd.Series,
+    observed: pd.Series,
+    n_bins: int = 20,
+    log: bool = False,
+) -> go.Figure:
+    """
+    Create a calibration plot to assess prediction accuracy.
+
+    Parameters
+    ----------
+    fitted : pd.Series
+        The fitted values (predicted probabilities or rates).
+    observed : pd.Series
+        The observed values (actual outcomes: 0/1 for binomial, counts for Poisson).
+    n_bins : int, optional (default=20)
+        Number of bins to create based on fitted value quantiles.
+    log : bool, optional (default=False)
+        Whether to use a log scale for axes.
+
+    Returns
+    -------
+    fig : Figure
+        The chart
+
+    Notes
+    -----
+    The plot shows observed vs predicted values per bin. Points should fall
+    along the 45-degree line for a well-calibrated model.
+
+    fitted: model.fittedvalues (predicted probabilities)
+    observed: model.model.endog
+
+    """
+    # create bins
+    bins = pd.qcut(fitted, q=n_bins, duplicates="drop")
+
+    # calculate binned statistics
+    binned = (
+        pd.DataFrame({"fitted": fitted, "observed": observed})
+        .assign(bin=bins)
+        .groupby("bin", observed=True)
+        .agg(
+            mean_fitted=("fitted", "mean"),
+            mean_observed=("observed", "mean"),
+            n=("observed", "size"),
+            sd=("observed", "std"),
+        )
+    )
+    binned["se"] = binned["sd"] / np.sqrt(binned["n"])
+    binned["error"] = 2 * binned["se"]
+
+    # create the plot
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=binned["mean_fitted"],
+            y=binned["mean_observed"],
+            error_y={
+                "type": "data",
+                "array": binned["error"],
+                "visible": True,
+                "color": "blue",
+            },
+            mode="markers",
+            name="Observed vs Predicted",
+            marker={"color": "blue", "size": 8},
+        )
+    )
+
+    # perfect calibration line
+    min_val = min(binned["mean_fitted"].min(), binned["mean_observed"].min())
+    max_val = max(binned["mean_fitted"].max(), binned["mean_observed"].max())
+
+    fig.add_trace(
+        go.Scatter(
+            x=[min_val, max_val],
+            y=[min_val, max_val],
+            mode="lines",
+            name="Perfect Calibration",
+            line={"color": "red", "dash": "dash", "width": 2},
+        )
+    )
+
+    fig.update_layout(
+        title="Calibration Plot",
+        xaxis_title="fitted values",
+        yaxis_title="observed values",
+        width=700,
+        height=700,
+        showlegend=True,
+    )
+
+    if log:
+        fig.update_layout(
+            xaxis_type="log",
+            yaxis_type="log",
+            title="Calibration Plot (Log Scale)",
+        )
+
+    # make axes equal for easier visual assessment
+    fig.update_xaxes(scaleanchor="y", scaleratio=1)
+
+    return fig
+
+
 def get_category_orders(
     df: pd.DataFrame,
     category: str,
@@ -1690,8 +1988,11 @@ def _pdp_make_prediction(
     x_axis: str,
     x_axis_type: str,
     x_axis_cols: Optional[List[str]],
+    x_axis_transformer: Any,
     value: Any,
     line_color: str,
+    line_color_type: str,
+    line_color_cols: Optional[List[str]],
     line_value: Any,
     quick: bool,
     weights: Optional[pd.Series],
@@ -1699,21 +2000,33 @@ def _pdp_make_prediction(
     """Make predictions for PDP."""
     X_temp = X.copy()
 
-    # Handle one-hot encoding
+    # set x_axis values
     if x_axis_type == "ohe":
         for col in x_axis_cols[1:]:
             X_temp[col] = 0
-        # the dropped first column is a reference column and should have a value of 0
-        if value != x_axis_cols[0][len(x_axis + "_") :]:
-            X_temp[x_axis + "_" + value] = 1
+        target_col = f"{x_axis}_{value}"
+        if target_col in x_axis_cols:
+            X_temp[target_col] = 1
+    elif x_axis_type == "spline":
+        spline_values = x_axis_transformer.transform(pd.DataFrame({x_axis: [value]}))
+        for i, col in enumerate(x_axis_cols):
+            X_temp[col] = spline_values[0, i]
     else:
         X_temp.iloc[:, X_temp.columns.get_loc(x_axis)] = value
 
-    # Set line color values
+    # set line_color values
     if line_color and line_color != "Overall":
-        X_temp.iloc[:, X_temp.columns.get_loc(line_color)] = line_value
+        # handle ohe
+        if line_color_type == "ohe":
+            for col in line_color_cols:
+                X_temp[col] = 0
+            target_col = f"{line_color}_{line_value}"
+            if target_col in line_color_cols:
+                X_temp[target_col] = 1
+        else:
+            X_temp.iloc[:, X_temp.columns.get_loc(line_color)] = line_value
 
-    # Make predictions
+    # make predictions
     if quick:
         pred = model.predict(X_temp)[0]
     else:
@@ -1726,3 +2039,59 @@ def _pdp_make_prediction(
         line_color: line_value,
         "pred": pred,
     }
+
+
+def _reconstruct_col_from_ohe_expanded(
+    df: pd.DataFrame,
+    feature_name: str,
+    mapping: Dict[str, Dict[str, Union[str, Dict[str, str]]]],
+) -> pd.Series:
+    """
+    Reconstruct a categorical column from one-hot expanded columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the OHE columns
+    feature_name : str
+        The original feature name (used for reference category detection)
+    mapping : dict
+        A mapping dictionary that will lookup an encoded features original
+        values.
+
+    Returns
+    -------
+    pd.Series
+        Reconstructed categorical column
+
+    """
+    values_mapping = mapping[feature_name]["values"]
+
+    # initialize
+    ohe_col_values = pd.Series(index=df.index, dtype=object)
+
+    # find the original value for each row
+    for original_value, ohe_col in values_mapping.items():
+        if ohe_col in df.columns:
+            mask = df[ohe_col] == 1
+            ohe_col_values.loc[mask] = original_value
+
+    # update the na's to the reference category, which should be the missing column
+    if ohe_col_values.isna().any():
+        ohe_cols_expanded = [
+            col for col in values_mapping.values() if col in df.columns
+        ]
+        all_zeros_mask = (df[ohe_cols_expanded] == 0).all(axis=1)
+        # find the ohe_column not in the dataframe
+        for original_value, ohe_col in values_mapping.items():
+            if ohe_col not in df.columns:
+                ohe_col_values.loc[all_zeros_mask & ohe_col_values.isna()] = (
+                    original_value
+                )
+                break
+        # all columns exist so use first category as reference for all zeros
+        else:
+            first_category = next(iter(values_mapping.keys()))
+            ohe_col_values.loc[ohe_col_values.isna()] = first_category
+
+    return ohe_col_values

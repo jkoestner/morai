@@ -36,6 +36,9 @@ class GLM(BaseEstimator, RegressorMixin):
         self.mapping = None
         self.model = None
         self.is_fitted_ = False
+        self.dispersion = None
+        self.alpha = None
+        self.l1_wt = None
 
     def fit(
         self,
@@ -45,6 +48,9 @@ class GLM(BaseEstimator, RegressorMixin):
         family: sm.families = None,
         r_style: bool = False,
         mapping: Optional[dict] = None,
+        alpha: float = 0.0,
+        l1_wt: float = 0.0,
+        maxiter: int = 100,
         **kwargs,
     ) -> Any:
         """
@@ -61,7 +67,7 @@ class GLM(BaseEstimator, RegressorMixin):
         y : pd.Series
             The target
         weights : pd.Series, optional
-            The weights
+            The weights - used as var_weights in statsmodels
         family : sm.families, optional
             The family to use for the GLM model
         r_style : bool, optional
@@ -69,6 +75,15 @@ class GLM(BaseEstimator, RegressorMixin):
         mapping : dict, optional
             The mapping of the features to the encoding and only needed
             if r_style is True
+        alpha : float, optional
+            The regularization strength
+        l1_wt : float, optional
+            The l1 weight for elastic net regularization
+            - 0.0 = ridge (L2 only) - default
+            - 1.0 = lasso (L1 only)
+            - 0.0 < L1_wt < 1.0 = elastic net
+        maxiter : int, optional
+            The maximum number of iterations for fitting
         kwargs : dict, optional
             Additional keyword arguments to apply to the model
 
@@ -78,13 +93,32 @@ class GLM(BaseEstimator, RegressorMixin):
             The GLM model
 
         """
-        logger.info("fiting the model")
+        feature_cnt = X.shape[1]
+        logger.info(f"fiting the model with {feature_cnt} features")
         self.r_style = r_style
         self.mapping = mapping
+        self.alpha = alpha
+        self.l1_wt = l1_wt
         model = self._setup_model(X, y, weights, family, **kwargs)
-        model = model.fit()
+
+        # use regularized fit if alpha > 0
+        if alpha > 0:
+            logger.info(f"fitting penalized GLM with alpha={alpha}, L1_wt={l1_wt}")
+            model = model.fit_regularized(alpha=alpha, L1_wt=l1_wt, maxiter=maxiter)
+            regularized_feature_cnt = np.sum(model.params != 0)
+            if regularized_feature_cnt < feature_cnt:
+                logger.info(
+                    f"regularized model reduced features from "
+                    f"{feature_cnt} to {regularized_feature_cnt}"
+                )
+        else:
+            model = model.fit(maxiter=maxiter)
+
         self.model = model
         self.is_fitted_ = True
+
+        # calculate dispersion
+        self.dispersion = self.calculate_dispersion()
 
         return model
 
@@ -259,7 +293,7 @@ class GLM(BaseEstimator, RegressorMixin):
         y : pd.Series
             The target
         weights : pd.Series, optional
-            The weights
+            The weights - used as var_weights in statsmodels
         base_features : list, optional
             The base features to use for the contributions
 
@@ -317,6 +351,10 @@ class GLM(BaseEstimator, RegressorMixin):
                 }
             )
         feature_contributions = pd.DataFrame(contributions)
+        feature_contributions["contribution"] = feature_contributions[
+            "contribution"
+        ].round(5)
+
         # refit the model
         self.fit(X[[*features, *base_features]], y, weights)
 
@@ -324,6 +362,89 @@ class GLM(BaseEstimator, RegressorMixin):
         logger.setLevel(original_log_level)
 
         return feature_contributions
+
+    def calculate_dispersion(
+        self,
+        residuals: np.ndarray = None,
+        weights: np.ndarray = None,
+        weight_type: Optional[str] = None,
+    ) -> float:
+        """
+        Calculate the empirical dispersion of the model.
+
+        The empirical dispersion is calculated as:
+          - pearson chi-squared statistic / degrees of freedom
+
+        The pearson chi-squared statistic is calculated as:
+          - sum of squared pearson residuals
+
+        This tells you if the model varies more or less than expected.
+
+        Parameters
+        ----------
+        residuals : np.ndarray, optional
+            The residuals of the model
+        weights : np.ndarray, optional
+            The weights - used as var_weights in statsmodels
+        weight_type : str, optional
+            The type of weight to use for the dispersion calculation
+              - "var_weights": variance weights
+              - "freq_weights": frequency weights
+              - "None": no weights
+
+        Returns
+        -------
+        dispersion : float
+            The dispersion of the model
+
+        Notes
+        -----
+        To interpret the dispersion:
+            - dispersion < 1: underdispersion
+            - dispersion = 1: equidispersion
+            - dispersion > 1: overdispersion
+
+        https://www.stat.umn.edu/geyer/5421/notes/over.html
+
+        """
+        if not self.is_fitted_:
+            raise ValueError("model is not fitted use fit method")
+
+        # check valid parameters if provided
+        else:
+            if weight_type not in ["var", "freq", None]:
+                raise ValueError("weight_type must be 'var', 'freq', or None")
+            if weight_type is not None and weights is None:
+                raise ValueError("weights must be provided if weight_type is not None")
+
+        # check regularized model
+        is_regularized = self.alpha > 0
+
+        # set defaults if not provided
+        if residuals is None:
+            if is_regularized:
+                # calculate pearson residuals manually for regularized model
+                fitted_values = self.model.predict(self.model.model.exog)
+                if isinstance(self.model.model.family, sm.families.Binomial):
+                    mu = fitted_values
+                    var = mu * (1 - mu)
+                    residuals = (self.model.model.endog - mu) / np.sqrt(var)
+                else:
+                    residuals = self.model.model.endog - fitted_values
+            else:
+                residuals = self.model.resid_pearson
+
+        degrees_of_freedom = len(residuals) - len(self.model.params)
+
+        # check if weights are used
+        if weight_type == "freq":
+            # frequency
+            dispersion = np.sum(weights * residuals**2) / degrees_of_freedom
+        else:
+            # no weights or var_weights
+            dispersion = np.sum(residuals**2) / degrees_of_freedom
+
+        return dispersion
 
     def _setup_model(
         self,
@@ -343,7 +464,7 @@ class GLM(BaseEstimator, RegressorMixin):
         y : pd.Series
             The target
         weights : pd.Series, optional
-            The weights
+            The weights - used as var_weights in statsmodels
         family : sm.families, optional
             The family to use for the GLM model
         kwargs : dict, optional

@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.2](https://github.com/jkoestner/morai/tree/v0.3.2)
+
+[Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.1...v0.3.2)
+
+**Enhancements**
+- improve web dashboard with mobile device
+- add residual analytic plots (qq plot, residual plot, calibration plot) in `charters`
+- enhance pdp plot with ohe and spline functionality in `charters`
+- add penalty options for GLM models (L1, L2, elasticnet) in `core`
+- add spline creation in `preprocessing`
+- improve neural network model in `neural`
+
+**Bugs**
+- small bug fixes
+
+**Documentation**
+- update notebooks
+- add CLAUDE.md
+
 ## [0.3.1](https://github.com/jkoestner/morai/tree/v0.3.1)
 
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.0...v0.3.1)
