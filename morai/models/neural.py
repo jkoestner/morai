@@ -341,7 +341,7 @@ class Neural(nn.Module):
             self.output.weight.mul_(0.01)
 
         # logging
-        logger.info(f"epochs: {epochs:,.0f}, batch_size: {batch_size:,.0f}, lr: {lr}")
+        logger.info(f"epochs: {epochs:,.0f}, batch_size: {batch_size}, lr: {lr}")
         logger.info(f"dropout: {dropout}, weight_decay: {weight_decay}")
         if early_stopping:
             logger.info(
