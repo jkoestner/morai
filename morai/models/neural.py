@@ -311,10 +311,17 @@ class Neural(nn.Module):
             weights_test.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
 
+        if X_torch_embed_idx:
+            X_torch_embed_stacked = torch.stack(X_torch_embed_idx, dim=1)
+        else:
+            X_torch_embed_stacked = torch.zeros(
+                len(y_torch), 0, dtype=torch.long, device=self.device
+            )
+
         # create dataloader for mini-batch training
         effective_batch_size = batch_size if batch_size is not None else len(y_torch)
         train_dataset = TensorDataset(
-            X_torch_num, X_torch_embed_idx, y_torch, weights_torch
+            X_torch_num, X_torch_embed_stacked, y_torch, weights_torch
         )
         train_loader = DataLoader(
             train_dataset, batch_size=effective_batch_size, shuffle=True
@@ -350,7 +357,11 @@ class Neural(nn.Module):
             for batch_num, batch_embed, batch_y, batch_weights in train_loader:
                 opt.zero_grad()
 
-                z_torch = self(batch_num, batch_embed)
+                batch_embed_list = [
+                    batch_embed[:, i] for i in range(batch_embed.shape[1])
+                ]
+
+                z_torch = self(batch_num, batch_embed_list)
 
                 if self.task == "poisson":
                     logE = torch.log(batch_weights).clamp(min=MAX_NEGATIVE_LOG)
