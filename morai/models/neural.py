@@ -211,6 +211,7 @@ class Neural(nn.Module):
         lr: float = 0.001,
         dropout: float = 0.0,
         weight_decay: float = 0.0001,
+        early_stopping: bool = True,
         warmup_epochs: int = 50,
         max_patience: int = 20,
         seed: Optional[int] = None,
@@ -241,6 +242,8 @@ class Neural(nn.Module):
             Dropout rate for the model
         weight_decay : float, optional (default=1e-4)
             similar to L2 regularization to prevent overfitting
+        early_stopping : bool, optional (default=True)
+            Whether to use early stopping based on test loss
         warmup_epochs : int, optional (default=50)
             Number of epochs to wait before starting early stopping
         max_patience : int, optional (default=20)
@@ -372,45 +375,55 @@ class Neural(nn.Module):
                     ).mean()
                 self.train()  # switch back to training mode
 
-            train_losses.append(loss.detach().item())
-            test_losses.append(test_loss.detach().item())
+            train_loss_value = loss.detach().item()
+            test_loss_value = test_loss.item()
+            train_losses.append(train_loss_value)
+            test_losses.append(test_loss_value)
             learning_rates.append(opt.param_groups[0]["lr"])
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
             opt.step()
 
-            loss_value = loss.detach().item()
-            scheduler.step(loss_value)
+            scheduler.step(train_loss_value)
 
             # early stopping when loss does not improve
-            if loss_value < best_loss:
-                best_loss = loss_value
-                best_epoch = epoch + 1
-                patience_counter = 0
-                best_state = self.state_dict().copy()
-            elif epoch >= warmup_epochs:
-                patience_counter += 1
-            if patience_counter >= max_patience:
-                logger.info(f"early stopping at epoch {epoch + 1}")
-                pbar.close()
-                break
+            if early_stopping:
+                if test_loss_value < best_loss:
+                    best_loss = test_loss_value
+                    best_epoch = epoch + 1
+                    patience_counter = 0
+                    best_state = self.state_dict().copy()
+                elif epoch >= warmup_epochs:
+                    patience_counter += 1
+                if patience_counter >= max_patience:
+                    logger.info(
+                        f"early stopping at epoch {epoch + 1}, best epoch {best_epoch}"
+                    )
+                    pbar.close()
+                    break
 
             pbar.set_postfix(
                 {
-                    "loss": f"{loss_value:.6f}",
+                    "train": f"{train_loss_value:.6f}",
+                    "test": f"{test_loss_value:.6f}",
                     "counter": patience_counter,
                     "lr": opt.param_groups[0]["lr"],
                 }
             )
 
         # load best state
-        if best_state is not None:
+        if early_stopping and best_state is not None:
             self.load_state_dict(best_state)
-        logger.info(
-            f"training complete with best_epoch: `{best_epoch}` "
-            f"and best_loss: `{best_loss}`"
-        )
+            logger.info(
+                f"training complete, restored best epoch: `{best_epoch}` "
+                f"with test loss: `{best_loss:.6f}`"
+            )
+        else:
+            logger.info(
+                f"training complete, {epoch + 1} epochs, "
+                f"with test loss: `{test_loss_value:.6f}`"
+            )
 
         # create loss plot
         fig = go.Figure()
@@ -547,6 +560,7 @@ class Neural(nn.Module):
         weights_df = pd.DataFrame(
             weights, index=labels, columns=[f"dim_{i}" for i in range(weights.shape[1])]
         )
+        weights_df = weights_df.sort_index()
 
         return weights_df
 
