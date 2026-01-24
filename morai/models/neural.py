@@ -13,6 +13,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_similarity
 from torch import nn, optim
+from torch.utils.data import DataLoader, TensorDataset
 from tqdm.auto import tqdm
 
 from morai.utils import custom_logger
@@ -208,6 +209,7 @@ class Neural(nn.Module):
         y_test: pd.Series = None,
         weights_test: pd.Series = None,
         epochs: int = 100,
+        batch_size: int = 8192,
         lr: float = 0.001,
         dropout: float = 0.0,
         weight_decay: float = 0.0001,
@@ -235,6 +237,8 @@ class Neural(nn.Module):
             The weights for the testing data
         epochs : int, optional (default=100)
             The number of epochs to train the model for, by default 100
+        batch_size: int, optional (default=8192)
+            The batch size for mini-batch training, by default 8192
         lr : float, optional (default=0.001)
             The learning rate, by default 0.001. Lower values will result in
             slower learning, higher values will result in faster learning
@@ -306,6 +310,16 @@ class Neural(nn.Module):
         weights_torch_test = torch.tensor(
             weights_test.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
+
+        # create dataloader for mini-batch training
+        effective_batch_size = batch_size if batch_size is not None else len(y_torch)
+        train_dataset = TensorDataset(
+            X_torch_num, X_torch_embed_idx, y_torch, weights_torch
+        )
+        train_loader = DataLoader(
+            train_dataset, batch_size=effective_batch_size, shuffle=True
+        )
+
         train_losses, test_losses, learning_rates = [], [], []
 
         # setup optimizer and a learning rate scheduler to reduce learning rate
@@ -330,26 +344,38 @@ class Neural(nn.Module):
         for epoch in pbar:
             # training forward pass
             self.train()
-            opt.zero_grad()
+            epoch_loss = 0.0
+            num_batches = 0
 
-            # convert to torch tensors, prepare fresh
-            z_torch = self(X_torch_num, X_torch_embed_idx)
+            for batch_num, batch_embed, batch_y, batch_weights in train_loader:
+                opt.zero_grad()
 
-            if self.task == "poisson":
-                logE = torch.log(weights_torch).clamp(min=MAX_NEGATIVE_LOG)
-                loglam = z_torch + logE
-                loss = F.poisson_nll_loss(
-                    input=loglam,
-                    target=y_torch,
-                    log_input=True,
-                    full=False,
-                    reduction="mean",
-                )
-            else:  # binomial
-                loss = -(
-                    y_torch * F.logsigmoid(z_torch)
-                    + (weights_torch - y_torch) * F.logsigmoid(-z_torch)
-                ).mean()
+                z_torch = self(batch_num, batch_embed)
+
+                if self.task == "poisson":
+                    logE = torch.log(batch_weights).clamp(min=MAX_NEGATIVE_LOG)
+                    loglam = z_torch + logE
+                    loss = F.poisson_nll_loss(
+                        input=loglam,
+                        target=batch_y,
+                        log_input=True,
+                        full=False,
+                        reduction="mean",
+                    )
+                else:  # binomial
+                    loss = -(
+                        batch_y * F.logsigmoid(z_torch)
+                        + (batch_weights - batch_y) * F.logsigmoid(-z_torch)
+                    ).mean()
+
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
+                opt.step()
+
+                epoch_loss += loss.detach().item()
+                num_batches += 1
+
+            train_loss_value = epoch_loss / num_batches
 
             # test loss - no gradients needed
             with torch.no_grad():
@@ -373,19 +399,13 @@ class Neural(nn.Module):
                         + (weights_torch_test - y_torch_test)
                         * F.logsigmoid(-z_torch_test)
                     ).mean()
-                self.train()  # switch back to training mode
 
-            train_loss_value = loss.detach().item()
             test_loss_value = test_loss.item()
             train_losses.append(train_loss_value)
             test_losses.append(test_loss_value)
             learning_rates.append(opt.param_groups[0]["lr"])
 
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
-            opt.step()
-
-            scheduler.step(train_loss_value)
+            scheduler.step(test_loss_value)
 
             # early stopping when loss does not improve
             if early_stopping:
