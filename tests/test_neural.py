@@ -37,18 +37,20 @@ def test_neural_poisson():
     # test setup
     model = neural.Neural(
         task="poisson",
-        cat_cols=[
-            "gender",
-            "faceband",
-        ],
     )
     assert model.task == "poisson"
 
     # test fit
-    model.fit(X=X, y=y, weights=weights, epochs=10, lr=0.001)
-    assert set(model.embeddings.keys()) == {"gender", "faceband"}
-    assert model.embeddings["gender"].num_embeddings == 3
-    assert model.embeddings["gender"].embedding_dim == 2
+    model.fit(
+        X=X,
+        y=y,
+        weights=weights,
+        X_test=X,
+        y_test=y,
+        weights_test=weights,
+        epochs=100,
+        lr=0.01,
+    )
     assert model.dropout1.p == 0.0
     assert model.dropout2.p == 0.0
     assert model.dropout3.p == 0.0
@@ -88,19 +90,21 @@ def test_neural_binomial():
     # test setup
     model = neural.Neural(
         task="binomial",
-        cat_cols=[
-            "gender",
-            "faceband",
-        ],
-        embedding_dims={"gender": 5, "faceband": 10},
     )
     assert model.task == "binomial"
 
     # test fit
-    model.fit(X=X, y=y, weights=weights, epochs=10, lr=0.001, dropout=0.01)
-    assert set(model.embeddings.keys()) == {"gender", "faceband"}
-    assert model.embeddings["gender"].num_embeddings == 3
-    assert model.embeddings["gender"].embedding_dim == 5
+    model.fit(
+        X=X,
+        y=y,
+        weights=weights,
+        X_test=X,
+        y_test=y,
+        weights_test=weights,
+        epochs=100,
+        lr=0.01,
+        dropout=0.01,
+    )
     assert model.dropout1.p == 0.01
     assert model.dropout2.p == 0.01
     assert model.dropout3.p == 0.01

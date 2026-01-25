@@ -90,6 +90,7 @@ class Neural(nn.Module):
         self.fc1 = self.fc2 = self.fc3 = self.output = None
         self.relu1 = self.relu2 = self.relu3 = None
         self.label_encoders = {}
+        self._is_fitted = False
         self.to(self.device)
         logger.info(
             f"initialized Neural model with Torch\n"
@@ -203,12 +204,12 @@ class Neural(nn.Module):
         X: pd.DataFrame,
         y: pd.Series,
         weights: pd.Series,
-        X_test: pd.DataFrame = None,
-        y_test: pd.Series = None,
-        weights_test: pd.Series = None,
+        X_test: pd.DataFrame,
+        y_test: pd.Series,
+        weights_test: pd.Series,
         epochs: int = 100,
-        batch_size: int = 8192,
         lr: float = 0.001,
+        batch_size: Optional[int] = None,
         dropout: float = 0.0,
         weight_decay: float = 0.0001,
         early_stopping: bool = True,
@@ -235,10 +236,10 @@ class Neural(nn.Module):
             The weights for the testing data
         epochs : int, optional (default=100)
             The number of epochs to train the model for, by default 100
-        batch_size: int, optional (default=8192)
-            The batch size for mini-batch training, by default 8192
         lr : float, optional (default=0.001)
             The learning rate, by default 0.001. Lower values will result in
+        batch_size: int, optional (default=None)
+            The batch size for mini-batch training. If None, use full-batch training
             slower learning, higher values will result in faster learning
         dropout : float, optional (default=0.0)
             Dropout rate for the model
@@ -275,6 +276,11 @@ class Neural(nn.Module):
         if self.fc1 is None:
             self.setup_model(X_train=X, dropout=dropout)
             self.to(self.device)
+        else:
+            logger.warning(
+                "model has already been set up and calling fit again"
+                "will update existing weights."
+            )
         if self.task not in ("poisson", "binomial"):
             raise ValueError("task must be 'poisson' or 'binomial'")
         if not (X.index.equals(y.index) and X.index.equals(weights.index)):
@@ -482,7 +488,8 @@ class Neural(nn.Module):
                     patience_counter += 1
                 if patience_counter >= max_patience:
                     logger.info(
-                        f"early stopping at epoch: {epoch + 1}, best epoch: {best_epoch}"
+                        f"early stopping at epoch: {epoch + 1}, "
+                        f"best epoch: {best_epoch}"
                     )
                     pbar.close()
                     break
@@ -508,6 +515,7 @@ class Neural(nn.Module):
                 f"training complete, {epoch + 1} epochs, "
                 f"with test loss: `{test_loss_value:,.2f}`"
             )
+        self._is_fitted = True
 
         # create loss plot
         fig = go.Figure()
