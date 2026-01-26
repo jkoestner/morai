@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.3](https://github.com/jkoestner/morai/tree/v0.3.3)
+
+[Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.2...v0.3.3)
+
+**Enhancements**
+- add batch_size and clean up logging in `neural`
+- enhance the pdp processing in `charters`
+
+**Documentation**
+- update tests
+
 ## [0.3.2](https://github.com/jkoestner/morai/tree/v0.3.2)
 
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.1...v0.3.2)

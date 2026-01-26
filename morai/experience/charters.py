@@ -861,7 +861,7 @@ def pdp(
         x_axis_transformer = spline_dict[x_axis]["transformer"]
         if pd.api.types.is_integer_dtype(df[x_axis].dtype):
             df[x_axis] = df[x_axis].astype(float)
-        x_axis_values = np.linspace(df[x_axis].min(), df[x_axis].max(), 100)
+        x_axis_values = _get_numeric_axis_values(df[x_axis])
     elif mapping and x_axis in mapping:
         x_axis_type = mapping[x_axis]["type"]
         if x_axis_type == "ohe":
@@ -874,10 +874,9 @@ def pdp(
     elif x_axis in df.select_dtypes(exclude=[np.number]).columns:
         x_axis_values = list(df[x_axis].unique())
     else:
-        # linspace is creating float falues
         if pd.api.types.is_integer_dtype(df[x_axis].dtype):
             df[x_axis] = df[x_axis].astype(float)
-        x_axis_values = np.linspace(df[x_axis].min(), df[x_axis].max(), 100)
+        x_axis_values = _get_numeric_axis_values(df[x_axis])
     logger.info(f"x_axis: [{x_axis}] type: [{x_axis_type}] center: [{center}]")
     X = df[model_features]
 
@@ -1980,6 +1979,40 @@ def get_category_orders(
     category_orders = {category: col_order.index.to_list()}
 
     return category_orders
+
+
+def _get_numeric_axis_values(series: pd.Series, max_points: int = 100) -> np.ndarray:
+    """
+    Get axis values for numeric features in PDP.
+
+    Uses unique values if the feature is integer-like or has few unique values,
+    otherwise uses linspace.
+
+    Parameters
+    ----------
+    series : pd.Series
+        The feature series
+    max_points : int, optional (default=100)
+        Maximum number of points to generate if using linspace
+
+    Returns
+    -------
+    axis_values = np.ndarray
+        Array of values to use for the PDP x-axis
+
+    """
+    unique_vals = series.dropna().unique()
+    n_unique = len(unique_vals)
+
+    # use unique values if integer-like or few unique values
+    if n_unique <= max_points:
+        axis_values = np.sort(unique_vals)
+
+    # otherwise use linspace
+    else:
+        axis_values = np.linspace(series.min(), series.max(), max_points)
+
+    return axis_values
 
 
 def _pdp_make_prediction(

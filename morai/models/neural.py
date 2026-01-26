@@ -90,6 +90,7 @@ class Neural(nn.Module):
         self.fc1 = self.fc2 = self.fc3 = self.output = None
         self.relu1 = self.relu2 = self.relu3 = None
         self.label_encoders = {}
+        self._is_fitted = False
         self.to(self.device)
         logger.info(
             f"initialized Neural model with Torch\n"
@@ -115,7 +116,6 @@ class Neural(nn.Module):
         self.num_cols = num_cols
         logger.info(f"non-embedding columns: {self.num_cols}")
         logger.info(f"embedding columns: {self.embedding_cols}")
-        logger.info(f"dropout: {dropout}")
 
         input_size = len(num_cols)
         total_embedding_dim = self._create_embeddings(X_train)
@@ -204,13 +204,15 @@ class Neural(nn.Module):
         X: pd.DataFrame,
         y: pd.Series,
         weights: pd.Series,
-        X_test: pd.DataFrame = None,
-        y_test: pd.Series = None,
-        weights_test: pd.Series = None,
+        X_test: pd.DataFrame,
+        y_test: pd.Series,
+        weights_test: pd.Series,
         epochs: int = 100,
         lr: float = 0.001,
+        batch_size: Optional[int] = None,
         dropout: float = 0.0,
         weight_decay: float = 0.0001,
+        early_stopping: bool = True,
         warmup_epochs: int = 50,
         max_patience: int = 20,
         seed: Optional[int] = None,
@@ -236,11 +238,15 @@ class Neural(nn.Module):
             The number of epochs to train the model for, by default 100
         lr : float, optional (default=0.001)
             The learning rate, by default 0.001. Lower values will result in
+        batch_size: int, optional (default=None)
+            The batch size for mini-batch training. If None, use full-batch training
             slower learning, higher values will result in faster learning
         dropout : float, optional (default=0.0)
             Dropout rate for the model
         weight_decay : float, optional (default=1e-4)
             similar to L2 regularization to prevent overfitting
+        early_stopping : bool, optional (default=True)
+            Whether to use early stopping based on test loss
         warmup_epochs : int, optional (default=50)
             Number of epochs to wait before starting early stopping
         max_patience : int, optional (default=20)
@@ -270,6 +276,11 @@ class Neural(nn.Module):
         if self.fc1 is None:
             self.setup_model(X_train=X, dropout=dropout)
             self.to(self.device)
+        else:
+            logger.warning(
+                "model has already been set up and calling fit again"
+                "will update existing weights."
+            )
         if self.task not in ("poisson", "binomial"):
             raise ValueError("task must be 'poisson' or 'binomial'")
         if not (X.index.equals(y.index) and X.index.equals(weights.index)):
@@ -294,6 +305,7 @@ class Neural(nn.Module):
         y_torch = torch.tensor(
             y.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
+        y_torch_length = len(y_torch)
         y_torch_test = torch.tensor(
             y_test.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
@@ -303,6 +315,18 @@ class Neural(nn.Module):
         weights_torch_test = torch.tensor(
             weights_test.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
         )
+
+        if X_torch_embed_idx:
+            X_torch_embed_stacked = torch.stack(X_torch_embed_idx, dim=1)
+        else:
+            X_torch_embed_stacked = torch.zeros(
+                y_torch_length, 0, dtype=torch.long, device=self.device
+            )
+
+        # batch configuration
+        # if batch_size is None or >= dataset size, use full-batch
+        use_mini_batch = batch_size is not None and batch_size < y_torch_length
+
         train_losses, test_losses, learning_rates = [], [], []
 
         # setup optimizer and a learning rate scheduler to reduce learning rate
@@ -314,7 +338,7 @@ class Neural(nn.Module):
 
         # initialize prediction to global rate
         overall_mu = float(y.sum() / weights.sum())
-        logger.info(f"overall_mu: {overall_mu}")
+        logger.info(f"overall_mu: {overall_mu:.6f}")
         with torch.no_grad():
             self.wide_linear.bias.fill_(
                 np.log(max(overall_mu, 1e-12)).astype(np.float32)
@@ -322,31 +346,106 @@ class Neural(nn.Module):
             self.output.bias.fill_(0.0)
             self.output.weight.mul_(0.01)
 
+        # logging
+        logger.info(f"epochs: {epochs:,.0f}, batch_size: {batch_size}, lr: {lr}")
+        logger.info(f"dropout: {dropout}, weight_decay: {weight_decay}")
+        if early_stopping:
+            logger.info(
+                f"early stopping: enabled, warmup_epochs: {warmup_epochs}, "
+                f"max_patience: {max_patience}"
+            )
+        else:
+            logger.info("early stopping: disabled")
+
         # train with loss likelihoods
         pbar = tqdm(range(epochs), desc="Training", leave=True)
         for epoch in pbar:
             # training forward pass
             self.train()
-            opt.zero_grad()
+            epoch_loss = 0.0
+            num_batches = 0
 
-            # convert to torch tensors, prepare fresh
-            z_torch = self(X_torch_num, X_torch_embed_idx)
+            if use_mini_batch:
+                # shuffle
+                perm = torch.randperm(y_torch_length, device=self.device)
 
-            if self.task == "poisson":
-                logE = torch.log(weights_torch).clamp(min=MAX_NEGATIVE_LOG)
-                loglam = z_torch + logE
-                loss = F.poisson_nll_loss(
-                    input=loglam,
-                    target=y_torch,
-                    log_input=True,
-                    full=False,
-                    reduction="mean",
-                )
-            else:  # binomial
-                loss = -(
-                    y_torch * F.logsigmoid(z_torch)
-                    + (weights_torch - y_torch) * F.logsigmoid(-z_torch)
-                ).mean()
+                # iterate over batches using direct indexing
+                # instead of dataloader for efficiency
+                for start_idx in range(0, y_torch_length, batch_size):
+                    end_idx = min(start_idx + batch_size, y_torch_length)
+                    idx = perm[start_idx:end_idx]
+
+                    batch_num = X_torch_num[idx]
+                    batch_embed = X_torch_embed_stacked[idx]
+                    batch_y = y_torch[idx]
+                    batch_weights = weights_torch[idx]
+
+                    opt.zero_grad()
+
+                    batch_embed_list = [
+                        batch_embed[:, i] for i in range(batch_embed.shape[1])
+                    ]
+
+                    z_torch = self(batch_num, batch_embed_list)
+
+                    if self.task == "poisson":
+                        logE = torch.log(batch_weights).clamp(min=MAX_NEGATIVE_LOG)
+                        loglam = z_torch + logE
+                        loss = F.poisson_nll_loss(
+                            input=loglam,
+                            target=batch_y,
+                            log_input=True,
+                            full=False,
+                            reduction="mean",
+                        )
+                    else:  # binomial
+                        loss = -(
+                            batch_y * F.logsigmoid(z_torch)
+                            + (batch_weights - batch_y) * F.logsigmoid(-z_torch)
+                        ).mean()
+
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
+                    opt.step()
+
+                    epoch_loss += loss.detach().item()
+                    num_batches += 1
+
+            # full-batch training
+            else:
+                opt.zero_grad()
+
+                X_torch_embed_list = [
+                    X_torch_embed_stacked[:, i]
+                    for i in range(X_torch_embed_stacked.shape[1])
+                ]
+
+                z_torch = self(X_torch_num, X_torch_embed_list)
+
+                if self.task == "poisson":
+                    logE = torch.log(weights_torch).clamp(min=MAX_NEGATIVE_LOG)
+                    loglam = z_torch + logE
+                    loss = F.poisson_nll_loss(
+                        input=loglam,
+                        target=y_torch,
+                        log_input=True,
+                        full=False,
+                        reduction="mean",
+                    )
+                else:  # binomial
+                    loss = -(
+                        y_torch * F.logsigmoid(z_torch)
+                        + (weights_torch - y_torch) * F.logsigmoid(-z_torch)
+                    ).mean()
+
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
+                opt.step()
+
+                epoch_loss = loss.detach().item()
+                num_batches = 1
+
+            train_loss_value = epoch_loss / num_batches
 
             # test loss - no gradients needed
             with torch.no_grad():
@@ -370,47 +469,53 @@ class Neural(nn.Module):
                         + (weights_torch_test - y_torch_test)
                         * F.logsigmoid(-z_torch_test)
                     ).mean()
-                self.train()  # switch back to training mode
 
-            train_losses.append(loss.detach().item())
-            test_losses.append(test_loss.detach().item())
+            test_loss_value = test_loss.item()
+            train_losses.append(train_loss_value)
+            test_losses.append(test_loss_value)
             learning_rates.append(opt.param_groups[0]["lr"])
 
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
-            opt.step()
-
-            loss_value = loss.detach().item()
-            scheduler.step(loss_value)
+            scheduler.step(test_loss_value)
 
             # early stopping when loss does not improve
-            if loss_value < best_loss:
-                best_loss = loss_value
-                best_epoch = epoch + 1
-                patience_counter = 0
-                best_state = self.state_dict().copy()
-            elif epoch >= warmup_epochs:
-                patience_counter += 1
-            if patience_counter >= max_patience:
-                logger.info(f"early stopping at epoch {epoch + 1}")
-                pbar.close()
-                break
+            if early_stopping:
+                if test_loss_value < best_loss:
+                    best_loss = test_loss_value
+                    best_epoch = epoch + 1
+                    patience_counter = 0
+                    best_state = self.state_dict().copy()
+                elif epoch >= warmup_epochs:
+                    patience_counter += 1
+                if patience_counter >= max_patience:
+                    logger.info(
+                        f"early stopping at epoch: {epoch + 1}, "
+                        f"best epoch: {best_epoch}"
+                    )
+                    pbar.close()
+                    break
 
             pbar.set_postfix(
                 {
-                    "loss": f"{loss_value:.6f}",
+                    "train": f"{train_loss_value:,.2f}",
+                    "test": f"{test_loss_value:,.2f}",
                     "counter": patience_counter,
                     "lr": opt.param_groups[0]["lr"],
                 }
             )
 
         # load best state
-        if best_state is not None:
+        if early_stopping and best_state is not None:
             self.load_state_dict(best_state)
-        logger.info(
-            f"training complete with best_epoch: `{best_epoch}` "
-            f"and best_loss: `{best_loss}`"
-        )
+            logger.info(
+                f"training complete, restored best epoch: `{best_epoch}` "
+                f"with test loss: `{best_loss:.6f}`"
+            )
+        else:
+            logger.info(
+                f"training complete, {epoch + 1} epochs, "
+                f"with test loss: `{test_loss_value:,.2f}`"
+            )
+        self._is_fitted = True
 
         # create loss plot
         fig = go.Figure()
@@ -547,6 +652,7 @@ class Neural(nn.Module):
         weights_df = pd.DataFrame(
             weights, index=labels, columns=[f"dim_{i}" for i in range(weights.shape[1])]
         )
+        weights_df = weights_df.sort_index()
 
         return weights_df
 
