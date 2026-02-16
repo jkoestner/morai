@@ -295,11 +295,34 @@ def calc_relative_risk(
             on=relative_cols,
             how="left",
         )
+
+        # fallback for groups not represented in subset
+        if subset_dict:
+            if ratio:
+                fallback = base_df.select(
+                    (pl.col("risk_sum").sum() / pl.col("weight_sum").sum()).alias(
+                        "fallback"
+                    )
+                )
+            else:
+                fallback = base_df.select(
+                    (
+                        (pl.col("risk_sum") * pl.col("weight_sum")).sum()
+                        / pl.col("weight_sum").sum()
+                    ).alias("fallback")
+                )
+            grouped_df = grouped_df.with_columns(
+                pl.col("baseline_ratio")
+                .fill_null(fallback.collect().item())
+                .alias("baseline_ratio")
+            )
+
+        # calculate relative risk
         grouped_df = grouped_df.with_columns(
             (pl.col("risk_numerator") / pl.col("baseline_ratio")).alias("relative_risk")
         )
 
-        # handle zero
+        # handle zero by replacing with 1.0
         grouped_df = grouped_df.with_columns(
             pl.when(pl.col("relative_risk") == 0)
             .then(pl.lit(1.0))
@@ -380,11 +403,21 @@ def calc_relative_risk(
             on=relative_cols,
             how="left",
         )
+
+        # fallback for groups not represented in subset
+        if subset_dict:
+            if ratio:
+                fallback = base_df["risk_sum"].sum() / base_df["weight_sum"].sum()
+            else:
+                fallback = base_df["weighted_risk"].sum() / base_df["weight_sum"].sum()
+            grouped_df["baseline_ratio"] = grouped_df["baseline_ratio"].fillna(fallback)
+
+        # calculate relative risk
         grouped_df["relative_risk"] = (
             grouped_df["risk_numerator"] / grouped_df["baseline_ratio"]
         )
 
-        # handle zero
+        # handle zero by replacing with 1.0
         grouped_df.loc[grouped_df["relative_risk"] == 0, "relative_risk"] = 1.0
 
         if relative_to == "reference":
