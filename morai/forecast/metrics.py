@@ -9,6 +9,7 @@ import pandas as pd
 import polars as pl
 import sklearn.metrics as skm
 
+from morai.forecast import preprocessors
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
@@ -74,6 +75,8 @@ def ae_rank(
     actuals: str,
     expecteds: str,
     exposures: str,
+    bin_threshold: Optional[int] = None,
+    n_bins: int = 10,
 ) -> pd.DataFrame:
     """
     Calculate the actual/expected ranking.
@@ -98,6 +101,11 @@ def ae_rank(
         The expecteds.
     exposures : str
         The exposures.
+    bin_threshold : int, default=None
+        If a feature has more unique values than this threshold, bin it into
+        `n_bins` bins.
+    n_bins : int, default=10
+        Number of bins to create when binning.
 
     Returns
     -------
@@ -120,6 +128,13 @@ def ae_rank(
     total_exposure = agg_result["total_exposure"][0]
     ae = agg_result["total_actuals"][0] / agg_result["total_expecteds"][0]
     logger.info(f"The total AE with {expecteds} as E for dataset is {ae * 100:.1f}%")
+
+    # bin features with many unique values
+    if bin_threshold is not None:
+        for feature in features:
+            n_unique = df.select(pl.col(feature).n_unique()).collect().item()
+            if n_unique > bin_threshold:
+                df = preprocessors.lazy_bin_feature(df, feature, n_bins, inplace=True)
 
     # dataframe with attributes and attribute values
     melted_dfs = []

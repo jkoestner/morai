@@ -257,10 +257,20 @@ def _build_selectors_column():
                     ],
                     value="chart",
                     clearable=False,
-                    className="border-0 shadow-sm mb-4",
+                    className="border-0 shadow-sm mb-2",
                     style={
                         "borderRadius": "8px",
                         "fontSize": "15px",
+                    },
+                ),
+                html.P(
+                    "Visualize experience data across features with flexible charting.",
+                    id="tool-description",
+                    style={
+                        "fontSize": "0.85em",
+                        "color": "gray",
+                        "marginTop": "0px",
+                        "marginBottom": "10px",
                     },
                 ),
                 html.Button(
@@ -344,6 +354,7 @@ def load_data(dataset, config):
             "relative_cols": False,
             "subset_dict": False,
             "flip_x_color": False,
+            "rank_columns": True,
         },
     )
 
@@ -426,6 +437,7 @@ def update_tab_content(
     relative_cols = dh._inputs_parse_id(states_info, "relative_cols_selector")
     subset_dict = dh._inputs_parse_id(states_info, "subset_dict_selector")
     flip_x_color = dh._inputs_parse_id(states_info, "flip_x_color_selector")
+    rank_columns = dh._inputs_parse_id(states_info, "rank_columns_selector")
     if not subset_dict or subset_dict.strip() == "":
         subset_dict = None
     else:
@@ -620,12 +632,17 @@ def update_tab_content(
         tab_content = html.Div([export_button, grid])
 
     elif active_tab == "tab-rank":
+        rank_features = (
+            rank_columns if rank_columns else config_dataset["columns"]["features"]
+        )
         rank = metrics.ae_rank(
             df=filtered_df,
-            features=config_dataset["columns"]["features"],
+            features=rank_features,
             actuals=config_dataset["columns"]["actuals_amt"],
             expecteds=config_dataset["columns"]["expecteds_amt"],
             exposures=config_dataset["columns"]["exposure_amt"],
+            bin_threshold=20,
+            n_bins=10,
         )
 
         columnDefs = dash_formats.get_column_defs(rank)
@@ -653,7 +670,20 @@ def update_tab_content(
             columnSize="sizeToFit",
         )
 
-        tab_content = html.Div([export_button, grid])
+        rank_description = html.P(
+            children=[
+                "Rank identifies features driving A/E deviations. "
+                "'Issue' ranks high-loss values with high-loss percentages. "
+                "'Driver' ranks high-loss values with small exposure.",
+                html.Br(),
+                "Issue = abs((actuals - expected) * (actuals/expected - 1))",
+                html.Br(),
+                "Driver = abs((actuals - expected) * (1 - exposure/total_exposure))",
+            ],
+            style={"fontSize": "0.85em", "color": "gray", "marginBottom": "6px"},
+        )
+
+        tab_content = html.Div([rank_description, export_button, grid])
 
     return tab_content, chart_secondary, filtered_card
 
@@ -730,6 +760,26 @@ def toggle_tool(tool, all_selectors):
             style_updates.append({"display": "none"})
 
     return style_updates
+
+
+@callback(
+    Output("tool-description", "children"),
+    [Input("tool-selector", "value")],
+    prevent_initial_call=True,
+)
+def update_tool_description(tool):
+    """Update tool description based on selected tool."""
+    descriptions = {
+        "chart": "Visualize experience data across features with flexible charting.",
+        "compare": "Compare multiple rate side by side.",
+        "target": "Analyze how features relate to a selected target metric.",
+        "relative": (
+            "Relative risk compares the 'y-axis' of each 'relative feature' "
+            "against a reference level, with the option to split by 'relative "
+            "columns'. "
+        ),
+    }
+    return descriptions.get(tool, "")
 
 
 @callback(

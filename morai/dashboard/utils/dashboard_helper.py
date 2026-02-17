@@ -948,7 +948,31 @@ def generate_selectors(
         html.Div(
             id={"type": prefix_group, "index": "relative_to"},
             children=[
-                html.Label("Relative To"),
+                html.Div(
+                    [
+                        html.Label("Relative To"),
+                        html.Span(
+                            "ℹ",  # Info icon
+                            id="relative-info",
+                            style={
+                                "marginLeft": "8px",
+                                "cursor": "help",
+                                "color": "#007bff",
+                                "fontWeight": "bold",
+                                "fontSize": "16px",
+                                "position": "relative",
+                            },
+                            title=(
+                                "Aggregate: compares to the overall aggregate. "
+                                "Reference: compares to the lowest value in the group, "
+                                "so that the lowest point will be 1."
+                                "Subset: compares to a specific subset based on the "
+                                "subset dict. "
+                            ),
+                        ),
+                    ],
+                    style={"display": "flex", "alignItems": "center"},
+                ),
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "relative_to_selector"},
                     options=["aggregate", "subset", "reference"],
@@ -985,6 +1009,25 @@ def generate_selectors(
             ],
             style={"display": "block"}
             if selector_dict.get("flip_x_color") == True
+            else {"display": "none"},
+        ),
+        html.Div(
+            id={"type": prefix_group, "index": "rank_columns"},
+            children=[
+                html.Label("Rank Columns"),
+                dcc.Dropdown(
+                    id={
+                        "type": prefix_selector,
+                        "index": "rank_columns_selector",
+                    },
+                    options=config_dataset["columns"]["features"],
+                    value=config_dataset["columns"]["features"],
+                    multi=True,
+                    placeholder="Select Rank Columns",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("rank_columns") == True
             else {"display": "none"},
         ),
     ]

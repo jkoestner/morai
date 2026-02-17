@@ -32,7 +32,7 @@ dependencies = [
     "tqdm>=4.67.1",
 
     # dashboard
-    "dash>=3.1.1",                      # only for dash
+    "dash==3.3.0",                      # only for dash
     "dash-ag-grid>=32.3.0",             # only for dash
     "dash-bootstrap-components>=2.0.3", # only for dash
     "dash-extensions>=2.0.4",           # only for dash
@@ -76,7 +76,7 @@ repository = "https://github.com/jkoestner/morai"
 include-package-data = true # include files from MANIFEST.in
 
 [tool.setuptools.packages.find]
-exclude = ["tests*"]
+exclude = ["build*", "dist*", "tests*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "morai.version.version" }
