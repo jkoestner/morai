@@ -702,7 +702,7 @@ def frequency(
             features = [
                 col
                 for col, dtype in schema.items()
-                if schema[col] not in pl.datatypes.group.NUMERIC_DTYPES
+                if schema[col] not in pl.datatypes.group.NUMERIC_DTYPES  # noqa: PLR1733
             ]
         else:
             features = df.select_dtypes(exclude=[np.number]).columns.to_list()
@@ -1310,7 +1310,7 @@ def target(
     if is_lazy:
         df = df.with_columns(pl.lit(1).alias("_aggregate"))
     else:  # pandas
-        df.loc[:, "_aggregate"] = 1
+        df = df.assign(_aggregate=1)
 
     # ensure all features are in df
     if is_lazy:
@@ -1715,8 +1715,8 @@ def qq(residuals: pd.Series, distribution: str = "norm") -> go.Figure:
 
     """
     # calculate values
-    (theoretical_quantiles, sample_quantiles), (slope, intercept, r) = probplot(
-        residuals, dist="norm"
+    (theoretical_quantiles, sample_quantiles), (slope, intercept, _) = probplot(
+        residuals, dist=distribution
     )
 
     # create the plot
