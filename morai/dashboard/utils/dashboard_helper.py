@@ -109,15 +109,29 @@ def filter_data(
 
     str_cols = []
     num_cols = []
-    for col_name, dtype in schema.items():
-        if dtype in pl.datatypes.group.NUMERIC_DTYPES:
-            unique_count = df.select(pl.col(col_name).n_unique()).collect().item()
-            if unique_count < num_to_str_count:
+
+    # determine numeric and string columns based on schema and unique counts
+    # uses only one collection call to optimize performance
+    numeric_cols_from_schema = [
+        col_name
+        for col_name, dtype in schema.items()
+        if dtype in pl.datatypes.group.NUMERIC_DTYPES
+    ]
+    if numeric_cols_from_schema:
+        unique_counts = df.select(
+            [pl.col(c).n_unique().alias(c) for c in numeric_cols_from_schema]
+        ).collect()
+        for col_name in numeric_cols_from_schema:
+            if unique_counts[col_name][0] < num_to_str_count:
                 str_cols.append(col_name)
             else:
                 num_cols.append(col_name)
-        else:
-            str_cols.append(col_name)
+    non_numeric_cols = [
+        col_name
+        for col_name, dtype in schema.items()
+        if dtype not in pl.datatypes.group.NUMERIC_DTYPES
+    ]
+    str_cols.extend(non_numeric_cols)
 
     filtered_df = df
 
@@ -534,8 +548,10 @@ def generate_card(
     """
     card_body_content = []
 
+    # calculate sums for the card list columns in one go to optimize performance
+    sums = df.select([pl.col(c).sum().alias(c) for c in card_list]).collect()
     for column in card_list:
-        column_sum = df.select(pl.col(column).sum()).collect().item()
+        column_sum = sums[column][0]
         value_text = f"{column}: {convert_to_short_number(column_sum)}"
         card_body_content.append(html.P(value_text, className="card-text"))
 

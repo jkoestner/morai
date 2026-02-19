@@ -448,7 +448,10 @@ def update_tab_content(
             subset_dict = None
 
     # filter the dataset - only filter what's needed
+    # pre-collect to avoid multiple downstream collections
     filtered_df = dh.filter_data(df=dataset, callback_context=states_info)
+    if isinstance(filtered_df, pl.LazyFrame):
+        filtered_df = filtered_df.collect().lazy()
 
     # create cards
     card_list = dh.get_card_list(config)
