@@ -419,7 +419,7 @@ def _convert_object_to_category(df: pd.DataFrame, column: str) -> pd.DataFrame:
         The DataFrame with the column converted to a category.
 
     """
-    if df[column].dtype == "object":
+    if df[column].dtype == "object" or isinstance(df[column].dtype, pd.StringDtype):
         df[column] = df[column].astype("category")
     return df
 

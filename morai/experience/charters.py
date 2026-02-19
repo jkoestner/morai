@@ -1038,7 +1038,9 @@ def pdp(
             )
         else:
             pdp_df = (
-                pdp_df.groupby(grouped_features, observed=True).mean().reset_index()
+                pdp_df.groupby(grouped_features, observed=True)
+                .mean(numeric_only=True)
+                .reset_index()
             )
 
     # create the plots

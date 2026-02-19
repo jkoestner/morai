@@ -45,6 +45,7 @@ class GAMR(BaseEstimator, RegressorMixin):
         self.feature_names = None
         self.coefs = None
         self.is_fitted_ = False
+        self._r_initialized = False
 
     def setup_model(
         self,
@@ -510,21 +511,13 @@ class GAMR(BaseEstimator, RegressorMixin):
         from rpy2.robjects import pandas2ri  # noqa: PLC0415
         from rpy2.robjects.packages import importr  # noqa: PLC0415
 
-        if not pandas2ri.activated:
-            pandas2ri.activate()
+        pandas2ri.activate()
+        importr("base")
+        importr("mgcv")
 
-        try:
-            ro.r("library(mgcv)")
-        except Exception:
-            importr("base")
-            importr("mgcv")
-
+        # add model to r environment
         if "model" not in ro.globalenv:
             if self.model is not None:
                 ro.globalenv["model"] = self.model
-            else:
-                raise ValueError(
-                    "Model not found in R environment and no saved model object."
-                )
 
         self._r_initialized = True
