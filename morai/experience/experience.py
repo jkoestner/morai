@@ -14,12 +14,12 @@ logger = custom_logger.setup_logging(__name__)
 def normalize(
     df: pd.DataFrame,
     features: List[str],
-    normalize_col: List[str] or str,
-    weight_col: Optional[List[str] or str] = None,
+    normalize_col: Union[List[str], str],
+    weight_col: Optional[Union[List[str], str]] = None,
     add_norm_col: Optional[bool] = False,
     ratio: Optional[bool] = False,
     relative_to: Optional[str] = "aggregate",
-    relative_cols: Optional[List[str] or str] = None,
+    relative_cols: Optional[Union[List[str], str]] = None,
     **kwargs: Any,
 ) -> pd.DataFrame:
     """
@@ -206,13 +206,17 @@ def calc_relative_risk(
             raise ValueError(f"Column {col} not found in DataFrame")
 
     # add temporary columns
-    use_temp_weight = weight_col is None
-    use_temp_relative = relative_cols is None
-
-    if use_temp_weight:
-        weight_col = "_temp_weight"
-    if use_temp_relative:
+    if relative_cols is None:
         relative_cols = ["_temp_relative"]
+        use_temp_relative = True
+    else:
+        use_temp_relative = False
+
+    if weight_col is None:
+        weight_col = "_temp_weight"
+        use_temp_weight = True
+    else:
+        use_temp_weight = False
 
     if is_lazy:
         if use_temp_weight:

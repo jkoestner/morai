@@ -149,7 +149,7 @@ class MortTable:
         self,
         table_list: List[int],
         extra_dims: Optional[Dict[str, List[str]]] = None,
-        juv_list: Optional[List[int]] = None,
+        juv_list: Optional[list[Optional[int]]] = None,
         extend: bool = False,
         add_year: Optional[float] = None,
     ) -> pd.DataFrame:
@@ -631,19 +631,19 @@ class MortTable:
             The minimum age.
 
         """
-        soa_table = soa_xml.Tables[table_index].Values.reset_index()
+        soa_table = soa_xml.Tables[table_index].Values.reset_index()  # type: ignore[attr-defined]
         soa_table.columns = soa_table.columns.str.lower()
 
         if table_index == 0 and is_select:
             soa_table = soa_table.rename(columns={"age": "issue_age"})
             select_period = (
-                soa_xml.Tables[table_index].MetaData.AxisDefs[1].MaxScaleValue
+                soa_xml.Tables[table_index].MetaData.AxisDefs[1].MaxScaleValue  # type: ignore[attr-defined]
             )
             min_age = None
         elif table_index == 1 and is_select:
             soa_table = soa_table.rename(columns={"age": "attained_age"})
             select_period = None
-            min_age = soa_xml.Tables[1].MetaData.AxisDefs[0].MinScaleValue
+            min_age = soa_xml.Tables[1].MetaData.AxisDefs[0].MinScaleValue  # type: ignore[attr-defined]
         else:
             soa_table = soa_table.rename(columns={"age": "attained_age"})
             select_period = None
@@ -1524,7 +1524,9 @@ def get_rates(rate_filename: Optional[str] = None) -> List[str]:
     return rates
 
 
-def get_rate_dict(rate: str, rate_filename: Optional[str] = None) -> Dict[str, str]:
+def get_rate_dict(
+    rate: str, rate_filename: Optional[Union[str, Path]] = None
+) -> Dict[str, Any]:
     """
     Process the rate file.
 
