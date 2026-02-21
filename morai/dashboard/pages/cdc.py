@@ -1,6 +1,7 @@
 """CDC dashboard."""
 
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import dash_ag_grid as dag
@@ -86,106 +87,102 @@ def layout():
             # Description Card
             dbc.Card(
                 dbc.CardBody(
-                    [
-                        dbc.Row(
-                            [
-                                dbc.Col(
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
                                     html.H5(
                                         [
-                                            html.I(className="fas fa-info-circle me-2"),
-                                            "About CDC Data",
+                                            html.I(className="fas fa-database me-2"),
+                                            "CDC Wonder Mortality Data",
                                         ],
-                                        className="card-title mb-3",
+                                        className="card-title mb-2",
                                     ),
-                                    xs=12,
-                                    md=10,
-                                    className="mb-3 mb-md-0",
-                                ),
-                                dbc.Col(
-                                    [
-                                        dbc.Button(
-                                            [
-                                                html.I(
-                                                    className="fas fa-sync-alt me-2"
-                                                ),
-                                                "Update Data",
-                                            ],
-                                            id="button-update-cdc",
-                                            color="primary",
-                                            className="w-100 mb-2",
-                                        ),
-                                        html.Div(
-                                            [
-                                                "Last Updated: ",
-                                                html.Span(
-                                                    last_updated,
-                                                    id="last-updated-text",
-                                                    className="text-muted small",
-                                                ),
-                                            ],
-                                            className="text-center small",
-                                        ),
-                                    ],
-                                    xs=12,
-                                    md=2,
-                                ),
-                            ],
-                        ),
-                        html.P(
-                            [
-                                "This page is used to analyze cause of death stats from the CDC. ",
-                                html.Br(),
-                                "To be able to load results there needs to be a database in ",
-                                html.Code("`files/integrations/cdc/cdc.sql`"),
-                                html.Br(),
-                                "Data sourced from: ",
-                                html.A(
-                                    "wonder.cdc.gov",
-                                    href="https://wonder.cdc.gov/",
-                                    target="_blank",
-                                ),
-                                html.Br(),
-                                html.Ul(
-                                    [
-                                        html.Li(
-                                            [
-                                                "1979-1998: ",
-                                                html.A(
-                                                    "https://wonder.cdc.gov/cmf-icd9.html",
-                                                    href="https://wonder.cdc.gov/cmf-icd9.html",
-                                                    target="_blank",
-                                                ),
-                                            ]
-                                        ),
-                                        html.Li(
-                                            [
-                                                "1999-2020: ",
-                                                html.A(
-                                                    "https://wonder.cdc.gov/ucd-icd10.html",
-                                                    href="https://wonder.cdc.gov/ucd-icd10.html",
-                                                    target="_blank",
-                                                ),
-                                            ]
-                                        ),
-                                        html.Li(
-                                            [
-                                                "2018-current: ",
-                                                html.A(
-                                                    "https://wonder.cdc.gov/mcd-icd10-provisional.html",
-                                                    href="https://wonder.cdc.gov/mcd-icd10-provisional.html",
-                                                    target="_blank",
-                                                ),
-                                            ]
-                                        ),
-                                    ],
-                                ),
-                                "Note: The data will not match exactly to source data due to splitting the data more granularly"
-                                " and losing a few claims (per year it is about .03%, 1000 claims off)",
-                                html.Br(),
-                            ],
-                            className="card-text mb-0",
-                        ),
-                    ]
+                                    html.P(
+                                        [
+                                            "Requires a local database at ",
+                                            html.Code("files/integrations/cdc/cdc.sql"),
+                                            html.Br(),
+                                            "Data sourced from ",
+                                            html.A(
+                                                "wonder.cdc.gov",
+                                                href="https://wonder.cdc.gov/",
+                                                target="_blank",
+                                            ),
+                                            ": ",
+                                            html.Br(),
+                                            html.Ul(
+                                                [
+                                                    html.Li(
+                                                        [
+                                                            html.A(
+                                                                "1979-1998 (ICD-9)",
+                                                                href="https://wonder.cdc.gov/cmf-icd9.html",
+                                                                target="_blank",
+                                                            ),
+                                                        ]
+                                                    ),
+                                                    html.Li(
+                                                        [
+                                                            html.A(
+                                                                "1999-2020 (ICD-10)",
+                                                                href="https://wonder.cdc.gov/ucd-icd10.html",
+                                                                target="_blank",
+                                                            ),
+                                                        ]
+                                                    ),
+                                                    html.Li(
+                                                        [
+                                                            html.A(
+                                                                "2018-present",
+                                                                href="https://wonder.cdc.gov/mcd-icd10-provisional.html",
+                                                                target="_blank",
+                                                            ),
+                                                        ]
+                                                    ),
+                                                ],
+                                            ),
+                                            "Note: Small rounding variance expected (~0.03% / year).",
+                                        ],
+                                        className="card-text mb-0 small text-muted",
+                                    ),
+                                ],
+                                xs=12,
+                                md=9,
+                            ),
+                            dbc.Col(
+                                [
+                                    dbc.Button(
+                                        [
+                                            html.I(className="fas fa-sync-alt me-2"),
+                                            "Refresh Data",
+                                        ],
+                                        id="button-update-cdc",
+                                        color="outline-primary",
+                                        className="w-100 mb-2",
+                                        size="sm",
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.I(
+                                                className="fas fa-clock me-1 text-muted"
+                                            ),
+                                            html.Span(
+                                                last_updated,
+                                                id="last-updated-text",
+                                                className="text-muted",
+                                            ),
+                                        ],
+                                        className="text-center small",
+                                    ),
+                                ],
+                                xs=12,
+                                md=3,
+                                className="d-flex flex-column justify-content-center",
+                            ),
+                        ],
+                        className="align-items-center",
+                    )
                 ),
                 className="shadow-sm mb-4",
             ),
@@ -198,43 +195,40 @@ def layout():
                             dbc.Row(
                                 [
                                     dbc.Col(
-                                        [
-                                            dbc.Button(
-                                                html.I(className="fas fa-sync-alt"),
-                                                id="button-cod",
-                                                color="primary",
-                                                className="shadow-sm",
-                                            ),
-                                        ],
-                                        width=1,
+                                        dbc.Button(
+                                            [
+                                                html.I(
+                                                    className="fas fa-sync-alt me-2"
+                                                ),
+                                                "Load Analysis",
+                                            ],
+                                            id="button-cod",
+                                            color="primary",
+                                            className="shadow-sm",
+                                        ),
+                                        width="auto",
+                                    ),
+                                    dbc.Col(
+                                        html.Div(
+                                            id="cod-active-filters-card",
+                                        ),
                                     ),
                                 ],
-                                className="mb-3",
+                                className="mb-3 align-items-center",
                             ),
-                            dbc.Row(
-                                dbc.Col(
-                                    html.Div(
-                                        id="cod-active-filters-card",
-                                        className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                            dbc.Alert(
+                                [
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    "Deaths by cause of death over time. Current year is annualized (365 / ",
+                                    html.Span(
+                                        "days elapsed",
+                                        id="cod-days-elapsed-text",
+                                        className="fw-semibold",
                                     ),
-                                    width="auto",
-                                ),
-                            ),
-                            dbc.Row(
-                                html.P(
-                                    [
-                                        "The chart shows the amount of deaths by COD over the past few years. ",
-                                        html.Br(),
-                                        "The chart also includes an adjustment for the current year by multiplying "
-                                        "the deaths by 365/",
-                                        html.Span(
-                                            "days elapsed",
-                                            id="cod-days-elapsed-text",
-                                            className="text-muted small",
-                                        ),
-                                        ".",
-                                    ]
-                                ),
+                                    ").",
+                                ],
+                                color="info",
+                                className="py-2 mb-3 small",
                             ),
                             dbc.Row(
                                 [
@@ -280,18 +274,19 @@ def layout():
                                 ],
                                 className="mb-4",
                             ),
-                            dbc.Row(
-                                html.P(
-                                    [
-                                        "Tree map that is a breakout of deaths from ",
-                                        html.Span(
-                                            "the most recent year",
-                                            id="cod-tree-year-text",
-                                            className="text-muted small",
-                                        ),
-                                        ".",
-                                    ]
-                                ),
+                            dbc.Alert(
+                                [
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    "Treemap breakdown of deaths by category for year ",
+                                    html.Span(
+                                        "—",
+                                        id="cod-tree-year-text",
+                                        className="fw-semibold",
+                                    ),
+                                    ".",
+                                ],
+                                color="info",
+                                className="py-2 mb-3 small",
                             ),
                             dbc.Row(
                                 dcc.Loading(
@@ -305,19 +300,19 @@ def layout():
                                 ),
                                 className="mb-4",
                             ),
-                            dbc.Row(
-                                html.P(
-                                    [
-                                        "These tables show the top causes of death by age "
-                                        "group for ",
-                                        html.Span(
-                                            "the most recent year",
-                                            id="cod-table-year-text",
-                                            className="text-muted small",
-                                        ),
-                                        ".",
-                                    ]
-                                ),
+                            dbc.Alert(
+                                [
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    "Top causes of death by age group for year ",
+                                    html.Span(
+                                        "—",
+                                        id="cod-table-year-text",
+                                        className="fw-semibold",
+                                    ),
+                                    ".",
+                                ],
+                                color="info",
+                                className="py-2 mb-3 small",
                             ),
                             dbc.Row(
                                 [
@@ -369,37 +364,34 @@ def layout():
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                [
-                                    dbc.Col(
-                                        dbc.Button(
-                                            html.I(className="fas fa-sync-alt"),
-                                            id="button-cod-trends",
-                                            color="primary",
-                                            className="shadow-sm",
-                                        ),
-                                        width=1,
+                                dbc.Col(
+                                    dbc.Button(
+                                        [
+                                            html.I(className="fas fa-sync-alt me-2"),
+                                            "Load Trends",
+                                        ],
+                                        id="button-cod-trends",
+                                        color="primary",
+                                        className="shadow-sm",
                                     ),
-                                    dbc.Col(
-                                        html.P(
-                                            [
-                                                f"The trends charts is based on a linear regression of {TRAIN_START_YEAR} - {TRAIN_END_YEAR} cause of deaths.",
-                                                html.Br(),
-                                                "The chart also includes an adjustment for the current year by multiplying "
-                                                "the deaths by 365/",
-                                                html.Span(
-                                                    "days elapsed",
-                                                    id="cod-trend-days-elapsed-text",
-                                                    className="text-muted small",
-                                                ),
-                                                html.Br(),
-                                                "Note: The trends should be caveated that they are based on a linear regression, "
-                                                "and there may be population differences that aren't being considered.",
-                                            ]
-                                        ),
-                                        width=11,
-                                    ),
-                                ],
+                                    width="auto",
+                                ),
                                 className="mb-3",
+                            ),
+                            dbc.Alert(
+                                [
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    f"Excess deaths vs. a linear regression baseline trained on {TRAIN_START_YEAR}-{TRAIN_END_YEAR}. "
+                                    "Current year annualized (365 / ",
+                                    html.Span(
+                                        "days elapsed",
+                                        id="cod-trend-days-elapsed-text",
+                                        className="fw-semibold",
+                                    ),
+                                    "). Population differences are not accounted for.",
+                                ],
+                                color="info",
+                                className="py-2 mb-3 small",
                             ),
                             dbc.Row(
                                 [
@@ -449,39 +441,34 @@ def layout():
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                [
-                                    dbc.Col(
-                                        dbc.Button(
-                                            html.I(className="fas fa-sync-alt"),
-                                            id="button-pop-trends",
-                                            color="primary",
-                                            className="shadow-sm",
-                                        ),
-                                        width=1,
+                                dbc.Col(
+                                    dbc.Button(
+                                        [
+                                            html.I(className="fas fa-sync-alt me-2"),
+                                            "Load Population Trends",
+                                        ],
+                                        id="button-pop-trends",
+                                        color="primary",
+                                        className="shadow-sm",
                                     ),
-                                    dbc.Col(
-                                        html.P(
-                                            [
-                                                f"The trends charts is based on a linear regression of {TRAIN_START_YEAR} - {TRAIN_END_YEAR} population "
-                                                f"using a LeeCarter model.",
-                                                html.Br(),
-                                                "The chart also includes an adjustment for the current year by multiplying "
-                                                "the deaths by 365/",
-                                                html.Span(
-                                                    "days elapsed",
-                                                    id="pop-trend-days-elapsed-text",
-                                                    className="text-muted small",
-                                                ),
-                                                html.Br(),
-                                                f"Note: There is a 2 year lag in updating population statistics. To get a trend of excess deaths that "
-                                                f"reflects updated population a trend from {TRAIN_START_YEAR} - {TRAIN_END_YEAR} was used and was "
-                                                f"extrapolated from the beginning of the 2 year lag to the current year.",
-                                            ]
-                                        ),
-                                        width=11,
-                                    ),
-                                ],
+                                    width="auto",
+                                ),
                                 className="mb-3",
+                            ),
+                            dbc.Alert(
+                                [
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    f"Lee-Carter population model trained on {TRAIN_START_YEAR}-{TRAIN_END_YEAR}, extrapolated through the current year. "
+                                    "Current year annualized (365 / ",
+                                    html.Span(
+                                        "days elapsed",
+                                        id="pop-trend-days-elapsed-text",
+                                        className="fw-semibold",
+                                    ),
+                                    f"). Note: population stats have a ~2-year lag; {TRAIN_START_YEAR}-{TRAIN_END_YEAR} trend is extrapolated to fill the gap.",
+                                ],
+                                color="info",
+                                className="py-2 mb-3 small",
                             ),
                             dbc.Row(
                                 [
@@ -525,24 +512,27 @@ def layout():
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                [
-                                    dbc.Col(
-                                        dbc.Button(
-                                            html.I(className="fas fa-sync-alt"),
-                                            id="button-monthly",
-                                            color="primary",
-                                            className="shadow-sm",
-                                        ),
-                                        width=1,
+                                dbc.Col(
+                                    dbc.Button(
+                                        [
+                                            html.I(className="fas fa-sync-alt me-2"),
+                                            "Load Monthly",
+                                        ],
+                                        id="button-monthly",
+                                        color="primary",
+                                        className="shadow-sm",
                                     ),
-                                    dbc.Col(
-                                        html.P(
-                                            "This chart shows the deaths in US per month",
-                                        ),
-                                        width=11,
-                                    ),
-                                ],
+                                    width="auto",
+                                ),
                                 className="mb-3",
+                            ),
+                            dbc.Alert(
+                                [
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    "Total US deaths per month.",
+                                ],
+                                color="info",
+                                className="py-2 mb-3 small",
                             ),
                             dbc.Row(
                                 [
@@ -567,34 +557,29 @@ def layout():
                     dbc.AccordionItem(
                         [
                             dbc.Row(
-                                [
-                                    dbc.Col(
-                                        dbc.Button(
-                                            html.I(className="fas fa-sync-alt"),
-                                            id="button-mi",
-                                            color="primary",
-                                            className="shadow-sm",
-                                        ),
-                                        width=1,
+                                dbc.Col(
+                                    dbc.Button(
+                                        [
+                                            html.I(className="fas fa-sync-alt me-2"),
+                                            "Load MI",
+                                        ],
+                                        id="button-mi",
+                                        color="primary",
+                                        className="shadow-sm",
                                     ),
-                                    dbc.Col(
-                                        html.P(
-                                            [
-                                                "The MI rates are calculated using a 2000 age-adjusted rate.",
-                                                html.Br(),
-                                                "The crude adjusted rate is the total number of deaths divided by the "
-                                                "total population weighted by the 2000 age distribution.",
-                                                html.Br(),
-                                                "The mortality improvement is the percentage change in the crude adjusted rate "
-                                                "from one year to the next.",
-                                                html.Br(),
-                                                "The rolling average is a 10-year average of the mortality improvement.",
-                                            ]
-                                        ),
-                                        width=11,
-                                    ),
-                                ],
+                                    width="auto",
+                                ),
                                 className="mb-3",
+                            ),
+                            dbc.Alert(
+                                [
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    "Age-adjusted mortality rates (2000 standard) and year-over-year improvement. "
+                                    "Crude adjusted rate = deaths / population weighted by 2000 age distribution. "
+                                    "Rolling average is a 10-year window.",
+                                ],
+                                color="info",
+                                className="py-2 mb-3 small",
                             ),
                             # Chart and Filters Row
                             dbc.Row(
@@ -797,6 +782,9 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
     totals = cod_all.groupby("year").sum(numeric_only=True).reset_index()
     totals[CATEGORY_COL] = "total"
     cod_all = pd.concat([cod_all, totals], ignore_index=True)
+    cod_all["age_groups"] = pd.Categorical(
+        cod_all["age_groups"], categories=cdc.AGE_GROUP_ORDER, ordered=True
+    )
     category_orders = charters.get_category_orders(
         df=cod_all, category=CATEGORY_COL, measure="deaths"
     )
@@ -1380,7 +1368,11 @@ def toggle_cdc_cod_collapse(n_clicks, is_open, children):
 
 
 def refresh_cdc_data() -> None:
-    """Refresh the cdc data."""
+    """
+    Refresh the cdc data.
+
+    Includes a 15 second sleep per call.
+    """
     try:
         db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
         mcd18_cod = cdc.get_cdc_data_xml(xml_filename="mcd18_cod.xml")
@@ -1390,6 +1382,8 @@ def refresh_cdc_data() -> None:
             table_name="mcd18_cod",
             if_exists="replace",
         )
+        time.sleep(15)
+
         mcd18_monthly = cdc.get_cdc_data_xml(
             xml_filename="mcd18_monthly.xml", parse_date_col="Month"
         )
@@ -1399,6 +1393,8 @@ def refresh_cdc_data() -> None:
             table_name="mcd18_monthly",
             if_exists="replace",
         )
+        time.sleep(15)
+
         mcd18_mi = cdc.get_cdc_data_xml(xml_filename="mcd18_mi.xml")
         sql.export_to_sql(
             df=mcd18_mi,

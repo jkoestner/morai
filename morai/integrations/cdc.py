@@ -7,7 +7,10 @@ collection of data from the CDC Wonder database.
 Link: https://wonder.cdc.gov/
 
 There are data limitations from the CDC web service listed here
-https://wonder.cdc.gov/wonder/help/WONDER-API.html
+https://wonder.cdc.gov/datause.html#
+
+For API use the following link is a reference on how to use.
+https://wonder.cdc.gov/wonder/help/wonder-api.html
 
 For instance the web service does not provide support for location based filters.
 
@@ -31,6 +34,27 @@ from morai.utils.custom_logger import suppress_logs
 from morai.utils.helpers import check_merge
 
 logger = custom_logger.setup_logging(__name__)
+
+# global variables
+AGE_GROUP_ORDER = [
+    "Not Stated",
+    "< 1 year",
+    "1-4 years",
+    "5-9 years",
+    "10-14 years",
+    "5-14 years",
+    "15-19 years",
+    "20-24 years",
+    "15-24 years",
+    "25-34 years",
+    "35-44 years",
+    "45-54 years",
+    "55-64 years",
+    "65-74 years",
+    "75-84 years",
+    "85+ years",
+    "total",
+]
 
 
 def get_cdc_data_xml(
@@ -182,27 +206,8 @@ def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
 
     # correctly order the age groups
     if "age_groups" in cdc_df.columns:
-        age_group_order = [
-            "Not Stated",
-            "< 1 year",
-            "1-4 years",
-            "5-9 years",
-            "10-14 years",
-            "5-14 years",
-            "15-19 years",
-            "20-24 years",
-            "15-24 years",
-            "25-34 years",
-            "35-44 years",
-            "45-54 years",
-            "55-64 years",
-            "65-74 years",
-            "75-84 years",
-            "85+ years",
-            "total",
-        ]
         cdc_df["age_groups"] = pd.Categorical(
-            cdc_df["age_groups"], categories=age_group_order, ordered=True
+            cdc_df["age_groups"], categories=AGE_GROUP_ORDER, ordered=True
         )
         cdc_df["age_groups"] = cdc_df["age_groups"].cat.remove_unused_categories()
 
@@ -463,13 +468,18 @@ def get_top_deaths_by_age_group(
         on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
 
+    # re-apply categorical ordering
+    df_year["age_groups"] = pd.Categorical(
+        df_year["age_groups"], categories=AGE_GROUP_ORDER, ordered=True
+    )
+
     # group the data for top 10 deaths in each age_group
     grouped = (
-        df_year.groupby(["age_groups", cod_col], observed=False)["deaths"]
+        df_year.groupby(["age_groups", cod_col], observed=True)["deaths"]
         .sum()
         .reset_index()
     )
-    grouped = grouped.sort_values(by=["age_groups", "deaths"], ascending=[False, False])
+    grouped = grouped.sort_values(by=["age_groups", "deaths"], ascending=[True, False])
     top_deaths = grouped.groupby("age_groups", observed=False).head(10).copy()
     top_deaths["rank"] = top_deaths.groupby("age_groups", observed=False)[
         "deaths"

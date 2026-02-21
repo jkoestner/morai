@@ -51,6 +51,7 @@ dev = [
     "isort>=6.0.1",
     "jupyterlab-code-formatter>=3.0.2",
     "jupyter-resource-usage>=1.1.1",
+    "mypy>=1.19.1",
     "pytest>=8.3.5",
     "pytest-cov>=6.0.0",
     "ruff>=0.14.14",
@@ -188,3 +189,7 @@ pylint.max-args = 10
 [tool.ruff.lint.per-file-ignores]
 "morai/dashboard/pages/*.py" = ["ANN", "E501"]
 "tests/*.py" = ["ANN001","ANN201"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true

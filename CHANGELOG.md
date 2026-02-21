@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.4](https://github.com/jkoestner/morai/tree/v0.3.4)
+
+[Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.3...v0.3.4)
+
+**Enhancements**
+- update dependencies (i.e. pandas to 3.0.0)
+
+**Bug Fixes**
+- enhance edge case for pdp
+- performance improvements
+- add r initialization from a saved state
+
+**Documentation**
+- update tests
+
 ## [0.3.3](https://github.com/jkoestner/morai/tree/v0.3.3)
 
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.2...v0.3.3)
