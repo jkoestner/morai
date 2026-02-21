@@ -9,6 +9,7 @@ import time
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -313,8 +314,7 @@ def layout():
                             ),
                             dcc.Loading(
                                 id="loading-graph-contour",
-                                type="default",
-                                color="#007bff",
+                                custom_spinner=dmc.Skeleton(visible=True, h="100%"),
                                 children=html.Div(
                                     id="graph-contour",
                                     className="bg-white rounded-3 shadow-sm p-3 mb-4",
@@ -334,8 +334,9 @@ def layout():
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-graph-compare-age",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(
                                                 id="graph-compare-age",
                                                 className="bg-white rounded-3 shadow-sm p-3",
@@ -348,8 +349,9 @@ def layout():
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-graph-compare-age-log",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(
                                                 id="graph-compare-age-log",
                                                 className="bg-white rounded-3 shadow-sm p-3",
@@ -397,8 +399,9 @@ def layout():
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-graph-compare-ratio",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(
                                                 id="graph-compare-ratio",
                                                 className="bg-white rounded-3 shadow-sm p-3",
@@ -428,8 +431,9 @@ def layout():
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-graph-su-table-1",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(
                                                 id="graph-su-table-1",
                                                 className="bg-white rounded-3 shadow-sm p-3",
@@ -442,8 +446,9 @@ def layout():
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-graph-su-table-2",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(
                                                 id="graph-su-table-2",
                                                 className="bg-white rounded-3 shadow-sm p-3",
@@ -491,8 +496,7 @@ def layout():
                             ),
                             dcc.Loading(
                                 id="loading-tables-tab-content",
-                                type="default",
-                                color="#007bff",
+                                custom_spinner=dmc.Skeleton(visible=True, h="100%"),
                                 children=html.Div(
                                     id="tables-tab-content",
                                     className="bg-white rounded-3 shadow-sm p-3",

@@ -282,8 +282,8 @@ def gvif(
         features = [*list(features), constant_col]
 
     # get the features to use
-    features_num = df[features].select_dtypes(include=[np.number]).columns
-    features_cat = df[features].select_dtypes(exclude=[np.number]).columns
+    features_num = df[features].select_dtypes(include=[np.number]).columns.tolist()
+    features_cat = df[features].select_dtypes(exclude=[np.number]).columns.tolist()
     if numeric_only:
         if len(features_cat) > 0:
             logger.warning(

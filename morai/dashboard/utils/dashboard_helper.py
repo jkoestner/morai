@@ -224,7 +224,6 @@ def generate_filters(
         for _col in df.columns:
             if hasattr(df[_col], "cat") and df[_col].cat.ordered:
                 cat_orders[_col] = df[_col].cat.categories.tolist()
-                print(cat_orders)
         df = pl.from_pandas(df).lazy()
     schema = df.collect_schema()
     columns = list(schema.keys())

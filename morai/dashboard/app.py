@@ -16,6 +16,7 @@ with "standard font"
 
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, ServersideOutputTransform, dcc, html
 
 from morai.dashboard.utils import dashboard_helper as dh
@@ -134,14 +135,16 @@ navbar = dbc.Navbar(
     sticky="top",
 )
 
-app.layout = html.Div(
-    [
-        dcc.Store(id="store-config", storage_type="session"),
-        dcc.Store(id="store-dataset", storage_type="session"),
-        dcc.Location(id="url", refresh=False),
-        navbar,
-        dash.page_container,
-    ]
+app.layout = dmc.MantineProvider(
+    html.Div(
+        [
+            dcc.Store(id="store-config", storage_type="session"),
+            dcc.Store(id="store-dataset", storage_type="session"),
+            dcc.Location(id="url", refresh=False),
+            navbar,
+            dash.page_container,
+        ]
+    )
 )
 
 dh.register_export_callback(app)

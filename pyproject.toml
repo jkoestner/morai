@@ -38,6 +38,7 @@ dependencies = [
     # dash-extensions relies on dash 3.3.0 until Wildcard is fixed
     # https://github.com/emilhe/dash-extensions/issues/400
     "dash-extensions>=2.0.4",           # only for dash
+    "dash-mantine-components>=2.6.0",   # only for dash
     "gunicorn>=25.1.0",                 # only for dash
 
     # models

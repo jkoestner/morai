@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import dash_mantine_components as dmc
 import pandas as pd
 import plotly.express as px
 from dash_extensions.enrich import (
@@ -236,8 +237,9 @@ def layout():
                                         [
                                             dcc.Loading(
                                                 id="loading-cdc-cod",
-                                                type="default",
-                                                color="#007bff",
+                                                custom_spinner=dmc.Skeleton(
+                                                    visible=True, h="100%"
+                                                ),
                                                 children=html.Div(
                                                     id="cdc-cod",
                                                     className="bg-white rounded-3 shadow-sm p-3",
@@ -291,8 +293,7 @@ def layout():
                             dbc.Row(
                                 dcc.Loading(
                                     id="loading-cdc-cod-heatmap",
-                                    type="default",
-                                    color="#007bff",
+                                    custom_spinner=dmc.Skeleton(visible=True, h="100%"),
                                     children=html.Div(
                                         id="cdc-cod-heatmap",
                                         className="bg-white rounded-3 shadow-sm p-3",
@@ -319,8 +320,9 @@ def layout():
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-cdc-top-causes",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(
                                                 [
                                                     dbc.Tabs(
@@ -422,8 +424,9 @@ def layout():
                                     ),
                                     dcc.Loading(
                                         id="loading-cdc-cod-trends",
-                                        type="default",
-                                        color="#007bff",
+                                        custom_spinner=dmc.Skeleton(
+                                            visible=True, h="100%"
+                                        ),
                                         children=html.Div(
                                             id="cdc-cod-trends",
                                             className="bg-white rounded-3 shadow-sm p-3",
@@ -493,8 +496,9 @@ def layout():
                                     ),
                                     dcc.Loading(
                                         id="loading-cdc-pop-trends",
-                                        type="default",
-                                        color="#007bff",
+                                        custom_spinner=dmc.Skeleton(
+                                            visible=True, h="100%"
+                                        ),
                                         children=html.Div(
                                             id="cdc-pop-trends",
                                             className="bg-white rounded-3 shadow-sm p-3",
@@ -538,8 +542,9 @@ def layout():
                                 [
                                     dcc.Loading(
                                         id="loading-cdc-monthly",
-                                        type="default",
-                                        color="#007bff",
+                                        custom_spinner=dmc.Skeleton(
+                                            visible=True, h="100%"
+                                        ),
                                         children=html.Div(
                                             id="cdc-monthly",
                                             className="bg-white rounded-3 shadow-sm p-3",
@@ -587,8 +592,9 @@ def layout():
                                     dbc.Col(
                                         dcc.Loading(
                                             id="loading-cdc-mi",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(
                                                 id="cdc-mi",
                                                 className="bg-white rounded-3 shadow-sm p-3",
@@ -628,8 +634,7 @@ def layout():
                             dbc.Row(
                                 dcc.Loading(
                                     id="loading-cdc-mi-table",
-                                    type="default",
-                                    color="#007bff",
+                                    custom_spinner=dmc.Skeleton(visible=True, h="100%"),
                                     children=html.Div(
                                         id="cdc-mi-table",
                                         className="bg-white rounded-3 shadow-sm p-3",

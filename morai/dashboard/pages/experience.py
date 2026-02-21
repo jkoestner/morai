@@ -5,6 +5,7 @@ import ast
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import dash_mantine_components as dmc
 import polars as pl
 from dash_extensions.enrich import (
     ALL,
@@ -88,9 +89,16 @@ def _build_cards_row():
     return dbc.Row(
         [
             dbc.Col(
-                html.Div(
-                    id="card",
-                    className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                dcc.Loading(
+                    children=[
+                        html.Div(
+                            id="card",
+                            className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                            style={"minHeight": "250px", "minWidth": "250px"},
+                        ),
+                    ],
+                    id="loading-card",
+                    custom_spinner=dmc.Skeleton(visible=True),
                 ),
                 width="auto",
             ),
@@ -100,11 +108,11 @@ def _build_cards_row():
                         html.Div(
                             id="filtered-card",
                             className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                            style={"minHeight": "250px", "minWidth": "250px"},
                         ),
                     ],
                     id="loading-filtered-card",
-                    type="default",
-                    color="#007bff",
+                    custom_spinner=dmc.Skeleton(visible=True, h="100%", w="100%"),
                 ),
                 width="auto",
             ),
@@ -172,8 +180,9 @@ def _build_main_content():
                         [
                             dcc.Loading(
                                 id="loading-tab-content",
-                                type="default",
-                                color="#007bff",
+                                custom_spinner=dmc.Skeleton(
+                                    visible=True, h="100%", w="100%"
+                                ),
                                 children=html.Div(
                                     id="tab-content",
                                     className="bg-white rounded-3 shadow-sm p-4 border border-light",
@@ -181,8 +190,9 @@ def _build_main_content():
                             ),
                             dcc.Loading(
                                 id="loading-chart-secondary",
-                                type="default",
-                                color="#007bff",
+                                custom_spinner=dmc.Skeleton(
+                                    visible=True, h="100%", w="100%"
+                                ),
                                 children=html.Div(
                                     id="chart-secondary",
                                     className="mt-4 bg-white rounded-3 shadow-sm p-4 border border-light",
