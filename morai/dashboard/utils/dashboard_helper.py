@@ -219,7 +219,12 @@ def generate_filters(
 
     # get column types
     is_lazy = isinstance(df, pl.LazyFrame)
+    cat_orders: dict = {}
     if not is_lazy:
+        for _col in df.columns:
+            if hasattr(df[_col], "cat") and df[_col].cat.ordered:
+                cat_orders[_col] = df[_col].cat.categories.tolist()
+                print(cat_orders)
         df = pl.from_pandas(df).lazy()
     schema = df.collect_schema()
     columns = list(schema.keys())
@@ -252,13 +257,19 @@ def generate_filters(
 
         # create options for categorical
         if is_categorical:
-            unique_values = (
-                df.select(pl.col(col)).drop_nulls().unique().collect().to_pandas()
+            unique_values = set(
+                df.select(pl.col(col))
+                .drop_nulls()
+                .unique()
+                .collect()[col]
+                .cast(pl.Utf8)
+                .to_list()
             )
-            options = [
-                {"label": str(i), "value": i}
-                for i in sorted(unique_values[col].astype(str).unique())
-            ]
+            if col in cat_orders:
+                ordered = [v for v in cat_orders[col] if str(v) in unique_values]
+                options = [{"label": str(i), "value": i} for i in ordered]
+            else:
+                options = [{"label": str(i), "value": i} for i in sorted(unique_values)]
 
             filter = html.Div(
                 [

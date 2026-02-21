@@ -828,6 +828,8 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
                 "crude_rate",
                 "added_at",
                 "icd_sub_chapter",
+                "crude_95_confidence_interval",
+                "m33",
             ],
         )["filters"]
 
@@ -1278,6 +1280,9 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
     )
     mi = mi.drop("age_groups", axis=1)
     mi = mi.rename(columns={"value": "age_groups"})
+    mi["age_groups"] = pd.Categorical(
+        mi["age_groups"], categories=cdc.AGE_GROUP_ORDER, ordered=True
+    )
 
     # filter the data
     filtered_mi = dh.filter_data(df=mi, callback_context=states_info)
@@ -1313,7 +1318,14 @@ def display_cdc_mi(n_clicks, cdc_mi_str_filters, cdc_mi_num_filters):
             df=mi,
             prefix="cdc_mi",
             config=None,
-            exclude_cols=["deaths", "population", "crude_rate", "added_at"],
+            exclude_cols=[
+                "deaths",
+                "population",
+                "crude_rate",
+                "added_at",
+                "crude_95_confidence_interval",
+                "m33",
+            ],
         )["filters"]
 
     return dcc.Graph(figure=cdc_mi_chart), mi_table, cdc_mi_filters, False, ""
