@@ -1,6 +1,6 @@
 """Creates models for forecasting mortality rates."""
 
-from typing import Any, Optional
+from typing import Any, Dict, Optional, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -19,6 +19,8 @@ from morai.utils.custom_logger import suppress_logs
 
 logger = custom_logger.setup_logging(__name__)
 
+_Numeric = TypeVar("_Numeric", float, pd.DataFrame)
+
 
 class GLM(BaseEstimator, RegressorMixin):
     """
@@ -32,13 +34,13 @@ class GLM(BaseEstimator, RegressorMixin):
         self,
     ) -> None:
         """Initialize the model."""
-        self.r_style = None
-        self.mapping = None
-        self.model = None
-        self.is_fitted_ = False
-        self.dispersion = None
-        self.alpha = None
-        self.l1_wt = None
+        self.r_style: Optional[bool] = None
+        self.mapping: Optional[dict] = None
+        self.model: Optional[Any] = None
+        self.is_fitted_: bool = False
+        self.dispersion: Optional[Any] = None
+        self.alpha: Optional[float] = None
+        self.l1_wt: Optional[float] = None
 
     def fit(
         self,
@@ -105,7 +107,7 @@ class GLM(BaseEstimator, RegressorMixin):
         if alpha > 0:
             logger.info(f"fitting penalized GLM with alpha={alpha}, L1_wt={l1_wt}")
             model = model.fit_regularized(alpha=alpha, L1_wt=l1_wt, maxiter=maxiter)
-            regularized_feature_cnt = np.sum(model.params != 0)
+            regularized_feature_cnt = sum(model.params != 0)
             if regularized_feature_cnt < feature_cnt:
                 logger.info(
                     f"regularized model reduced features from "
@@ -365,8 +367,8 @@ class GLM(BaseEstimator, RegressorMixin):
 
     def calculate_dispersion(
         self,
-        residuals: np.ndarray = None,
-        weights: np.ndarray = None,
+        residuals: Optional[np.ndarray] = None,
+        weights: Optional[np.ndarray] = None,
         weight_type: Optional[str] = None,
     ) -> float:
         """
@@ -409,6 +411,8 @@ class GLM(BaseEstimator, RegressorMixin):
         """
         if not self.is_fitted_:
             raise ValueError("model is not fitted use fit method")
+        if self.model is None:
+            raise ValueError("model needs to be created first")
 
         # check valid parameters if provided
         else:
@@ -418,7 +422,7 @@ class GLM(BaseEstimator, RegressorMixin):
                 raise ValueError("weights must be provided if weight_type is not None")
 
         # check regularized model
-        is_regularized = self.alpha > 0
+        is_regularized = self.alpha is not None and self.alpha > 0
 
         # set defaults if not provided
         if residuals is None:
@@ -632,14 +636,14 @@ class LeeCarter:
         self.expose_col = expose_col
         self.interval = interval
         # calculations
-        self.age_columns = None
-        self.a_x = None
-        self.k_t = None
-        self.b_x = None
-        self.b_x_k_t = None
-        self.lc_df = None
+        self.age_columns: Optional[Dict[str, Any]] = None
+        self.a_x: Optional[Dict[str, Any]] = None
+        self.k_t: Optional[Dict[str, Any]] = None
+        self.b_x: Optional[Dict[str, Any]] = None
+        self.b_x_k_t: Optional[Dict[str, Any]] = None
+        self.lc_df: Optional[pd.DataFrame] = None
         # forecast
-        self.k_t_i = None
+        self.k_t_i: Optional[Dict[str, Any]] = None
 
     def structure_df(
         self,
@@ -850,10 +854,14 @@ class LeeCarter:
 
         """
         # checks if models have data needed
-        if self.lc_df is None:
-            raise ValueError(
-                "model is not fitted use fit method please use fit() method"
-            )
+        if (
+            self.lc_df is None
+            or self.a_x is None
+            or self.k_t is None
+            or self.b_x is None
+            or self.b_x_k_t is None
+        ):
+            raise ValueError("Model is not fitted, please use fit() method first.")
 
         # initialize the variables
         variance = 0
@@ -1013,15 +1021,14 @@ class CBD:
         self.actual_col = actual_col
         self.expose_col = expose_col
         self.interval = interval
-        # calculations
-        self.age_diff = None
-        self.age_columns = None
-        self.k_t_1 = None
-        self.k_t_2 = None
-        self.cbd_df = None
+        self.age_diff: Optional[Dict[str, Any]] = None
+        self.age_columns: Optional[Dict[str, Any]] = None
+        self.k_t_1: Optional[Dict[str, Any]] = None
+        self.k_t_2: Optional[Dict[str, Any]] = None
+        self.cbd_df: Optional[pd.DataFrame] = None
         # forecast
-        self.k_1_f = None
-        self.k_2_f = None
+        self.k_1_f: Optional[pd.Series] = None
+        self.k_2_f: Optional[pd.Series] = None
 
     def structure_df(
         self,
@@ -1224,10 +1231,14 @@ class CBD:
 
         """
         # checks if models have data needed
-        if self.cbd_df is None:
-            raise ValueError(
-                "model is not fitted use fit method please use fit() method"
-            )
+        if (
+            self.cbd_df is None
+            or self.k_t_1 is None
+            or self.k_t_2 is None
+            or self.age_diff is None
+            or self.age_columns is None
+        ):
+            raise ValueError("Model is not fitted, please use fit() method first.")
 
         # initialize the variables
         variance = 0
@@ -1361,18 +1372,18 @@ class CBD:
 
         return cbd_df
 
-    def _logit(self, a: float) -> float:
+    def _logit(self, a: _Numeric) -> _Numeric:
         """
         Logit function.
 
         Parameters
         ----------
-        a : float
+        a : _Numeric
             The value
 
         Returns
         -------
-        logit : float
+        logit : _Numeric
             The logit value
 
         """
@@ -1398,13 +1409,13 @@ class GAMPy(BaseEstimator, RegressorMixin):
         self,
     ) -> None:
         """Initialize the model."""
-        self.X = None
-        self.y = None
-        self.weights = None
-        self.spline_dict = None
-        self.unfit_model = None
-        self.model = None
-        self.is_fitted_ = False
+        self.X: Optional[pd.DataFrame] = None
+        self.y: Optional[pd.Series] = None
+        self.weights: Optional[pd.Series] = None
+        self.spline_dict: Optional[dict] = None
+        self.unfit_model: Optional[Any] = None
+        self.model: Optional[Any] = None
+        self.is_fitted_: bool = False
 
     def setup_model(
         self,
@@ -1517,8 +1528,15 @@ class GAMPy(BaseEstimator, RegressorMixin):
 
         """
         # check if variables are saved
-        if (X is None and self.X is None) or (y is None and self.y is None):
-            raise ValueError("Need to provide X and y or save the variables")
+        if (
+            self.unfit_model is None
+            or (X is None and self.X is None)
+            or (y is None and self.y is None)
+        ):
+            raise ValueError(
+                "Need to provide X and y or save the variables, "
+                "and run setup_model() first."
+            )
         if X is None:
             X = self.X
         if y is None:
@@ -1616,16 +1634,16 @@ class GAMStats(BaseEstimator, RegressorMixin):
         self,
     ) -> None:
         """Initialize the model."""
-        self.X = None
-        self.y = None
-        self.weights = None
-        self.spline_dict = None
-        self.r_style = None
-        self.mapping = None
-        self.unfit_model = None
-        self.model = None
-        self.smoother = None
-        self.is_fitted_ = False
+        self.X: Optional[pd.DataFrame] = None
+        self.y: Optional[pd.Series] = None
+        self.weights: Optional[pd.Series] = None
+        self.spline_dict: Optional[dict] = None
+        self.r_style: Optional[bool] = None
+        self.mapping: Optional[dict] = None
+        self.unfit_model: Optional[Any] = None
+        self.model: Optional[Any] = None
+        self.smoother: Optional[Any] = None
+        self.is_fitted_: bool = False
 
     def setup_model(
         self,
@@ -1751,6 +1769,8 @@ class GAMStats(BaseEstimator, RegressorMixin):
 
         """
         if spline_dict is None:
+            if self.spline_dict is None:
+                raise ValueError("please provide a spline_dict or save it in the class")
             spline_dict = self.spline_dict
 
         # create the splines and get the attributes
@@ -1758,10 +1778,11 @@ class GAMStats(BaseEstimator, RegressorMixin):
         spline_cols = list(spline_dict.keys())
         splines = X[spline_cols]
         attributes = spline_dict[next(iter(spline_dict))].keys()
-        attr_lists = {f"{attr}_list": [] for attr in attributes}
-        for spline in spline_cols:
-            for attr in attributes:
-                attr_lists[f"{attr}_list"].append(spline_dict[spline][attr])
+        attr_lists = {}
+        for attr in attributes:
+            attr_lists[f"{attr}_list"] = [
+                spline_dict[spline][attr] for spline in spline_cols
+            ]
         df_list = attr_lists.get("df_list", [10] * len(spline_cols))
         degree_list = attr_lists.get("degree_list", [3] * len(spline_cols))
         drop_list = attr_lists.get("drop_list", [True] * len(spline_cols))
@@ -1794,8 +1815,8 @@ class GAMStats(BaseEstimator, RegressorMixin):
             The best alpha value
 
         """
-        if self.unfit_model is None:
-            raise ValueError("please create a model first")
+        if self.unfit_model is None or self.X is None or self.y is None:
+            raise ValueError("Please create a model first using setup_model().")
 
         unfit_model = self.unfit_model
         k_smooths = unfit_model.k_smooths
@@ -1848,6 +1869,9 @@ class GAMStats(BaseEstimator, RegressorMixin):
             The GAM model
 
         """
+        if self.unfit_model is None or self.smoother is None:
+            raise ValueError("Please create a model first using setup_model().")
+
         if kwargs.get("maxiter") is None:
             kwargs["maxiter"] = 100
 
@@ -1891,11 +1915,8 @@ class GAMStats(BaseEstimator, RegressorMixin):
             The predictions
 
         """
-        if not self.is_fitted_:
+        if not self.is_fitted_ or self.model is None or self.smoother is None:
             raise ValueError("model is not fitted use fit method")
-
-        if self.model is None:
-            raise ValueError("please create a model first")
 
         smoother_cols = self.smoother.variable_names
         non_smoother_cols = [col for col in X.columns if col not in smoother_cols]

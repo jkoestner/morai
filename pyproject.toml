@@ -20,7 +20,7 @@ dependencies = [
     "jupyterlab>=4.5.4",
     "numpy>=2.4.2",
     "openpyxl>=3.1.5",
-    "pandas>=3.0.0",
+    "pandas>=3.0.1",
     "plotly>=6.5.2",
     "polars>=1.38.1",
     "pyarrow>=23.0.1",
@@ -42,30 +42,28 @@ dependencies = [
     "gunicorn>=25.1.0",                 # only for dash
 
     # models
-    "catboost>=1.2.10",                  # only for catboost
+    "catboost>=1.2.10",                 # only for catboost
     "pygam>=0.12.0",                    # only for pygam (gam)
 ]
 
 [project.optional-dependencies]
 dev = [
-    "black>=25.1.0",
-    "isort>=6.0.1",
-    "jupyterlab-code-formatter>=3.0.2",
-    "jupyter-resource-usage>=1.1.1",
+    "jupyter-resource-usage>=1.2.0",
+    "jupyterlab-code-formatter>=3.0.3",
     "mypy>=1.19.1",
-    "pytest>=8.3.5",
-    "pytest-cov>=6.0.0",
-    "ruff>=0.14.14",
-    "sphinx>=6.0, <7.2",
-    "sphinx_rtd_theme>=3.0.2",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.2",
+    "sphinx>=9.1.0",
+    "sphinx_rtd_theme>=3.1.0",
 ]
 
 neural = [
-    "torch>=2.5.1",                   # only for neural network class
+    "torch>=2.10.-",                    # only for neural network class
 ]
 
 r = [
-    "rpy2==3.5.17",                     # only for mgcv (gam) and keeping it fixed to not change docker
+    "rpy2==3.5.17",                      # only for mgcv (gam) and keeping it fixed to not change docker
 ]
 
 [project.scripts]
@@ -193,7 +191,8 @@ pylint.max-args = 10
 
 [tool.mypy]
 python_version = "3.11"
-ignore_missing_imports = true
+follow_imports = "skip"          # ignore external imports
+ignore_missing_imports = true    # ignore missing type hints in external libraries
 
 exclude = [
     "^morai/dashboard/",

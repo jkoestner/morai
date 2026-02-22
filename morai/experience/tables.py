@@ -3,6 +3,7 @@
 import copy
 import itertools
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -20,7 +21,6 @@ from morai.utils.helpers import check_merge
 logger = custom_logger.setup_logging(__name__)
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from xml.etree.ElementTree import Element
 
 
@@ -36,7 +36,7 @@ class MortTable:
     def __init__(
         self,
         rate: Optional[pd.DataFrame] = None,
-        rate_filename: Optional[Union[str, "Path"]] = None,
+        rate_filename: Optional[Union[str, Path]] = None,
     ) -> None:
         """
         Initialize the Table class.
@@ -54,7 +54,7 @@ class MortTable:
         self.mi_table = None
         self.rate_dict = None
         self.rate_name = None
-        self.select_period = None
+        self.select_period: int | None = None
         self.max_age = 121
         if rate_filename is None:
             rate_filename = "rate_map.yaml"
@@ -95,7 +95,7 @@ class MortTable:
                 self.mi_table = self.get_mi_table(mi_filename)
 
     def build_table_workbook(
-        self, file_location: Union[str, "Path"], has_mults: bool = False
+        self, file_location: Union[str, Path], has_mults: bool = False
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Build a 1-d mortality table from a workbook.
@@ -148,7 +148,7 @@ class MortTable:
     def build_table_soa(
         self,
         table_list: List[int],
-        extra_dims: Optional[Dict[str, List[str]]] = None,
+        extra_dims: Optional[Dict[str, Any]] = None,
         juv_list: Optional[list[Optional[int]]] = None,
         extend: bool = False,
         add_year: Optional[float] = None,
@@ -517,8 +517,9 @@ class MortTable:
         # select the rows in mult_table that match the selected mults
         selected_mults = mult_table[
             mult_table.apply(
-                lambda row: row["subcategory"]
-                in selected_dict.get(row["category"], []),
+                lambda row: (
+                    row["subcategory"] in selected_dict.get(row["category"], [])
+                ),
                 axis=1,
             )
         ]
@@ -608,7 +609,7 @@ class MortTable:
 
     def _process_soa_table(
         self, soa_xml: "Element", table_index: int, is_select: bool
-    ) -> Tuple[Any, int, int]:
+    ) -> tuple[Any, Any, Any | None]:
         """
         Gather the metadata from the soa table.
 
@@ -625,9 +626,9 @@ class MortTable:
         -------
         soa_table : pymort.MortXML
             an xml object from pymort.
-        select_period : int
+        select_period : int | None
             The select period.
-        min_age : int
+        min_age : int | None
             The minimum age.
 
         """
@@ -1124,22 +1125,20 @@ def compare_tables(
     unique_keys = {}
     for i, table in enumerate([table_1, table_2]):
         table_name = f"table_{i + 1}"
-        unique_keys[table_name] = list(
-            set(table.columns) - set(common_keys) - {value_col}
-        )
-        if unique_keys[table_name]:
+        unique_cols = set(table.columns) - set(common_keys) - {value_col}
+        if unique_cols:
             unique_keys[table_name] = {
-                key: len(table[key].unique()) for key in unique_keys[table_name]
+                key: len(table[key].unique()) for key in unique_cols
             }
             if table_name == "table_1":
-                logger.info(f"{table_name} has extra keys: {unique_keys[table_name]}.")
+                logger.info(f"{table_name} has extra keys: {unique_cols}.")
             # aggregate table_2 if it has extra keys
             elif table_name == "table_2":
                 table_2 = table_2.groupby(common_keys, as_index=False).agg(
                     {value_col: "mean"}
                 )
                 logger.info(
-                    f"{table_name} has extra keys: {unique_keys[table_name]}. "
+                    f"{table_name} has extra keys: {unique_cols}. "
                     f"Calculated mean for '{value_col}' column."
                 )
 
@@ -1563,7 +1562,7 @@ def get_rate_dict(
     return rate_dict
 
 
-def get_filepath(filename: str) -> "Path":
+def get_filepath(filename: str | Path) -> Path:
     """
     Get the file path based on a number of paths.
 
@@ -1644,7 +1643,7 @@ def _remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 
 def _create_grid(
     dims: Optional[Dict[str, Union[List[Any], np.ndarray]]] = None,
-    mapping: Optional[Dict[str, Dict[str, Union[List[Any], np.ndarray]]]] = None,
+    mapping: Optional[Dict[str, Dict[str, Any]]] = None,
     max_age: int = 121,
     max_grid_size: int = 5_000_000,
     mult_features: Optional[List[str]] = None,
@@ -1671,12 +1670,14 @@ def _create_grid(
         The grid.
 
     """
-    if (not dims and not mapping) or (dims and mapping):
+    if dims and mapping:
         raise ValueError("Either dims or mapping must be provided.")
     if mapping:
         if mult_features:
             mapping = _remove_mult_from_rate_mapping(mapping, mult_features)
         dims = {col: list(val["values"].keys()) for col, val in mapping.items()}
+    if not dims:
+        raise ValueError("Dims should be provided if mapping is not provided.")
     dimensions = list(dims.values())
 
     # check the grid size before creating it

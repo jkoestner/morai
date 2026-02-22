@@ -127,7 +127,7 @@ def chart(
         agg_cols = [numerator, denominator]
         check_cols.remove(y_axis)
     else:
-        agg_cols = y_axis
+        agg_cols = [y_axis]
 
     # check if missing columns
     if is_lazy:
@@ -730,9 +730,9 @@ def frequency(
             frequency = frequency.sort_values(
                 by=col,
                 ascending=True,
-                key=lambda x: x.astype(str)
-                if isinstance(x.dtype, CategoricalDtype)
-                else x,
+                key=lambda x: (
+                    x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x
+                ),
             )
 
         # create the subplot
@@ -759,7 +759,7 @@ def pdp(
     line_color: Optional[str] = None,
     weight: Optional[str] = None,
     secondary: Optional[str] = None,
-    mapping: Optional[Dict[str, Dict[str, Union[str, Dict[str, str]]]]] = None,
+    mapping: Optional[Dict[str, Any]] = None,
     spline_dict: Optional[Dict[str, Any]] = None,
     x_bins: Optional[int] = None,
     center: str = "global",
@@ -868,11 +868,11 @@ def pdp(
             # values dict: {original_value: ohe_column_name}
             x_axis_cols = list(mapping[x_axis]["values"].values())
             df[x_axis] = _reconstruct_col_from_ohe_expanded(df, x_axis, mapping)
-            x_axis_values = list(df[x_axis].unique())
+            x_axis_values = np.array(df[x_axis].unique())
         else:
-            x_axis_values = list(df[x_axis].unique())
+            x_axis_values = np.array(df[x_axis].unique())
     elif x_axis in df.select_dtypes(exclude=[np.number]).columns:
-        x_axis_values = list(df[x_axis].unique())
+        x_axis_values = np.array(df[x_axis].unique())
     else:
         if pd.api.types.is_integer_dtype(df[x_axis].dtype):
             df[x_axis] = df[x_axis].astype(float)
@@ -911,9 +911,9 @@ def pdp(
             .reset_index()
             .sort_values(
                 by=grouped_features,
-                key=lambda x: x.astype(str)
-                if isinstance(x.dtype, CategoricalDtype)
-                else x,
+                key=lambda x: (
+                    x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x
+                ),
             )
         )
 
@@ -1232,7 +1232,7 @@ def matrix(
 def target(
     df: Union[pd.DataFrame, pl.LazyFrame],
     target: Union[List[str], str],
-    features: List[str],
+    features: List[Any],
     cols: int = 3,
     numerator: Optional[Union[List[str], str]] = None,
     denominator: Optional[Union[List[str], str]] = None,
@@ -1511,9 +1511,11 @@ def target(
         # sort values and then convert to string if categorical
         grouped_data = grouped_data.sort_values(
             by=plot_feature,
-            key=lambda x: x.astype(str)
-            if isinstance(x.dtype, pd.CategoricalDtype) and not x.cat.ordered
-            else x,
+            key=lambda x: (
+                x.astype(str)
+                if isinstance(x.dtype, pd.CategoricalDtype) and not x.cat.ordered
+                else x
+            ),
         )
         for feature in plot_feature:
             if isinstance(grouped_data[feature].dtype, pd.CategoricalDtype):
@@ -2037,12 +2039,16 @@ def _pdp_make_prediction(
 
     # set x_axis values
     if x_axis_type == "ohe":
+        if x_axis_cols is None:
+            raise ValueError("x_axis_cols is required for ohe type.")
         for col in x_axis_cols[1:]:
             X_temp[col] = 0
         target_col = f"{x_axis}_{value}"
         if target_col in x_axis_cols:
             X_temp[target_col] = 1
     elif x_axis_type == "spline":
+        if x_axis_cols is None:
+            raise ValueError("x_axis_cols is required for spline type.")
         spline_values = x_axis_transformer.transform(pd.DataFrame({x_axis: [value]}))
         for i, col in enumerate(x_axis_cols):
             X_temp[col] = spline_values[0, i]
@@ -2053,6 +2059,8 @@ def _pdp_make_prediction(
     if line_color and line_color != "Overall":
         # handle ohe
         if line_color_type == "ohe":
+            if line_color_cols is None:
+                raise ValueError("line_color_cols is required for ohe type.")
             for col in line_color_cols:
                 X_temp[col] = 0
             target_col = f"{line_color}_{line_value}"
@@ -2079,7 +2087,7 @@ def _pdp_make_prediction(
 def _reconstruct_col_from_ohe_expanded(
     df: pd.DataFrame,
     feature_name: str,
-    mapping: Dict[str, Dict[str, Union[str, Dict[str, str]]]],
+    mapping: Dict[str, Any],
 ) -> pd.Series:
     """
     Reconstruct a categorical column from one-hot expanded columns.
