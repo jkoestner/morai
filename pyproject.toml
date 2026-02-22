@@ -59,7 +59,7 @@ dev = [
 ]
 
 neural = [
-    "torch>=2.10.-",                    # only for neural network class
+    "torch>=2.10.0",                    # only for neural network class
 ]
 
 r = [
