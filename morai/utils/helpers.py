@@ -15,13 +15,10 @@ import pandas as pd
 
 from morai.utils import custom_logger
 
+_files_env = os.getenv("MORAI_FILES_PATH")
 ROOT_PATH = Path(__file__).resolve().parent.parent.parent
 TESTS_PATH = ROOT_PATH / "tests" / "files"
-FILES_PATH = (
-    Path(os.getenv("MORAI_FILES_PATH"))
-    if os.getenv("MORAI_FILES_PATH")
-    else ROOT_PATH / "files"
-)
+FILES_PATH = Path(_files_env) if _files_env else ROOT_PATH / "files"
 DASH_CONFIG_PATH = FILES_PATH / "dashboard_config.yaml"
 
 logger = custom_logger.setup_logging(__name__)
@@ -227,7 +224,7 @@ def delete_jupyter_objects(objects: list) -> None:  # pragma: no cover
     logger.info(f"deleted `{len(objects)}` objects in the Jupyter notebook")
 
 
-def test_path(path: str) -> Path:
+def test_path(path: str) -> str:
     """
     Test the path with a few different options and return if it exists.
 
@@ -238,8 +235,8 @@ def test_path(path: str) -> Path:
 
     Returns
     -------
-    path : pathlib.Path
-        The path as a pathlib.Path.
+    path : str
+        The path as a str.
 
     """
     paths_to_try = [
@@ -393,15 +390,15 @@ def _weighted_mean(
 
     """
     if weights is None or len(weights) == 0:
-        return values.mean()
-    elif isinstance(weights, list):
-        weights = np.array(weights)
+        return float(np.mean(values))
 
-    if weights.sum() == 0:
+    w = np.asarray(weights)
+
+    if w.sum() == 0:
         logger.warning("The sum of the weights is 0, returning NaN")
-        return np.nan
-    else:
-        return np.average(values, weights=weights)
+        return float(np.nan)
+
+    return float(np.average(values, weights=w))
 
 
 def _convert_object_to_category(df: pd.DataFrame, column: str) -> pd.DataFrame:

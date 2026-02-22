@@ -247,7 +247,7 @@ def calculate_metrics(
              negative if the model is worse than the mean
 
     """
-    metric_dict = {}
+    metric_dict: dict[str, Any] = {}
     for metric in metrics:
         if metric == "smape":
             metric_dict[f"{prefix}_{metric}"] = smape(
@@ -299,16 +299,15 @@ class ModelResults:
     def __init__(
         self, filepath: str | None = None, metrics: list | None = None
     ) -> None:
-        self.filepath = filepath
-
         # load model results from file
         if filepath is not None:
+            self.filepath = filepath
             filepath = helpers.test_path(filepath)
             if not str(filepath).endswith(".json"):
                 raise ValueError("Filepath must end with .json")
             logger.info(f"loading results from {filepath}")
 
-            with open(filepath, "r") as file:
+            with open(filepath, "r") as file:  # type: ignore[arg-type]
                 data = std_json.load(file)
             model_df = pd.read_json(
                 StringIO(std_json.dumps(data["model"])), orient="split"
@@ -332,7 +331,7 @@ class ModelResults:
             self.model = pd.DataFrame()
             self.scorecard = pd.DataFrame()
             self.importance = pd.DataFrame()
-            self.metrics = metrics
+            self.metrics = metrics or []
 
     def add_model(
         self,

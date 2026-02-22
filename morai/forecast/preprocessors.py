@@ -74,10 +74,10 @@ def preprocess_data(
     """
     # initializing the variables
     feature_dict = feature_dict.copy()
-    mapping = {}
-    y = None
-    weights = None
-    constant_col = []
+    mapping: dict[str, dict] = {}
+    y: pd.Series | None = None
+    weights: pd.Series | None = None
+    constant_col: list[str] = []
 
     # check if the feature_dict has the acceptable keys
     for key in feature_dict.keys():
@@ -117,9 +117,8 @@ def preprocess_data(
     for features in model_feature_dict.values():
         model_features.extend(features)
     if len(model_features) != len(set(model_features)):
-        seen = set()
-        duplicates = {x for x in model_features if x in seen or seen.add(x)}
-        raise ValueError(f"duplicates found: {duplicates}")
+        duplicates = [x for x in model_features if model_features.count(x) > 1]
+        raise ValueError(f"duplicates found: {set(duplicates)}")
 
     # get the dictionary values
     model_target = model_feature_dict.get("target", [])
@@ -159,15 +158,15 @@ def preprocess_data(
             "or 'ohe' and instead uses 'ordinal'"
         )
         ordinal_cols = ordinal_cols + nominal_cols + ohe_cols + spline_cols
-        nominal_cols = None
-        ohe_cols = None
+        nominal_cols = []
+        ohe_cols = []
     elif preset == "pass":
         logger.info("using 'pass' preset which makes all features passthrough")
         passthrough_cols = model_features
-        cat_pass_cols = None
-        ordinal_cols = None
-        nominal_cols = None
-        ohe_cols = None
+        cat_pass_cols = []
+        ordinal_cols = []
+        nominal_cols = []
+        ohe_cols = []
 
     # get y, weights, and X
     if model_target:
@@ -664,7 +663,7 @@ def time_based_split(
     time_col: str | None = None,
     cutoff: int | None = None,
     **kwargs: dict,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series]:
+) -> list[Any]:
     """
     Split X, y, weights by a calendar/time column and a cutoff value.
 
