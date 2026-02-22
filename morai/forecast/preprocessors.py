@@ -1,6 +1,8 @@
 """Preprocessors used in the models."""
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +23,7 @@ def preprocess_data(
     standardize: bool = False,
     scale_weights: bool = False,
     clean: bool = False,
-    preset: Optional[str] = None,
+    preset: str | None = None,
 ) -> dict:
     """
     Preprocess the features.
@@ -500,9 +502,9 @@ def lazy_bin_feature(
 
 def lazy_groupby(
     df: pl.LazyFrame,
-    groupby_cols: Union[str, List[str]],
-    agg_cols: Union[str, List[str]],
-    aggs: Union[str, List[str]],
+    groupby_cols: str | list[str],
+    agg_cols: str | list[str],
+    aggs: str | list[str],
 ) -> pl.LazyFrame:
     """
     Mimics a Pandas groupby call using Polars' lazy API.
@@ -562,7 +564,7 @@ def lazy_groupby(
     return grouped_df
 
 
-def get_dimensions(mapping: Dict[str, Any]) -> pd.DataFrame:
+def get_dimensions(mapping: dict[str, Any]) -> pd.DataFrame:
     """
     Get the dimensions for each feature in the mapping.
 
@@ -590,7 +592,7 @@ def get_dimensions(mapping: Dict[str, Any]) -> pd.DataFrame:
     return dimensions
 
 
-def remap_values(df: pd.DataFrame, mapping: Dict[str, Any]) -> pd.DataFrame:
+def remap_values(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
     """
     Remap the values using the mapping.
 
@@ -626,7 +628,7 @@ def remap_values(df: pd.DataFrame, mapping: Dict[str, Any]) -> pd.DataFrame:
     return df
 
 
-def update_mapping(mapping: Dict[str, Any], key: str, values: Any) -> Dict[str, Any]:
+def update_mapping(mapping: dict[str, Any], key: str, values: Any) -> dict[str, Any]:
     """
     Update the mapping key values.
 
@@ -659,10 +661,10 @@ def update_mapping(mapping: Dict[str, Any], key: str, values: Any) -> Dict[str, 
 
 def time_based_split(
     *arrays,
-    time_col: Optional[str] = None,
-    cutoff: Optional[int] = None,
+    time_col: str | None = None,
+    cutoff: int | None = None,
     **kwargs: dict,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series]:
     """
     Split X, y, weights by a calendar/time column and a cutoff value.
 

@@ -4,8 +4,10 @@ Utilities for app.
 Provides functions for common used functions in app.
 """
 
+from __future__ import annotations
+
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -77,11 +79,11 @@ def read_table(filepath: str) -> pl.LazyFrame:
 
 
 def filter_data(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     callback_context: list[dict],
     num_to_str_count: int = num_to_str_count,
-    mult_table: Optional[pd.DataFrame] = None,
-) -> Union[pd.DataFrame, pl.LazyFrame]:
+    mult_table: pd.DataFrame | None = None,
+) -> pd.DataFrame | pl.LazyFrame:
     """
     Filter data based on the number of unique values.
 
@@ -176,12 +178,12 @@ def filter_data(
 
 
 def generate_filters(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     prefix: str,
     num_to_str_count: int = num_to_str_count,
-    config: Optional[Dict[str, Any]] = None,
-    exclude_cols: Optional[List[str]] = None,
-    mult_table: Optional[Union[pd.DataFrame, pl.LazyFrame]] = None,
+    config: dict[str, Any] | None = None,
+    exclude_cols: list[str] | None = None,
+    mult_table: pd.DataFrame | pl.LazyFrame | None = None,
 ) -> dict:
     """
     Generate a dictionary of dashboard options from dataframe.
@@ -380,8 +382,8 @@ def generate_filters(
 
 def get_active_filters(
     callback_context: Any,
-    str_filters: Optional[list[Any]] = None,
-    num_filters: Optional[list[Any]] = None,
+    str_filters: list[Any] | None = None,
+    num_filters: list[Any] | None = None,
 ) -> list[Any]:
     """
     Create a list of active filters for display.
@@ -441,8 +443,8 @@ def get_active_filters(
 
 
 def toggle_collapse(
-    callback_context: Any, is_open: List[bool], children: List[dict]
-) -> tuple[List[bool], List[List[dict]]]:
+    callback_context: Any, is_open: list[bool], children: list[dict]
+) -> tuple[list[bool], list[list[dict]]]:
     """
     Toggle collapse state of filter checklists.
 
@@ -499,7 +501,7 @@ def toggle_collapse(
     return new_is_open, new_children
 
 
-def get_card_list(config: Dict[str, Any]) -> List[str]:
+def get_card_list(config: dict[str, Any]) -> list[str]:
     """
     Get list of variables to display in cards.
 
@@ -526,7 +528,7 @@ def get_card_list(config: Dict[str, Any]) -> List[str]:
 
 def generate_card(
     df: pl.LazyFrame,
-    card_list: List[str],
+    card_list: list[str],
     title: str = "Data",
     color: str = "Azure",
     inverse: bool = False,
@@ -577,10 +579,10 @@ def generate_card(
 
 
 def generate_selectors(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     prefix: str,
-    selector_dict: Dict[str, bool],
-) -> List[html.Div]:
+    selector_dict: dict[str, bool],
+) -> list[html.Div]:
     """
     Generate selectors.
 
@@ -1068,7 +1070,7 @@ def generate_selectors(
     return selectors
 
 
-def load_config(dash_config_path: str = helpers.DASH_CONFIG_PATH) -> Dict[str, Any]:
+def load_config(dash_config_path: str = helpers.DASH_CONFIG_PATH) -> dict[str, Any]:
     """
     Load the yaml configuration file.
 
@@ -1089,7 +1091,7 @@ def load_config(dash_config_path: str = helpers.DASH_CONFIG_PATH) -> Dict[str, A
 
 
 def write_config(
-    config: Dict[str, Any], dash_config_path: str = helpers.DASH_CONFIG_PATH
+    config: dict[str, Any], dash_config_path: str = helpers.DASH_CONFIG_PATH
 ) -> None:
     """
     Write the yaml configuration file.
@@ -1107,7 +1109,7 @@ def write_config(
         yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
 
-def list_files_in_folder(folder_path: str) -> List[str]:
+def list_files_in_folder(folder_path: str) -> list[str]:
     """
     List files in the directory.
 
@@ -1134,8 +1136,8 @@ def list_files_in_folder(folder_path: str) -> List[str]:
 
 
 def flatten_columns(
-    df: Union[pd.DataFrame, pl.LazyFrame],
-) -> Union[pd.DataFrame, pl.LazyFrame]:
+    df: pd.DataFrame | pl.LazyFrame,
+) -> pd.DataFrame | pl.LazyFrame:
     """
     Flatten columns in dataframe.
 
@@ -1181,7 +1183,7 @@ def flatten_columns(
     return df
 
 
-def _inputs_flatten_list(input_list: List[Any]) -> List[Any]:
+def _inputs_flatten_list(input_list: list[Any]) -> list[Any]:
     flat_list = []
     for item in input_list:
         if isinstance(item, dict):
@@ -1191,7 +1193,7 @@ def _inputs_flatten_list(input_list: List[Any]) -> List[Any]:
     return flat_list
 
 
-def _inputs_parse_id(input_list: List[Any], id_value: str) -> Any:
+def _inputs_parse_id(input_list: list[Any], id_value: str) -> Any:
     """
     Parse inputs for id value.
 
@@ -1222,7 +1224,7 @@ def _inputs_parse_id(input_list: List[Any], id_value: str) -> Any:
     return None
 
 
-def _inputs_parse_type(input_list: List[Any], type_value: str) -> List[Any]:
+def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
     """
     Parse inputs for type value.
 
@@ -1294,7 +1296,7 @@ def register_export_callback(app) -> None:  # noqa: ANN001
         prevent_initial_call=True,
     )
     def export_table(
-        n_clicks_list: List[Optional[int]], table_data_list: List[List[Any]]
+        n_clicks_list: list[int | None], table_data_list: list[list[Any]]
     ) -> None:
         """
         Export table data to CSV.

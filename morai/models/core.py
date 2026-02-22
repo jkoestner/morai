@@ -1,6 +1,8 @@
 """Creates models for forecasting mortality rates."""
 
-from typing import Any, Dict, Optional, TypeVar
+from __future__ import annotations
+
+from typing import Any, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -34,13 +36,13 @@ class GLM(BaseEstimator, RegressorMixin):
         self,
     ) -> None:
         """Initialize the model."""
-        self.r_style: Optional[bool] = None
-        self.mapping: Optional[dict] = None
-        self.model: Optional[Any] = None
+        self.r_style: bool | None = None
+        self.mapping: dict | None = None
+        self.model: Any | None = None
         self.is_fitted_: bool = False
-        self.dispersion: Optional[Any] = None
-        self.alpha: Optional[float] = None
-        self.l1_wt: Optional[float] = None
+        self.dispersion: Any | None = None
+        self.alpha: float | None = None
+        self.l1_wt: float | None = None
 
     def fit(
         self,
@@ -49,7 +51,7 @@ class GLM(BaseEstimator, RegressorMixin):
         weights: pd.Series = None,
         family: sm.families = None,
         r_style: bool = False,
-        mapping: Optional[dict] = None,
+        mapping: dict | None = None,
         alpha: float = 0.0,
         l1_wt: float = 0.0,
         maxiter: int = 100,
@@ -283,7 +285,7 @@ class GLM(BaseEstimator, RegressorMixin):
         X: pd.DataFrame,
         y: pd.Series,
         weights: pd.Series = None,
-        base_features: Optional[list] = None,
+        base_features: list | None = None,
     ) -> pd.DataFrame:
         """
         Get the feature contributions.
@@ -367,9 +369,9 @@ class GLM(BaseEstimator, RegressorMixin):
 
     def calculate_dispersion(
         self,
-        residuals: Optional[np.ndarray] = None,
-        weights: Optional[np.ndarray] = None,
-        weight_type: Optional[str] = None,
+        residuals: np.ndarray | None = None,
+        weights: np.ndarray | None = None,
+        weight_type: str | None = None,
     ) -> float:
         """
         Calculate the empirical dispersion of the model.
@@ -610,7 +612,7 @@ class LeeCarter:
         year_col: str = "observation_year",
         actual_col: str = "death_claim_amount",
         expose_col: str = "amount_exposed",
-        interval: Optional[int] = None,
+        interval: int | None = None,
     ) -> None:
         """
         Initialize the model.
@@ -636,14 +638,14 @@ class LeeCarter:
         self.expose_col = expose_col
         self.interval = interval
         # calculations
-        self.age_columns: Optional[Dict[str, Any]] = None
-        self.a_x: Optional[Dict[str, Any]] = None
-        self.k_t: Optional[Dict[str, Any]] = None
-        self.b_x: Optional[Dict[str, Any]] = None
-        self.b_x_k_t: Optional[Dict[str, Any]] = None
-        self.lc_df: Optional[pd.DataFrame] = None
+        self.age_columns: dict[str, Any] | None = None
+        self.a_x: dict[str, Any] | None = None
+        self.k_t: dict[str, Any] | None = None
+        self.b_x: dict[str, Any] | None = None
+        self.b_x_k_t: dict[str, Any] | None = None
+        self.lc_df: pd.DataFrame | None = None
         # forecast
-        self.k_t_i: Optional[Dict[str, Any]] = None
+        self.k_t_i: dict[str, Any] | None = None
 
     def structure_df(
         self,
@@ -704,7 +706,7 @@ class LeeCarter:
 
         return self.lc_df
 
-    def fit(self, lc_df: pd.DataFrame, interval: Optional[int] = None) -> pd.DataFrame:
+    def fit(self, lc_df: pd.DataFrame, interval: int | None = None) -> pd.DataFrame:
         """
         Fit the LeeCarter model from a crude_df which will add the qx_lc rates.
 
@@ -836,7 +838,7 @@ class LeeCarter:
 
         return lc_df
 
-    def forecast(self, years: int, seed: Optional[int] = None) -> pd.DataFrame:
+    def forecast(self, years: int, seed: int | None = None) -> pd.DataFrame:
         """
         Forecast the mortality rates using deterministic random walk.
 
@@ -926,8 +928,8 @@ class LeeCarter:
     def map(
         self,
         df: pd.DataFrame,
-        age_col: Optional[str] = None,
-        year_col: Optional[str] = None,
+        age_col: str | None = None,
+        year_col: str | None = None,
     ) -> pd.DataFrame:
         """
         Map the mortality rates from the Lee Carter model.
@@ -996,7 +998,7 @@ class CBD:
         year_col: str = "observation_year",
         actual_col: str = "death_claim_amount",
         expose_col: str = "amount_exposed",
-        interval: Optional[int] = None,
+        interval: int | None = None,
     ) -> None:
         """
         Initialize the model.
@@ -1021,14 +1023,14 @@ class CBD:
         self.actual_col = actual_col
         self.expose_col = expose_col
         self.interval = interval
-        self.age_diff: Optional[Dict[str, Any]] = None
-        self.age_columns: Optional[Dict[str, Any]] = None
-        self.k_t_1: Optional[Dict[str, Any]] = None
-        self.k_t_2: Optional[Dict[str, Any]] = None
-        self.cbd_df: Optional[pd.DataFrame] = None
+        self.age_diff: dict[str, Any] | None = None
+        self.age_columns: dict[str, Any] | None = None
+        self.k_t_1: dict[str, Any] | None = None
+        self.k_t_2: dict[str, Any] | None = None
+        self.cbd_df: pd.DataFrame | None = None
         # forecast
-        self.k_1_f: Optional[pd.Series] = None
-        self.k_2_f: Optional[pd.Series] = None
+        self.k_1_f: pd.Series | None = None
+        self.k_2_f: pd.Series | None = None
 
     def structure_df(
         self,
@@ -1092,7 +1094,7 @@ class CBD:
     def fit(
         self,
         cbd_df: pd.DataFrame,
-        interval: Optional[int] = None,
+        interval: int | None = None,
     ) -> pd.DataFrame:
         """
         Get the forecasted mortality rates.
@@ -1213,7 +1215,7 @@ class CBD:
 
         return cbd_df
 
-    def forecast(self, years: int, seed: Optional[int] = None) -> pd.DataFrame:
+    def forecast(self, years: int, seed: int | None = None) -> pd.DataFrame:
         """
         Forecast the mortality rates using deterministic random walk.
 
@@ -1322,8 +1324,8 @@ class CBD:
     def map(
         self,
         df: pd.DataFrame,
-        age_col: Optional[str] = None,
-        year_col: Optional[str] = None,
+        age_col: str | None = None,
+        year_col: str | None = None,
     ) -> pd.DataFrame:
         """
         Map the mortality rates from the CBD model.
@@ -1409,12 +1411,12 @@ class GAMPy(BaseEstimator, RegressorMixin):
         self,
     ) -> None:
         """Initialize the model."""
-        self.X: Optional[pd.DataFrame] = None
-        self.y: Optional[pd.Series] = None
-        self.weights: Optional[pd.Series] = None
-        self.spline_dict: Optional[dict] = None
-        self.unfit_model: Optional[Any] = None
-        self.model: Optional[Any] = None
+        self.X: pd.DataFrame | None = None
+        self.y: pd.Series | None = None
+        self.weights: pd.Series | None = None
+        self.spline_dict: dict | None = None
+        self.unfit_model: Any | None = None
+        self.model: Any | None = None
         self.is_fitted_: bool = False
 
     def setup_model(
@@ -1424,7 +1426,7 @@ class GAMPy(BaseEstimator, RegressorMixin):
         weights: pd.Series = None,
         distribution: str = "binomial",
         link: str = "logit",
-        spline_dict: Optional[dict] = None,
+        spline_dict: dict | None = None,
         alpha: float = 0,
         save: bool = True,
         **kwargs,
@@ -1578,7 +1580,7 @@ class GAMPy(BaseEstimator, RegressorMixin):
 
         return predictions
 
-    def get_terms(self, X: pd.DataFrame, spline_dict: Optional[dict] = None) -> str:
+    def get_terms(self, X: pd.DataFrame, spline_dict: dict | None = None) -> str:
         """
         Get the terms for the GAM model.
 
@@ -1634,15 +1636,15 @@ class GAMStats(BaseEstimator, RegressorMixin):
         self,
     ) -> None:
         """Initialize the model."""
-        self.X: Optional[pd.DataFrame] = None
-        self.y: Optional[pd.Series] = None
-        self.weights: Optional[pd.Series] = None
-        self.spline_dict: Optional[dict] = None
-        self.r_style: Optional[bool] = None
-        self.mapping: Optional[dict] = None
-        self.unfit_model: Optional[Any] = None
-        self.model: Optional[Any] = None
-        self.smoother: Optional[Any] = None
+        self.X: pd.DataFrame | None = None
+        self.y: pd.Series | None = None
+        self.weights: pd.Series | None = None
+        self.spline_dict: dict | None = None
+        self.r_style: bool | None = None
+        self.mapping: dict | None = None
+        self.unfit_model: Any | None = None
+        self.model: Any | None = None
+        self.smoother: Any | None = None
         self.is_fitted_: bool = False
 
     def setup_model(
@@ -1651,7 +1653,7 @@ class GAMStats(BaseEstimator, RegressorMixin):
         y: pd.Series,
         weights: pd.Series = None,
         family: sm.families = None,
-        spline_dict: Optional[dict] = None,
+        spline_dict: dict | None = None,
         alpha: float = 0,
         save: bool = True,
         **kwargs,
@@ -1746,7 +1748,7 @@ class GAMStats(BaseEstimator, RegressorMixin):
         return unfit_model
 
     def create_smoother(
-        self, X: pd.DataFrame, spline_dict: Optional[dict] = None
+        self, X: pd.DataFrame, spline_dict: dict | None = None
     ) -> Any:
         """
         Create the smoother for the GAM model.

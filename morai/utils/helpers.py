@@ -1,12 +1,14 @@
 """Collection of helpers."""
 
+from __future__ import annotations
+
 import gc
 import json
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -26,11 +28,11 @@ logger = custom_logger.setup_logging(__name__)
 
 
 def clean_df(
-    data: Union[pd.DataFrame, dict],
+    data: pd.DataFrame | dict,
     lowercase: bool = True,
     underscore: bool = True,
     update_cat: bool = True,
-) -> Union[pd.DataFrame, dict]:
+) -> pd.DataFrame | dict:
     """
     Clean the DataFrame.
 
@@ -372,7 +374,7 @@ def check_merge(func: Callable) -> Callable:
 
 
 def _weighted_mean(
-    values: Union[list, np.ndarray], weights: Optional[Union[list, np.ndarray]] = None
+    values: list | np.ndarray, weights: list | np.ndarray | None = None
 ) -> float:
     """
     Calculate the weighted mean.
@@ -424,7 +426,7 @@ def _convert_object_to_category(df: pd.DataFrame, column: str) -> pd.DataFrame:
     return df
 
 
-def _to_list(val: Union[str, list, dict, None]) -> list:
+def _to_list(val: str | list | dict | None) -> list:
     """
     Convert a string, dict, or None to a list.
 

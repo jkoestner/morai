@@ -20,10 +20,11 @@ reference.
 Link: https://github.com/alipphardt/cdc-wonder-api
 """
 
+from __future__ import annotations
+
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Optional
 
 import pandas as pd
 import requests
@@ -59,7 +60,7 @@ AGE_GROUP_ORDER = [
 
 def get_cdc_data_xml(
     xml_filename: str,
-    parse_date_col: Optional[str] = None,
+    parse_date_col: str | None = None,
     convert_dtypes: bool = True,
     clean_df: bool = True,
 ) -> pd.DataFrame:
@@ -218,7 +219,7 @@ def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
     return cdc_df
 
 
-def get_last_updated(table_name: Optional[str] = None) -> str:
+def get_last_updated(table_name: str | None = None) -> str:
     """Get the last updated date of a table."""
     if table_name is None:
         table_name = "mcd18_cod"
@@ -258,9 +259,9 @@ def get_cdc_reference(sheet_name: str) -> pd.DataFrame:
 def map_reference(
     df: pd.DataFrame,
     col: str,
-    on_dict: Optional[dict] = None,
+    on_dict: dict | None = None,
     sheet_name: str = "cod",
-    category: Optional[str] = None,
+    category: str | None = None,
 ) -> pd.DataFrame:
     """
     Map a column from the CDC reference to the DataFrame.
@@ -378,8 +379,8 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
 def compare_dfs(
     left_df: pd.DataFrame,
     right_df: pd.DataFrame,
-    compare_col_dict: Optional[dict] = None,
-    compare_value_dict: Optional[dict] = None,
+    compare_col_dict: dict | None = None,
+    compare_value_dict: dict | None = None,
 ) -> pd.DataFrame:
     """
     Compare two DataFrames.

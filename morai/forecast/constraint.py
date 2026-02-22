@@ -1,6 +1,6 @@
 """Constraint functions."""
 
-from typing import Optional
+from __future__ import annotations
 
 import pandas as pd
 
@@ -45,7 +45,7 @@ class TableConstrainer:
         issue_age_col: str,
         duration_col: str,
         attained_age_col: str,
-        other_feature_cols: Optional[list] = None,
+        other_feature_cols: list | None = None,
         min_increase: float = 0.001,
         iteration_limit: int = 10,
     ) -> None:
@@ -215,7 +215,7 @@ def run_constraint(
     constraint_col: str,
     other_feature_cols: list,
     min_increase: float = 0.001,
-    fixed_col: Optional[str] = None,
+    fixed_col: str | None = None,
 ) -> pd.DataFrame:
     """
     Run constraint on a dataframe.

@@ -1,6 +1,8 @@
 """Experience study model."""
 
-from typing import Any, Dict, List, Optional, Union
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -13,13 +15,13 @@ logger = custom_logger.setup_logging(__name__)
 
 def normalize(
     df: pd.DataFrame,
-    features: List[str],
-    normalize_col: Union[List[str], str],
-    weight_col: Optional[Union[List[str], str]] = None,
-    add_norm_col: Optional[bool] = False,
-    ratio: Optional[bool] = False,
-    relative_to: Optional[str] = "aggregate",
-    relative_cols: Optional[Union[List[str], str]] = None,
+    features: list[str],
+    normalize_col: list[str] | str,
+    weight_col: list[str] | str | None = None,
+    add_norm_col: bool | None = False,
+    ratio: bool | None = False,
+    relative_to: str | None = "aggregate",
+    relative_cols: list[str] | str | None = None,
     **kwargs: Any,
 ) -> pd.DataFrame:
     """
@@ -126,15 +128,15 @@ def normalize(
 
 
 def calc_relative_risk(
-    df: Union[pd.DataFrame, pl.LazyFrame],
-    features: List[str],
-    risk_col: Union[List[str], str],
-    weight_col: Optional[Union[List[str], str]] = None,
-    ratio: Optional[bool] = False,
-    relative_to: Optional[str] = "aggregate",
-    relative_cols: Optional[Union[List[str], str]] = None,
-    subset_dict: Optional[Dict[str, Any]] = None,
-) -> Union[pd.DataFrame, pl.LazyFrame]:
+    df: pd.DataFrame | pl.LazyFrame,
+    features: list[str],
+    risk_col: list[str] | str,
+    weight_col: list[str] | str | None = None,
+    ratio: bool | None = False,
+    relative_to: str | None = "aggregate",
+    relative_cols: list[str] | str | None = None,
+    subset_dict: dict[str, Any] | None = None,
+) -> pd.DataFrame | pl.LazyFrame:
     """
     Calculate relative risk of a column (risk_col) based on a number of features.
 
@@ -473,7 +475,7 @@ def calc_variance(
     df: pd.DataFrame,
     rate_col: str,
     exposure_col: str,
-    amount_col: Optional[str] = None,
+    amount_col: str | None = None,
 ) -> pd.Series:
     """
     Calculate the variance of a binomial distribution.
@@ -524,8 +526,8 @@ def calc_moments(
     df: pd.DataFrame,
     rate_col: str,
     exposure_col: str,
-    amount_col: Optional[str] = None,
-    sffx: Optional[str] = None,
+    amount_col: str | None = None,
+    sffx: str | None = None,
 ) -> pd.DataFrame:
     """
     Calculate the moment variables of a binomial distribution.

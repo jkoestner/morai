@@ -1,8 +1,10 @@
 """Collection of visualization tools."""
 
+from __future__ import annotations
+
 import itertools
 import math
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -28,22 +30,22 @@ chart_width = 1000
 
 
 def chart(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     x_axis: str,
-    y_axis: Optional[str] = None,
-    color: Optional[str] = None,
+    y_axis: str | None = None,
+    color: str | None = None,
     type: str = "line",
-    numerator: Optional[str] = None,
-    denominator: Optional[str] = None,
-    title: Optional[str] = None,
+    numerator: str | None = None,
+    denominator: str | None = None,
+    title: str | None = None,
     y_sort: bool = False,
-    x_bins: Optional[int] = None,
+    x_bins: int | None = None,
     y_log: bool = False,
     add_line: bool = False,
     agg: str = "sum",
     display: bool = True,
     **kwargs: Any,
-) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
+) -> go.Figure | pd.DataFrame | pl.LazyFrame:
     """
     Create a chart with Plotly Express.
 
@@ -294,19 +296,19 @@ def chart(
 
 
 def relative_risk(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     y_axis: str,
-    features: List[str],
-    numerator: Optional[str] = None,
-    denominator: Optional[str] = None,
-    x_bins: Optional[int] = None,
-    relative_to: Optional[str] = "aggregate",
-    relative_cols: Optional[List[str] | str] = None,
-    subset_dict: Optional[Dict[str, Any]] = None,
-    flip_x_color: Optional[bool] = False,
+    features: list[str],
+    numerator: str | None = None,
+    denominator: str | None = None,
+    x_bins: int | None = None,
+    relative_to: str | None = "aggregate",
+    relative_cols: list[str] | str | None = None,
+    subset_dict: dict[str, Any] | None = None,
+    flip_x_color: bool | None = False,
     display: bool = True,
     **kwargs: Any,
-) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
+) -> go.Figure | pd.DataFrame | pl.LazyFrame:
     """
     Chart relative risk by a feature.
 
@@ -463,17 +465,17 @@ def relative_risk(
 
 
 def compare_rates(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     x_axis: str,
-    rates: List[str],
-    line_feature: Optional[str] = None,
-    weights: Optional[List[str]] = None,
-    secondary: Optional[str] = None,
+    rates: list[str],
+    line_feature: str | None = None,
+    weights: list[str] | None = None,
+    secondary: str | None = None,
     y_log: bool = False,
-    x_bins: Optional[int] = None,
+    x_bins: int | None = None,
     display: bool = True,
     **kwargs: Any,
-) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
+) -> go.Figure | pd.DataFrame | pl.LazyFrame:
     """
     Compare rates by a feature.
 
@@ -667,10 +669,10 @@ def compare_rates(
 
 
 def frequency(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     cols: int = 1,
-    features: Optional[List[str]] = None,
-    sum_var: Optional[str] = None,
+    features: list[str] | None = None,
+    sum_var: str | None = None,
 ) -> go.Figure:
     """
     Generate frequency plots.
@@ -756,17 +758,17 @@ def pdp(
     model: Any,
     df: pd.DataFrame,
     x_axis: str,
-    line_color: Optional[str] = None,
-    weight: Optional[str] = None,
-    secondary: Optional[str] = None,
-    mapping: Optional[Dict[str, Any]] = None,
-    spline_dict: Optional[Dict[str, Any]] = None,
-    x_bins: Optional[int] = None,
+    line_color: str | None = None,
+    weight: str | None = None,
+    secondary: str | None = None,
+    mapping: dict[str, Any] | None = None,
+    spline_dict: dict[str, Any] | None = None,
+    x_bins: int | None = None,
     center: str = "global",
     quick: bool = False,
-    n_jobs: Optional[int] = None,
+    n_jobs: int | None = None,
     display: bool = True,
-) -> Union[go.Figure, pd.DataFrame]:
+) -> go.Figure | pd.DataFrame:
     """
     Create a partial dependence plot (PDP) for the DataFrame.
 
@@ -1106,7 +1108,7 @@ def pdp(
 def scatter(
     df: pd.DataFrame,
     target: str,
-    features: List[str],
+    features: list[str],
     sample_nbr: float = 100,
     cols: int = 3,
 ) -> go.Figure:
@@ -1230,14 +1232,14 @@ def matrix(
 
 
 def target(
-    df: Union[pd.DataFrame, pl.LazyFrame],
-    target: Union[List[str], str],
-    features: List[Any],
+    df: pd.DataFrame | pl.LazyFrame,
+    target: list[str] | str,
+    features: list[Any],
     cols: int = 3,
-    numerator: Optional[Union[List[str], str]] = None,
-    denominator: Optional[Union[List[str], str]] = None,
-    weights: Optional[Union[List[str], str]] = None,
-    normalize: Optional[List[str]] = None,
+    numerator: list[str] | str | None = None,
+    denominator: list[str] | str | None = None,
+    weights: list[str] | str | None = None,
+    normalize: list[str] | None = None,
     add_line: bool = False,
     generate_pairwise: bool = False,
     y_log: bool = False,
@@ -1632,7 +1634,7 @@ def target(
     return fig
 
 
-def get_stats(df: Union[pd.DataFrame, pl.LazyFrame], features: list) -> pd.DataFrame:
+def get_stats(df: pd.DataFrame | pl.LazyFrame, features: list) -> pd.DataFrame:
     """
     Generate summary statistics for the dataset.
 
@@ -1956,7 +1958,7 @@ def get_category_orders(
     measure: str,
     ascending: bool = False,
     agg: str = "sum",
-) -> Dict[str, List[Any]]:
+) -> dict[str, list[Any]]:
     """
     Get the category order.
 
@@ -2024,16 +2026,16 @@ def _pdp_make_prediction(
     X: pd.DataFrame,
     x_axis: str,
     x_axis_type: str,
-    x_axis_cols: Optional[List[str]],
+    x_axis_cols: list[str] | None,
     x_axis_transformer: Any,
     value: Any,
     line_color: str,
     line_color_type: str,
-    line_color_cols: Optional[List[str]],
+    line_color_cols: list[str] | None,
     line_value: Any,
     quick: bool,
-    weights: Optional[pd.Series],
-) -> Dict[str, Any]:
+    weights: pd.Series | None,
+) -> dict[str, Any]:
     """Make predictions for PDP."""
     X_temp = X.copy()
 
@@ -2087,7 +2089,7 @@ def _pdp_make_prediction(
 def _reconstruct_col_from_ohe_expanded(
     df: pd.DataFrame,
     feature_name: str,
-    mapping: Dict[str, Any],
+    mapping: dict[str, Any],
 ) -> pd.Series:
     """
     Reconstruct a categorical column from one-hot expanded columns.

@@ -1,6 +1,6 @@
 """Creates neural models for forecasting mortality rates."""
 
-from typing import Dict, Optional, Tuple, Union
+from __future__ import annotations
 
 import numpy as np
 import pandas as pd
@@ -56,8 +56,8 @@ class Neural(nn.Module):
     def __init__(
         self,
         task: str = "poisson",
-        embedding_cols: Optional[list] = None,
-        embedding_dims: Optional[Dict[str, int]] = None,
+        embedding_cols: list | None = None,
+        embedding_dims: dict[str, int] | None = None,
     ) -> None:
         """
         Initialize the model.
@@ -144,7 +144,7 @@ class Neural(nn.Module):
             self.output.bias.fill_(0.0)
 
     def forward(
-        self, X_torch_num: torch.Tensor, X_torch_embed_idx: [torch.Tensor]
+        self, X_torch_num: torch.Tensor, X_torch_embed_idx: list[torch.Tensor]
     ) -> torch.Tensor:
         """
         Forward function to be called from nn.Module.
@@ -209,13 +209,13 @@ class Neural(nn.Module):
         weights_test: pd.Series,
         epochs: int = 100,
         lr: float = 0.001,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
         dropout: float = 0.0,
         weight_decay: float = 0.0001,
         early_stopping: bool = True,
         warmup_epochs: int = 50,
         max_patience: int = 20,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> None:
         """
         Fit the model.
@@ -555,7 +555,7 @@ class Neural(nn.Module):
 
     def predict(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
     ) -> np.ndarray:
         """
         Predict the target.
@@ -826,7 +826,7 @@ class Neural(nn.Module):
 
     def _prepare_input_tensor(
         self, X: pd.DataFrame
-    ) -> Tuple[torch.Tensor, [torch.Tensor]]:
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """
         Prepare input tensor by combining numerical features and embeddings list.
 
@@ -900,7 +900,7 @@ class Shap:
         model: Neural,
         background_df: pd.DataFrame,
         n_samples: int = 100,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> None:
         """
         Initialize the SHAP wrapper.
@@ -980,7 +980,7 @@ class Shap:
         self,
         explain_df: pd.DataFrame,
         n_samples: int = 100,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> shap.Explanation:
         """
         Compute SHAP values for a dataset.

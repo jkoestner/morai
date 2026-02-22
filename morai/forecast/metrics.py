@@ -1,8 +1,10 @@
 """Metrics used in the models."""
 
+from __future__ import annotations
+
 import json as std_json
 from io import StringIO
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -70,12 +72,12 @@ def ae(y_true: pd.Series, y_pred: pd.Series) -> float:
 
 
 def ae_rank(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     features: list,
     actuals: str,
     expecteds: str,
     exposures: str,
-    bin_threshold: Optional[int] = None,
+    bin_threshold: int | None = None,
     n_bins: int = 10,
 ) -> pd.DataFrame:
     """
@@ -203,8 +205,8 @@ def calculate_metrics(
     y_pred: pd.Series,
     metrics: list,
     prefix: str = "",
-    model: Optional[Any] = None,
-    sample_weight: Optional[pd.Series] = None,
+    model: Any | None = None,
+    sample_weight: pd.Series | None = None,
     **kwargs,
 ) -> dict:
     """
@@ -295,7 +297,7 @@ class ModelResults:
     """
 
     def __init__(
-        self, filepath: Optional[str] = None, metrics: Optional[list] = None
+        self, filepath: str | None = None, metrics: list | None = None
     ) -> None:
         self.filepath = filepath
 
@@ -449,7 +451,7 @@ class ModelResults:
         self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
         self.importance = self.importance[self.importance["model_name"] != model_name]
 
-    def save_model(self, filepath: Optional[str] = None) -> None:
+    def save_model(self, filepath: str | None = None) -> None:
         """
         Save the model as a json file.
 
@@ -500,8 +502,8 @@ class ModelResults:
         y_true_test: pd.Series = None,
         y_pred_test: pd.Series = None,
         weights_test: pd.Series = None,
-        metrics: Optional[list] = None,
-        model: Optional[Any] = None,
+        metrics: list | None = None,
+        model: Any | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         """

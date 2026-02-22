@@ -1,7 +1,9 @@
 """Validating module."""
 
+from __future__ import annotations
+
 import os
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -12,7 +14,7 @@ from morai.utils import custom_logger, helpers
 logger = custom_logger.setup_logging(__name__)
 
 
-def get_checks(checks_path: Optional[str] = None) -> Dict[str, Any]:
+def get_checks(checks_path: str | None = None) -> dict[str, Any]:
     """
     Get the checks from the checks_path.
 
@@ -49,7 +51,7 @@ def get_checks(checks_path: Optional[str] = None) -> Dict[str, Any]:
 
 
 def run_checks(
-    lzdf: pl.LazyFrame, check_dict: Optional[Dict[str, Any]] = None
+    lzdf: pl.LazyFrame, check_dict: dict[str, Any] | None = None
 ) -> pd.DataFrame:
     """
     Run checks defined in check_dict on the dataframe df.
@@ -116,7 +118,7 @@ def run_checks(
 
 
 def view_single_check(
-    lzdf: pl.LazyFrame, check_dict: Dict[str, Any], check_name: str, limit: int = 10
+    lzdf: pl.LazyFrame, check_dict: dict[str, Any], check_name: str, limit: int = 10
 ) -> pd.DataFrame:
     """
     View the results of a specific check.
@@ -147,8 +149,8 @@ def view_single_check(
 
 
 def _replace_newlines_in_dict(
-    d: Dict[str, Union[str, Dict[str, Any]]], old: str, new: str
-) -> Dict[str, Union[str, Dict[str, Any]]]:
+    d: dict[str, str | dict[str, Any]], old: str, new: str
+) -> dict[str, str | dict[str, Any]]:
     """
     Recursively replace newline characters in all string values of a dictionary.
 

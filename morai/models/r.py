@@ -1,6 +1,8 @@
 """R models for forecasting mortality rates."""
 
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -54,8 +56,8 @@ class GAMR(BaseEstimator, RegressorMixin):
         weights: pd.Series = None,
         distribution: str = "quasibinomial",
         link: str = "logit",
-        spline_dict: Optional[dict] = None,
-        extra_text: Optional[str] = "",
+        spline_dict: dict | None = None,
+        extra_text: str | None = "",
         save: bool = True,
     ) -> Any:
         """
@@ -186,7 +188,7 @@ class GAMR(BaseEstimator, RegressorMixin):
         return None
 
     def get_formula(
-        self, X: pd.DataFrame, y: pd.Series, spline_dict: Optional[dict] = None
+        self, X: pd.DataFrame, y: pd.Series, spline_dict: dict | None = None
     ) -> str:
         """
         Get the formula for the GAM model.

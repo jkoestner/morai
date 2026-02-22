@@ -1,6 +1,6 @@
 """Graduation functions."""
 
-from typing import List, Optional, Union
+from __future__ import annotations
 
 import numpy as np
 import pandas as pd
@@ -14,17 +14,17 @@ logger = custom_logger.setup_logging(__name__)
 
 
 def whl(
-    rates: Union[pd.Series, np.ndarray],
+    rates: pd.Series | np.ndarray,
     horizontal_order: int,
     horizontal_lambda: float,
-    weights: Union[pd.Series, np.ndarray] = None,
+    weights: pd.Series | np.ndarray = None,
     horizontal_expo: float = 0,
     vertical_order: int = 0,
     vertical_lambda: float = 0,
     vertical_expo: float = 0,
     normalize_weights: bool = True,
-    standard_rates: Union[pd.Series, np.ndarray] = None,
-    standard_weights: Union[pd.Series, np.ndarray] = None,
+    standard_rates: pd.Series | np.ndarray = None,
+    standard_weights: pd.Series | np.ndarray = None,
     blending_factor: float = 0,
 ) -> np.ndarray:
     """
@@ -196,10 +196,10 @@ def whl(
             raise ValueError("Order must be greater than 0.")
 
         # initialize
-        data: List[float] = []
-        row_indices: List[int] = []
-        col_indices: List[int] = []
-        indices_list: List[np.ndarray] = []
+        data: list[float] = []
+        row_indices: list[int] = []
+        col_indices: list[int] = []
+        indices_list: list[np.ndarray] = []
 
         # 1 dimension
         if rates.ndim == 1:
@@ -285,7 +285,7 @@ def exponential(
     ages: np.ndarray,
     expo_low: int,
     expo_high: int,
-    calc_ages: Optional[np.ndarray] = None,
+    calc_ages: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     Graduate data by fitting a logistic model using weighted least squares.
