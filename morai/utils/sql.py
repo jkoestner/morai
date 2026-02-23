@@ -2,12 +2,16 @@
 
 import sqlite3
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def export_to_sql(
@@ -53,13 +57,13 @@ def export_to_sql(
         conn.close()
 
 
-def read_sql(db_filepath: str, query: str) -> pd.DataFrame:
+def read_sql(db_filepath: str | Path, query: str) -> pd.DataFrame:
     """
     Read a SQLite database.
 
     Parameters
     ----------
-    db_filepath : str
+    db_filepath : str | Path
         Database file path.
     query : str
         Query to execute.
@@ -85,13 +89,13 @@ def read_sql(db_filepath: str, query: str) -> pd.DataFrame:
     return df
 
 
-def get_tables(db_filepath: str) -> list:
+def get_tables(db_filepath: str | Path) -> list:
     """
     Get the tables from a SQLite database.
 
     Parameters
     ----------
-    db_filepath : str
+    db_filepath : str | Path
         Database file path.
 
     Returns

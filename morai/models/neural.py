@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -77,19 +79,24 @@ class Neural(nn.Module):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.task = task
-        self.feature_names = None
+        self.feature_names: list[str] | None = None
         if embedding_cols is None:
             embedding_cols = []
         self.embedding_cols = embedding_cols
-        self.num_cols = []
+        self.num_cols: list[str] = []
         if embedding_dims is None:
             embedding_dims = {}
         self.embedding_dims = embedding_dims
         self.embeddings = nn.ModuleDict()
-        self.wide_linear = None
-        self.fc1 = self.fc2 = self.fc3 = self.output = None
-        self.relu1 = self.relu2 = self.relu3 = None
-        self.label_encoders = {}
+        self.wide_linear: nn.Linear | None = None
+        self.fc1: nn.Linear | None = None
+        self.fc2: nn.Linear | None = None
+        self.fc3: nn.Linear | None = None
+        self.output: nn.Linear | None = None
+        self.relu1: nn.ReLU | None = None
+        self.relu2: nn.ReLU | None = None
+        self.relu3: nn.ReLU | None = None
+        self.label_encoders: dict[str, Any] = {}
         self._is_fitted = False
         self.to(self.device)
         logger.info(
@@ -164,6 +171,18 @@ class Neural(nn.Module):
             The output tensor
 
         """
+        # check if model is set up
+        if (
+            self.wide_linear is None
+            or self.fc1 is None
+            or self.fc2 is None
+            or self.fc3 is None
+            or self.output is None
+            or self.relu1 is None
+            or self.relu2 is None
+            or self.relu3 is None
+        ):
+            raise RuntimeError("Model not initialized.")
         if self.embedding_cols:
             embedding_vectors = [
                 self.embeddings[col](idx)
@@ -281,6 +300,8 @@ class Neural(nn.Module):
                 "model has already been set up and calling fit again"
                 "will update existing weights."
             )
+        if self.wide_linear is None or self.output is None:
+            raise RuntimeError("Model not initialized.")
         if self.task not in ("poisson", "binomial"):
             raise ValueError("task must be 'poisson' or 'binomial'")
         if not (X.index.equals(y.index) and X.index.equals(weights.index)):
@@ -365,7 +386,7 @@ class Neural(nn.Module):
             epoch_loss = 0.0
             num_batches = 0
 
-            if use_mini_batch:
+            if use_mini_batch and batch_size is not None:
                 # shuffle
                 perm = torch.randperm(y_torch_length, device=self.device)
 
@@ -591,9 +612,9 @@ class Neural(nn.Module):
             if X[col].dtype == "object" or isinstance(X[col].iloc[0], str):
                 valid_values = set(self.label_encoders[col].keys())
                 X[col] = X[col].apply(
-                    lambda x, valid_values=valid_values: x
-                    if x in valid_values
-                    else "__UNK__"
+                    lambda x, valid_values=valid_values: (
+                        x if x in valid_values else "__UNK__"
+                    )
                 )
             # map integers back to strings
             else:

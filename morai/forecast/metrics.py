@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json as std_json
 from io import StringIO
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -15,6 +15,9 @@ from morai.forecast import preprocessors
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def smape(
@@ -450,7 +453,7 @@ class ModelResults:
         self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
         self.importance = self.importance[self.importance["model_name"] != model_name]
 
-    def save_model(self, filepath: str | None = None) -> None:
+    def save_model(self, filepath: str | Path | None = None) -> None:
         """
         Save the model as a json file.
 
@@ -490,6 +493,9 @@ class ModelResults:
             "scorecard": scorecard_json,
             "importance": importance_json,
         }
+
+        if filepath is None:
+            raise ValueError("Filepath must be provided")
         with open(filepath, "w") as file:
             std_json.dump(model_results, file, indent=4)
 

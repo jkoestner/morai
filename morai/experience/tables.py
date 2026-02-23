@@ -1525,9 +1525,7 @@ def get_rates(rate_filename: str | None = None) -> list[str]:
     return rates
 
 
-def get_rate_dict(
-    rate: str, rate_filename: str | Path | None = None
-) -> dict[str, Any]:
+def get_rate_dict(rate: str, rate_filename: str | Path | None = None) -> dict[str, Any]:
     """
     Process the rate file.
 
@@ -1570,19 +1568,19 @@ def get_filepath(filename: str | Path) -> Path:
 
     Parameters
     ----------
-    filename : str
+    filename : str | Path
         The file location.
 
     Returns
     -------
-    filepath : file
+    filepath : Path
         The file.
 
     """
     filepaths = [
         helpers.FILES_PATH / "rates" / filename,
         helpers.ROOT_PATH / "tests" / "files" / "experience" / "tables" / filename,
-        filename,
+        Path(filename),
     ]
     for filepath in filepaths:
         if filepath.exists():
@@ -1715,9 +1713,7 @@ def _create_grid(
     return mort_grid
 
 
-def _formula_grade(
-    df: pd.DataFrame, multiple: float | str, formula: str
-) -> pd.Series:
+def _formula_grade(df: pd.DataFrame, multiple: float | str, formula: str) -> pd.Series:
     """
     Calculate individual grade from a formula string and multiple.
 

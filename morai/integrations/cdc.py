@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import requests
@@ -35,6 +36,9 @@ from morai.utils.custom_logger import suppress_logs
 from morai.utils.helpers import check_merge
 
 logger = custom_logger.setup_logging(__name__)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # global variables
 AGE_GROUP_ORDER = [
@@ -172,13 +176,13 @@ def get_cdc_data_txt(
     return cdc_df
 
 
-def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
+def get_cdc_data_sql(db_filepath: str | Path, table_name: str) -> pd.DataFrame:
     """
     Get CDC data from a SQLite database.
 
     Parameters
     ----------
-    db_filepath : str
+    db_filepath : str | Path
         Database file path.
     table_name : str
         Table name.
@@ -495,7 +499,7 @@ def get_top_deaths_by_age_group(
 
 def _xml_parse_dataid(xml_string: str) -> str:
     """
-    Parse the data-id from an XML string object.
+    Parse the data-id from an XML string object for CDC Wonder.
 
     Parameters
     ----------
@@ -509,7 +513,12 @@ def _xml_parse_dataid(xml_string: str) -> str:
 
     """
     root = ET.fromstring(xml_string)
-    value = root.find(".//parameter[name='B_1']/value").text
+    param = root.find(".//parameter[name='B_1']/value")
+    if param is None:
+        raise ValueError("Could not find parameter 'B_1' in XML.")
+    value = param.text
+    if value is None:
+        raise ValueError("Parameter 'B_1' has no text value.")
     data_id = value.split(".")[0]
 
     return data_id
@@ -533,11 +542,24 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
 
     """
     root = ET.fromstring(xml_response)
+
+    # initialize variables
+    column_values: list[str | None] = []
+    cells: list[str | None] = []
+    data_through: str | datetime | None = None
+
     # get the data-table
     data_table = root.find(".//data-table")
+    if data_table is None:
+        raise ValueError("Could not find 'data-table' in XML.")
 
     # check if show-totals is true
-    show_totals = root.find(".//parameter[@code='O_show_totals']/value").text
+    param = root.find(".//parameter[@code='O_show_totals']/value")
+    if param is None:
+        raise ValueError("Could not find parameter 'O_show_totals' in XML.")
+    show_totals = param.text
+    if show_totals is None:
+        raise ValueError("Parameter 'O_show_totals' has no text value.")
     if show_totals == "true":
         logger.warning(
             "show totals is true, this should be false with option `O_show_totals`"
@@ -550,25 +572,30 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
     cdc_mapping = cdc_mapping["value"].to_dict()
 
     # get the column names
-    byvariables = [
-        var.get("code").split(".")[1] for var in root.findall(".//byvariables/variable")
-    ]
-    measure_selections = [
-        measure.get("code").split(".")[1]
-        for measure in root.find(".//measure-selections").findall(".//measure")
-    ]
+    byvariables = []
+    for var in root.findall(".//byvariables/variable"):
+        code = var.get("code")
+        if code is not None:
+            byvariables.append(code.split(".")[1])
+
+    measure_parent = root.find(".//measure-selections")
+    if measure_parent is None:
+        raise ValueError("Could not find 'measure-selections' in XML.")
+    measure_selections = []
+    for measure in measure_parent.findall(".//measure"):
+        code = measure.get("code")
+        if code is not None:
+            measure_selections.append(code.split(".")[1])
     columns = byvariables + measure_selections
     columns = [cdc_mapping.get(key, key) for key in columns]
     num_columns = len(columns)
-
-    # create the data table
-    rows = []
 
     # initialize row-span counts and values for each column
     row_span_counts = [0] * num_columns
     column_values = [None] * num_columns
 
     # iterate over the rows
+    rows = []
     for row in data_table.findall("r"):
         row_cells = row.findall("c")
         cell_idx = 0
@@ -584,7 +611,7 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
                     if "r" in cell.attrib:
                         # row-spanning cell
                         value = cell.get("l") or cell.get("v") or cell.text
-                        row_span_counts[idx] = int(cell.get("r")) - 1
+                        row_span_counts[idx] = int(cell.attrib["r"]) - 1
                         column_values[idx] = value
                     else:
                         # regular cell
@@ -669,7 +696,7 @@ def _infer_dtypes(df: pd.DataFrame) -> pd.DataFrame:
             continue
         df[col] = pd.to_numeric(df[col].str.replace(",", ""), errors="coerce")
 
-    float_cols = [col for col in [] if col in df.columns]
+    float_cols = [col for col in ["placeholder"] if col in df.columns]
     for col in float_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 

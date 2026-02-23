@@ -32,7 +32,7 @@ chart_width = 1000
 def chart(
     df: pd.DataFrame | pl.LazyFrame,
     x_axis: str,
-    y_axis: str | None = None,
+    y_axis: str,
     color: str | None = None,
     type: str = "line",
     numerator: str | None = None,
@@ -69,6 +69,7 @@ def chart(
         of two columns.
     color : str, optional (default=None)
         The column name to use for the color.
+        Needed for "heatmap" and "contour".
     type : str, optional (default="line")
         The type of chart to create. Options are "line", "heatmap", "bar", or "area".
     numerator : str, optional (default=None)
@@ -159,7 +160,7 @@ def chart(
             logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
             df = preprocessors.lazy_bin_feature(df, x_axis, x_bins, inplace=True)
 
-        grouped_data = preprocessors.lazy_groupby(df, groupby_cols, agg_cols, agg)
+        grouped_data = preprocessors.lazy_groupby(df, groupby_cols, agg_cols, agg)  # type: ignore[arg-type]
         grouped_data = grouped_data.collect().to_pandas()
 
     else:  # pandas
@@ -1335,11 +1336,12 @@ def target(
         raise ValueError(
             f"Target '{target}' needs to be in DataFrame columns, 'ratio', or 'risk'"
         )
-    if target in ["ratio", "risk"] and (numerator is None or denominator is None):
-        raise ValueError("Numerator/Denominator is required for ratio or risk target.")
-    if target not in ["ratio", "risk"] and (
-        numerator is not None or denominator is not None
-    ):
+    if target in ["ratio", "risk"]:
+        if numerator is None or denominator is None:
+            raise ValueError(
+                "Numerator/Denominator is required for ratio or risk target."
+            )
+    elif numerator is not None or denominator is not None:
         logger.warning(
             "Parameters 'numerator' and 'denominator' are ignored if target is "
             "not 'ratio' or 'risk'."
@@ -1351,7 +1353,7 @@ def target(
             df = experience.normalize(
                 df,
                 features=normalize,
-                normalize_col=numerator,
+                normalize_col=numerator,  # type: ignore[arg-type]
                 weight_col=denominator,
                 ratio=True,
             )

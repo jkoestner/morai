@@ -56,6 +56,9 @@ dev = [
     "ruff>=0.15.2",
     "sphinx>=9.1.0",
     "sphinx_rtd_theme>=3.1.0",
+    "types-python-dateutil",             # only for mypy
+    "types-PyYAML",                      # only for mypy
+    "types-requests",                    # only for mypy
 ]
 
 neural = [
@@ -190,12 +193,15 @@ pylint.max-args = 10
 "tests/*.py" = ["ANN001","ANN201"]
 
 [tool.mypy]
-python_version = "3.11"
 follow_imports = "skip"          # ignore external imports
 ignore_missing_imports = true    # ignore missing type hints in external libraries
 
 exclude = [
-    "^morai/dashboard/",
+    # directories
+    "morai/dashboard/",
     "^notebooks/",
     "^tests/",
+    # files
+    "morai/models/r.py",
+    "morai/utils/cli.py",
 ]
