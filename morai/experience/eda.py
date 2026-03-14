@@ -219,7 +219,7 @@ def cramers_v(
     - https://en.wikipedia.org/wiki/Cram%C3%A9r%27s_V
 
     """
-    chi2, p, dof, ex = chi2_contingency(confusion_matrix, correction=correction)
+    chi2, _p, _dof, _ex = chi2_contingency(confusion_matrix, correction=correction)
     n = confusion_matrix.sum().sum()
     phi2 = chi2 / n
     r, k = confusion_matrix.shape

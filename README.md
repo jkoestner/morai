@@ -135,3 +135,8 @@ To see the test coverage the following command is run in the root directory.
 ```
 pytest --cov=morai --cov-report=html
 ```
+
+To test static typing
+```
+mypy morai
+```

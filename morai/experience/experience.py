@@ -13,6 +13,135 @@ from morai.utils import custom_logger
 logger = custom_logger.setup_logging(__name__)
 
 
+def calc_exposure(
+    df: pd.DataFrame,
+    bos_date: str,
+    eos_date: str,
+    study_decrement: str,
+    study_exposure_method: str = "annual",
+) -> pd.DataFrame:
+    """
+    Calculate the exposure for each row in the DataFrame.
+
+    The dataframe expects to have the following columns:
+    - termination_date: the date of termination of the policy
+    - termination_reason: the reason for termination of the policy
+    - issue_date: the date of issue of the policy
+
+    The following columns will be added to the DataFrame:
+    - anniversary_date: the date of the policy anniversary during the study period
+    - exposure_before: the exposure before the policy anniversary during the study period
+    - exposure_after: the exposure after the policy anniversary during the study period
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the data.
+    bos_date : str
+        Beginning of the study period.
+    eos_date : str
+        End of the study period.
+    exposure_method : str, optional default="annual"
+        Method for calculating exposure.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with additional column for exposure.
+
+    """
+    # validations
+    missing_cols = [
+        col
+        for col in ["termination_date", "termination_reason", "issue_date"]
+        if col not in df.columns
+    ]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
+        )
+    allowed_methods = ["annual", "distributed", "exact"]
+    if study_exposure_method not in allowed_methods:
+        raise ValueError(
+            f"Invalid exposure method: {study_exposure_method}. "
+            f"Allowed methods are: {', '.join(allowed_methods)}."
+        )
+
+    # convert dates to datetime
+    df["termination_date"] = pd.to_datetime(df["termination_date"], errors="coerce")
+    df["issue_date"] = pd.to_datetime(df["issue_date"], errors="coerce")
+    bos_date = pd.to_datetime(bos_date)
+    eos_date = pd.to_datetime(eos_date)
+
+    # calculate columns
+    df["bos_date"] = bos_date
+    df["eos_date"] = eos_date
+    df["anniversary_date"] = pd.to_datetime(
+        {
+            "year": bos_date.year,
+            "month": df["issue_date"].dt.month,
+            "day": df["issue_date"].dt.day,
+        }
+    )
+    df["next_anniversary_date"] = pd.to_datetime(
+        {
+            "year": bos_date.year + 1,
+            "month": df["issue_date"].dt.month,
+            "day": df["issue_date"].dt.day,
+        }
+    )
+
+    # calculate exposures
+    if study_exposure_method == "annual":
+        logger.info(
+            f"Calculating exposure using the annual method, "
+            f"with decrement under study: {study_decrement}."
+        )
+        df["exposure_before"] = np.where(
+            # not in the study period
+            (df["termination_date"] < bos_date),
+            0,
+            np.where(
+                # inforce
+                (df["termination_date"].isna()),
+                (df["anniversary_date"] - bos_date).dt.days,
+                np.where(
+                    # decrement not under study
+                    (df["termination_reason"] != study_decrement)
+                    & (df["termination_date"] <= df["anniversary_date"]),
+                    (df["termination_date"] - bos_date + pd.Timedelta(days=1)).dt.days,
+                    # else, decrement under study
+                    (df["anniversary_date"] - bos_date).dt.days,
+                ),
+            ),
+        )
+        df["exposure_after"] = np.where(
+            # not in the study period
+            (df["termination_date"] < df["anniversary_date"]),
+            0,
+            np.where(
+                # inforce
+                (df["termination_date"].isna()),
+                (eos_date - df["anniversary_date"] + pd.Timedelta(days=1)).dt.days,
+                np.where(
+                    # decrement not under study
+                    (df["termination_reason"] != study_decrement),
+                    (
+                        df["termination_date"]
+                        - df["anniversary_date"]
+                        + pd.Timedelta(days=1)
+                    ).dt.days,
+                    # else, decrement under study
+                    (df["next_anniversary_date"] - df["anniversary_date"]).dt.days,
+                ),
+            ),
+        )
+    else:
+        raise ValueError(f"Unsupported exposure method: {study_exposure_method}")
+
+    return df
+
+
 def normalize(
     df: pd.DataFrame,
     features: list[str],
@@ -618,7 +747,7 @@ def calc_qx_exp_ae(
     actual_col: str,
 ) -> pd.DataFrame:
     """
-    Add to the model data the qx, expected amount, and ae.
+    Add to the model data the qx, expected amount, and ae using the predictions.
 
     Parameters
     ----------
@@ -627,7 +756,7 @@ def calc_qx_exp_ae(
     predictions : pd.DataFrame
         DataFrame with the predictions.
     model_name : str
-        Name of the model.
+        Name of the model, which will be used as a suffix for the new columns.
     exposure_col : str
         Column name of the exposure.
     actual_col : str

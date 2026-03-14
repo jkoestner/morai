@@ -269,7 +269,7 @@ class MortTable:
                         )
 
                 # ult table
-                ult_table, _, min_age = self._process_soa_table(
+                ult_table, _select_period, _min_age = self._process_soa_table(
                     soa_xml=soa_xml, table_index=1, is_select=True
                 )
                 mort_table = self._merge_tables(

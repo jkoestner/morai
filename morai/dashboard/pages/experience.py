@@ -724,6 +724,7 @@ def toggle_tool(tool, all_selectors):
         "add_line",
         "normalize",
         "y_log",
+        "rank_columns",
     ]
     compare_selectors = [
         "x_axis",
