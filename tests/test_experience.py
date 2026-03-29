@@ -304,7 +304,7 @@ def test_normalize_ratio() -> None:
     )
 
 
-def test_exposure_annual() -> None:
+def test_exposure_annual_cal() -> None:
     """Tests the annual exposure calculation."""
     test_df = experience.calc_exposure(
         df=experience_df,
@@ -518,3 +518,24 @@ def test_exposure_annual() -> None:
         "Expected exposure to be up until min(termination, eos) for "
         "decrement not under study"
     )
+
+
+def test_exposure_annual_pol() -> None:
+    """Tests the annual exposure calculation - using policy years."""
+    test_df = experience.calc_exposure(
+        df=experience_df,
+        bos="1/1/2022",
+        eos="3/31/2024",
+        study_decrement="D",
+        exposure_method="annual",
+        calendar_exposure=False,
+    )
+
+    # not in study period
+    # issued after study period
+    assert (
+        test_df[(test_df["id"] == 2) & (test_df["bos_date"] == "1/1/2023")][
+            "exposure_after"
+        ].iloc[0]
+        == 136 / 366
+    ), "Expected exposure to be using 366 days for policy year as in leap year."

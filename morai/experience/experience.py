@@ -196,9 +196,9 @@ def calc_exposure(
 
     study_df = pd.concat(dfs, ignore_index=True)
     # remove temporary columns
-    # study_df = study_df.drop(
-    #     columns=["next_anniversary_date", "prior_anniversary_date"]
-    # )
+    study_df = study_df.drop(
+        columns=["next_anniversary_date", "prior_anniversary_date"]
+    )
 
     return study_df
 
@@ -211,6 +211,12 @@ def _annual_exposure(
 ) -> pd.DataFrame:
     """
     Calculate annual exposure.
+
+    The annual exposure method for a policy that decrements under the study puts
+    the exposure in the calendar year it terminated in.
+
+    Annual exposure method aligns with Balducci Hypothesis, which means death rates
+    decrease through the year.
 
     Expects the DataFrame to already have these columns:
     - termination_date, termination_reason
@@ -276,45 +282,225 @@ def _annual_exposure(
 
     # calculate exposures
     df["exposure_before"] = np.where(
+        # decrement under study - annual exposure
+        (df[termination_reason_col] == study_decrement)
+        & (df[termination_date_col] >= df["bos_date"]),
+        anniversary_minus_bos / total_days_before,
         # not in the study period or issued in the study period
-        (df[termination_date_col] < df["bos_date"])
-        | (df[issue_date_col].dt.year == df["eos_date"].dt.year),
-        0,
         np.where(
+            (df[termination_date_col] < df["bos_date"])
+            | (df[issue_date_col].dt.year == df["eos_date"].dt.year),
+            0,
             # inforce
-            (df[termination_date_col].isna())
-            | (df[termination_date_col] > df["anniversary_date"])
-            | (df[termination_date_col] > df["eos_date"]),
-            np.minimum(anniversary_minus_bos, eos_minus_bos) / total_days_before,
             np.where(
-                # decrement not under study
-                (df[termination_reason_col] != study_decrement)
-                & (df[termination_date_col] <= df["anniversary_date"]),
-                termination_minus_bos / total_days_before,
-                # else, decrement under study
-                anniversary_minus_bos / total_days_before,
+                (df[termination_date_col].isna())
+                | (df[termination_date_col] > df["anniversary_date"])
+                | (df[termination_date_col] > df["eos_date"]),
+                np.minimum(anniversary_minus_bos, eos_minus_bos) / total_days_before,
+                np.where(
+                    # decrement not under study
+                    (df[termination_reason_col] != study_decrement)
+                    & (df[termination_date_col] <= df["anniversary_date"]),
+                    termination_minus_bos / total_days_before,
+                    # else, error
+                    -1,
+                ),
             ),
         ),
     )
 
     df["exposure_after"] = np.where(
-        # not in the study period
-        (df[termination_date_col] < df["anniversary_date"])
-        | (df["eos_date"] < df["anniversary_date"]),
-        0,
+        # decrement under study - annual exposure
+        (df[termination_reason_col] == study_decrement)
+        & (df[termination_date_col] >= df["anniversary_date"])
+        & (df[termination_date_col] <= df["eos_date"]),
+        1,
+        # not in the study period or issued in the study period
         np.where(
+            (df[termination_date_col] < df["anniversary_date"])
+            | (df["eos_date"] < df["anniversary_date"]),
+            0,
             # inforce
-            (df[termination_date_col].isna())
-            | (df[termination_date_col] > df["eos_date"]),
-            eos_minus_anniversary / total_days_after,
             np.where(
-                # decrement not under study
-                df[termination_reason_col] != study_decrement,
-                termination_minus_anniversary / total_days_after,
-                # else, decrement under study
-                1,
+                (df[termination_date_col].isna())
+                | (df[termination_date_col] > df["eos_date"]),
+                eos_minus_anniversary / total_days_after,
+                np.where(
+                    # decrement not under study
+                    df[termination_reason_col] != study_decrement,
+                    termination_minus_anniversary / total_days_after,
+                    # else, error
+                    -1,
+                ),
             ),
         ),
+    )
+
+    return df
+
+
+def _distributed_exposure(
+    df: pd.DataFrame,
+    study_decrement: str,
+    calendar_exposure: bool = True,
+    mapping: dict[str, Any] | None = None,
+    exposure_method: str = "annual",
+) -> pd.DataFrame:
+    """
+    Calculate distributed exposure.
+
+    The distributed exposure method for a policy that decrements under the study splits
+    the exposure across the calendar year.
+
+    Distributed exposure method aligns with Uniform Distribution of Deaths,
+    which means death rates increase through the year.
+
+    Expects the DataFrame to already have these columns:
+    - termination_date, termination_reason
+    - anniversary_date, next_anniversary_date
+    - bos_date, eos_date
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the data.
+    study_decrement : str
+        Decrement under study, for example "death". This is used to determine the
+        exposure for policies that terminate during the study period.
+    calendar_exposure : bool, optional default=True
+        Whether to calculate exposure by calendar year or by policy year.
+        This has a very minor impact on the exposure calculation for policies,
+        however when there is a leap year, the exposure will either be 1 for a
+        calendar or 1 for a policy. It can't be 1 for both.
+    mapping : dict, optional default=None
+        Mapping for the column names if they differ from the expected column names.
+    exposure_method : str, optional default="annual"
+        Method for calculating exposure.
+        Options are "annual", "distributed", or "exact".
+
+    Returns
+    -------
+    df : pd.DataFrame
+        df with exposure_before and exposure_after columns added.
+
+    """
+    # default column names
+    termination_date_col = "termination_date"
+    termination_reason_col = "termination_reason"
+    issue_date_col = "issue_date"
+
+    # handle mapping
+    if mapping:
+        termination_date_col = mapping.get("termination_date", termination_date_col)
+        termination_reason_col = mapping.get(
+            "termination_reason", termination_reason_col
+        )
+        issue_date_col = mapping.get("issue_date", issue_date_col)
+
+    # series for calculations
+    anniversary_minus_bos = (df["anniversary_date"] - df["bos_date"]).dt.days
+    termination_minus_bos = (df[termination_date_col] - df["bos_date"]).dt.days + 1
+    eos_minus_anniversary = (df["eos_date"] - df["anniversary_date"]).dt.days + 1
+    eos_minus_bos = (df["eos_date"] - df["bos_date"]).dt.days + 1
+    termination_minus_anniversary = (
+        df[termination_date_col] - df["anniversary_date"]
+    ).dt.days + 1
+    calendar_before = (
+        366
+        if pd.Timestamp(year=df["eos_date"].iloc[0].year, month=12, day=31).is_leap_year
+        else 365
+    )
+    calendar_after = calendar_before
+    policy_before = (df["anniversary_date"] - df["prior_anniversary_date"]).dt.days
+    policy_after = (df["next_anniversary_date"] - df["anniversary_date"]).dt.days
+    if calendar_exposure:
+        total_days_before = calendar_before
+        total_days_after = calendar_after
+    else:
+        total_days_before = policy_before
+        total_days_after = policy_after
+
+    # calculate exposures
+    df["exposure_before"] = np.where(
+        # decrement under study - annual exposure
+        (df[termination_reason_col] == study_decrement)
+        & (df[termination_date_col] >= df["bos_date"])
+        & (exposure_method == "annual"),
+        anniversary_minus_bos / total_days_before,
+        np.where(
+            # decrement under study - distributed exposure
+            (df[termination_reason_col] == study_decrement)
+            & (df[termination_date_col] >= df["prior_anniversary_date"])
+            & (exposure_method == "distributed"),
+            anniversary_minus_bos / total_days_before,
+            # not in the study period or issued in the study period
+            np.where(
+                (df[termination_date_col] < df["bos_date"])
+                | (df[issue_date_col].dt.year == df["eos_date"].dt.year),
+                0,
+                # inforce
+                np.where(
+                    (df[termination_date_col].isna())
+                    | (df[termination_date_col] > df["anniversary_date"])
+                    | (df[termination_date_col] > df["eos_date"]),
+                    np.minimum(anniversary_minus_bos, eos_minus_bos)
+                    / total_days_before,
+                    np.where(
+                        # decrement not under study
+                        (df[termination_reason_col] != study_decrement)
+                        & (df[termination_date_col] <= df["anniversary_date"]),
+                        termination_minus_bos / total_days_before,
+                        # else, error
+                        -1,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    df["exposure_after"] = np.where(
+        # decrement under study - annual exposure
+        (df[termination_reason_col] == study_decrement)
+        & (df[termination_date_col] >= df["anniversary_date"])
+        & (df[termination_date_col] <= df["eos_date"])
+        & (exposure_method == "annual"),
+        1,
+        np.where(
+            # decrement under study - distributed exposure
+            (df[termination_reason_col] == study_decrement)
+            & (df[termination_date_col] >= df["anniversary_date"])
+            & (df[termination_date_col] <= df["eos_date"])
+            & (exposure_method == "distributed"),
+            eos_minus_anniversary / total_days_after,
+            # not in the study period or issued in the study period
+            np.where(
+                (df[termination_date_col] < df["anniversary_date"])
+                | (df["eos_date"] < df["anniversary_date"]),
+                0,
+                # inforce
+                np.where(
+                    (df[termination_date_col].isna())
+                    | (df[termination_date_col] > df["eos_date"]),
+                    eos_minus_anniversary / total_days_after,
+                    np.where(
+                        # decrement not under study
+                        df[termination_reason_col] != study_decrement,
+                        termination_minus_anniversary / total_days_after,
+                        # else, error
+                        -1,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    # check for errors
+    num_negative_exposure = (df["exposure_before"] < 0).sum() + (
+        df["exposure_after"] < 0
+    ).sum()
+    logger.error(
+        f"Number of rows with negative exposure: {num_negative_exposure}, "
+        f"this should not happen."
     )
 
     return df
