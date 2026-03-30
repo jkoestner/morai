@@ -98,7 +98,7 @@ def _build_cards_row():
                         ),
                     ],
                     id="loading-card",
-                    custom_spinner=dmc.Skeleton(visible=True),
+                    custom_spinner=dmc.Skeleton(visible=True, h="100%", w="100%"),
                 ),
                 width="auto",
             ),
@@ -337,7 +337,6 @@ def load_data(dataset, config):
         raise dash.exceptions.PreventUpdate
 
     logger.debug("generate selectors and filters")
-
     filter_dict = dh.generate_filters(df=dataset, prefix="chart", config=config)
     selectors_default = dh.generate_selectors(
         config=config,
@@ -367,7 +366,7 @@ def load_data(dataset, config):
             "rank_columns": True,
         },
     )
-
+    logger.debug("generating card")
     card = dh.generate_card(
         df=dataset,
         card_list=dh.get_card_list(config),
@@ -459,9 +458,16 @@ def update_tab_content(
 
     # filter the dataset - only filter what's needed
     # pre-collect to avoid multiple downstream collections
-    filtered_df = dh.filter_data(df=dataset, callback_context=states_info)
+    logger.debug("filtering dataset")
+    filtered_df = dh.filter_data(
+        df=dataset,
+        callback_context=states_info,
+        str_cols=filter_dict["str_cols"],
+        num_cols=filter_dict["num_cols"],
+    )
     if isinstance(filtered_df, pl.LazyFrame):
         filtered_df = filtered_df.collect().lazy()
+    logger.debug("filtered dataset")
 
     # create cards
     card_list = dh.get_card_list(config)
@@ -889,11 +895,11 @@ def toggle_collapse(n_clicks, is_open, children):
     [
         State({"type": "chart-str-filter", "index": ALL}, "id"),
         State({"type": "chart-num-filter", "index": ALL}, "id"),
-        State("store-dataset", "data"),
+        State("store-exp-filter", "data"),
     ],
 )
 def update_active_filters_card(
-    str_filters, num_filters, str_filter_ids, num_filter_ids, dataset
+    str_filters, num_filters, str_filter_ids, num_filter_ids, filter_dict
 ):
     """Update the card showing active filters."""
     active_filters = []
@@ -901,7 +907,7 @@ def update_active_filters_card(
     # Check string filters
     for filter_val, filter_id in zip(str_filters, str_filter_ids, strict=False):
         col = filter_id["index"]
-        unique_count = dataset.select(pl.col(col).unique()).collect().height
+        unique_count = len(filter_dict["cat_values"][col])
         if filter_val and len(filter_val) < unique_count:
             active_filters.append(col)
 
@@ -909,8 +915,8 @@ def update_active_filters_card(
     for filter_val, filter_id in zip(num_filters, num_filter_ids, strict=False):
         if filter_val:
             col = filter_id["index"]
-            min_val = dataset.select(pl.col(col).min()).collect().item()
-            max_val = dataset.select(pl.col(col).max()).collect().item()
+            min_val = filter_dict["min_max"][f"{col}_min"]
+            max_val = filter_dict["min_max"][f"{col}_max"]
             if (filter_val[0] > min_val) or (filter_val[1] < max_val):
                 active_filters.append(col)
 

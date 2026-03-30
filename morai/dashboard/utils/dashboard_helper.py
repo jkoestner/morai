@@ -7,9 +7,10 @@ Provides functions for common used functions in app.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import dash_bootstrap_components as dbc
+import duckdb
 import pandas as pd
 import polars as pl
 import yaml
@@ -19,6 +20,9 @@ from morai.experience import tables
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 num_to_str_count = 10
 
@@ -45,13 +49,13 @@ def convert_to_short_number(number: float) -> str:
     return f"{number:.1f}T"
 
 
-def read_table(filepath: str) -> pl.LazyFrame:
+def read_table(filepath: "Path") -> pl.LazyFrame:
     """
     Read table from file.
 
     Parameters
     ----------
-    filepath : str
+    filepath : Path
         Path to the file.
     **kwargs
         Additional arguments for reading the file.
@@ -81,11 +85,13 @@ def read_table(filepath: str) -> pl.LazyFrame:
 def filter_data(
     df: pd.DataFrame | pl.LazyFrame,
     callback_context: list[dict],
+    str_cols: list[str] | None = None,
+    num_cols: list[str] | None = None,
     num_to_str_count: int = num_to_str_count,
     mult_table: pd.DataFrame | None = None,
 ) -> pd.DataFrame | pl.LazyFrame:
     """
-    Filter data based on the number of unique values.
+    Filter data based on the callback context.
 
     Parameters
     ----------
@@ -93,6 +99,10 @@ def filter_data(
         Lazy dataframe to filter.
     callback_context : list
         List of callback context.
+    str_cols : list, optional
+        List of string/categorical columns from generate_filters.
+    num_cols : list, optional
+        List of numeric columns from generate_filters.
     num_to_str_count : int
         Number of unique values to convert to string.
     mult_table : pd.DataFrame
@@ -109,31 +119,31 @@ def filter_data(
         df = pl.from_pandas(df).lazy()
     schema = df.collect_schema()
 
-    str_cols = []
-    num_cols = []
-
-    # determine numeric and string columns based on schema and unique counts
-    # uses only one collection call to optimize performance
-    numeric_cols_from_schema = [
-        col_name
-        for col_name, dtype in schema.items()
-        if dtype in pl.datatypes.group.NUMERIC_DTYPES
-    ]
-    if numeric_cols_from_schema:
-        unique_counts = df.select(
-            [pl.col(c).n_unique().alias(c) for c in numeric_cols_from_schema]
-        ).collect()
-        for col_name in numeric_cols_from_schema:
-            if unique_counts[col_name][0] < num_to_str_count:
-                str_cols.append(col_name)
-            else:
-                num_cols.append(col_name)
-    non_numeric_cols = [
-        col_name
-        for col_name, dtype in schema.items()
-        if dtype not in pl.datatypes.group.NUMERIC_DTYPES
-    ]
-    str_cols.extend(non_numeric_cols)
+    # get string and numeric columns if not provided - collect
+    # ideally would avoid to collect
+    if str_cols is None or num_cols is None:
+        str_cols = []
+        num_cols = []
+        numeric_cols_from_schema = [
+            col_name
+            for col_name, dtype in schema.items()
+            if dtype in pl.datatypes.group.NUMERIC_DTYPES
+        ]
+        if numeric_cols_from_schema:
+            unique_counts = df.select(
+                [pl.col(c).n_unique().alias(c) for c in numeric_cols_from_schema]
+            ).collect()
+            for col_name in numeric_cols_from_schema:
+                if unique_counts[col_name][0] < num_to_str_count:
+                    str_cols.append(col_name)
+                else:
+                    num_cols.append(col_name)
+        non_numeric_cols = [
+            col_name
+            for col_name, dtype in schema.items()
+            if dtype not in pl.datatypes.group.NUMERIC_DTYPES
+        ]
+        str_cols.extend(non_numeric_cols)
 
     filtered_df = df
 
@@ -141,12 +151,9 @@ def filter_data(
     for col in str_cols:
         str_values = _inputs_parse_id(callback_context, col)
         if str_values:
-            # check col type and if numeric convert to int
             if schema[col] in pl.datatypes.group.NUMERIC_DTYPES:
                 str_values = [float(i) for i in str_values]
-                filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
-            else:
-                filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
+            filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
 
     # filter numeric columns
     for col in num_cols:
@@ -161,7 +168,6 @@ def filter_data(
         filtered_df = filtered_df.collect().to_pandas()
 
     # apply the multiplier table if exists
-    # this is for a rate_table
     if mult_table is not None and not mult_table.empty:
         mult_table_cols = mult_table["category"].tolist()
         selected_dict = {}
@@ -218,6 +224,7 @@ def generate_filters(
     num_cols = []
     prefix_str_filter = f"{prefix}-str-filter"
     prefix_num_filter = f"{prefix}-num-filter"
+    duckdb_source = None
 
     # get column types
     is_lazy = isinstance(df, pl.LazyFrame)
@@ -235,6 +242,21 @@ def generate_filters(
         config_columns = config_dataset["columns"]["features"]
         columns = [col for col in columns if col in config_columns]
 
+        # remove measure and rates from filters
+        config_measures = config_dataset["columns"]["measures"]
+        config_rates = config_dataset["columns"]["rates"]
+        measures_and_rates = [
+            col for col in columns if col in config_measures or col in config_rates
+        ]
+        exclude_cols = (
+            exclude_cols + measures_and_rates if exclude_cols else measures_and_rates
+        )
+
+        # filepath of the data source
+        duckdb_source = (
+            f"'{helpers.FILES_PATH / 'dataset' / config_dataset['filename']}'"
+        )
+
     if exclude_cols:
         columns = [col for col in columns if col not in exclude_cols]
 
@@ -243,34 +265,79 @@ def generate_filters(
 
     columns = sorted(columns)
 
-    # create filters
+    # get unique counts - collect
+    if duckdb_source:
+        counts_sql = ", ".join(
+            [f'COUNT(DISTINCT "{col}") as "{col}"' for col in columns]
+        )
+        unique_counts = (
+            duckdb.sql(f"SELECT {counts_sql} FROM {duckdb_source}")
+            .pl()
+            .row(0, named=True)
+        )
+    else:
+        unique_counts = (
+            df.select([pl.col(col).n_unique().alias(col) for col in columns])
+            .collect()
+            .row(0, named=True)
+        )
+
+    # classify columns as categorical or numeric
+    cat_cols = []
+    num_cols_list = []
     for col in columns:
         col_dtype = schema[col]
-
-        # check if categorical (non-numeric or low unique count)
-        is_categorical = False
         if col_dtype not in pl.datatypes.group.NUMERIC_DTYPES:
-            is_categorical = True
+            cat_cols.append(col)
+        elif unique_counts[col] < num_to_str_count:
+            cat_cols.append(col)
         else:
-            unique_count = df.select(pl.col(col).n_unique()).collect().item()
-            if unique_count < num_to_str_count:
-                is_categorical = True
+            num_cols_list.append(col)
 
-        # create options for categorical
-        if is_categorical:
-            unique_values = set(
-                df.select(pl.col(col))
-                .drop_nulls()
-                .unique()
-                .collect()[col]
-                .cast(pl.Utf8)
-                .to_list()
-            )
-            if col in cat_orders:
-                ordered = [v for v in cat_orders[col] if str(v) in unique_values]
-                options = [{"label": str(i), "value": i} for i in ordered]
-            else:
-                options = [{"label": str(i), "value": i} for i in sorted(unique_values)]
+    # get categorical values - collect
+    cat_values: dict[str, list] = {}
+    if cat_cols:
+        if duckdb_source:
+            for col in cat_cols:
+                unique_vals = set(
+                    duckdb.sql(
+                        f'SELECT DISTINCT CAST("{col}" AS VARCHAR) as "{col}" '
+                        f"FROM {duckdb_source}"
+                    )
+                    .pl()[col]
+                    .drop_nulls()
+                    .to_list()
+                )
+                if col in cat_orders:
+                    ordered = [v for v in cat_orders[col] if str(v) in unique_vals]
+                    cat_values[col] = ordered
+                else:
+                    cat_values[col] = sorted(unique_vals)
+        else:
+            cat_df = df.select(cat_cols).collect()
+            for col in cat_cols:
+                unique_vals = set(
+                    cat_df[col].drop_nulls().unique().cast(pl.Utf8).to_list()
+                )
+                if col in cat_orders:
+                    ordered = [v for v in cat_orders[col] if str(v) in unique_vals]
+                    cat_values[col] = ordered
+                else:
+                    cat_values[col] = sorted(unique_vals)
+
+    # get numeric min/max values - collect
+    min_max: dict[str, Any] = {}
+    if num_cols_list:
+        min_max_exprs = []
+        for col in num_cols_list:
+            min_max_exprs.append(pl.col(col).min().alias(f"{col}_min"))
+            min_max_exprs.append(pl.col(col).max().alias(f"{col}_max"))
+        min_max = df.select(min_max_exprs).collect().row(0, named=True)
+
+    # create filters
+    for col in columns:
+        if col in cat_cols:
+            options = [{"label": str(i), "value": i} for i in cat_values[col]]
 
             filter = html.Div(
                 [
@@ -299,10 +366,9 @@ def generate_filters(
             )
             str_cols.append(col)
 
-        # create slider for numeric columns
         else:
-            min_val = df.select(pl.col(col).min()).collect().item()
-            max_val = df.select(pl.col(col).max()).collect().item()
+            min_val = min_max[f"{col}_min"]
+            max_val = min_max[f"{col}_max"]
 
             filter = html.Div(
                 [
@@ -345,7 +411,6 @@ def generate_filters(
                 {"label": str(i), "value": i} for i in sorted(mult_table_options)
             ]
 
-            # set default value as the first option
             default_value = options[0]["value"] if len(options) > 0 else None
 
             filter = html.Div(
@@ -376,7 +441,13 @@ def generate_filters(
             str_cols.append(category)
             filters.append(filter)
 
-    filter_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
+    filter_dict = {
+        "filters": filters,
+        "str_cols": str_cols,
+        "num_cols": num_cols,
+        "cat_values": cat_values,
+        "min_max": min_max,
+    }
     return filter_dict
 
 
@@ -444,7 +515,7 @@ def get_active_filters(
 
 def toggle_collapse(
     callback_context: Any, is_open: list[bool], children: list[dict]
-) -> tuple[list[bool], list[list[dict]]]:
+) -> tuple[list[Any], list[Any]]:
     """
     Toggle collapse state of filter checklists.
 
