@@ -98,7 +98,7 @@ def run_checks(
         print(f"Running check {idx} of {total_checks}...", end="\r")
         try:
             check_logic = eval(check_logic_str)
-            result = lzdf.filter(check_logic).select(pl.len()).collect().item()
+            result = lzdf.filter(check_logic).collect().height
             check_output[check_name] = result
         except Exception as e:
             logger.error(f"Error evaluating check '{check_name}': {e}")
