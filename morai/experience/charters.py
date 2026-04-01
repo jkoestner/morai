@@ -207,10 +207,16 @@ def chart(
         )
         if add_line:
             # using scatter to add to legend
-            if isinstance(grouped_data[x_axis].dtype, pd.CategoricalDtype):
-                grouped_data[x_axis] = grouped_data[x_axis].cat.as_ordered()
+            if pd.api.types.is_numeric_dtype(grouped_data[x_axis].dtype):
+                add_line_x = [
+                    grouped_data[x_axis].min(),
+                    grouped_data[x_axis].max(),
+                ]
+            else:
+                add_line_x = sorted(grouped_data[x_axis].unique())
+                add_line_x = [add_line_x[0], add_line_x[-1]]
             fig.add_scatter(
-                x=[grouped_data[x_axis].min(), grouped_data[x_axis].max()],
+                x=add_line_x,
                 y=[1, 1],
                 mode="lines",
                 line={"dash": "dot", "color": "grey"},

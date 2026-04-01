@@ -728,7 +728,7 @@ def generate_selectors(
                     [
                         html.Label("X-Axis/Relative Feature"),
                         html.Span(
-                            "ℹ",  # Info icon
+                            "ℹ",  # Info icon  # noqa: RUF001
                             id="relative-info",
                             style={
                                 "marginLeft": "8px",
@@ -904,7 +904,7 @@ def generate_selectors(
                     [
                         html.Label("Normalize"),
                         html.Span(
-                            "ℹ",  # Info icon
+                            "ℹ",  # Info icon  # noqa: RUF001
                             id="normalize-info",
                             style={
                                 "marginLeft": "8px",
@@ -1051,7 +1051,7 @@ def generate_selectors(
                     [
                         html.Label("Relative To"),
                         html.Span(
-                            "ℹ",  # Info icon
+                            "ℹ",  # Info icon  # noqa: RUF001
                             id="relative-info",
                             style={
                                 "marginLeft": "8px",
@@ -1348,9 +1348,9 @@ def register_export_callback(app) -> None:  # noqa: ANN001
     The tab and page values must match between the button and table for proper pairing.
 
     """
-    import dash
-    import pandas as pd
-    from dash_extensions.enrich import (
+    import dash  # noqa: PLC0415
+    import pandas as pd  # noqa: PLC0415
+    from dash_extensions.enrich import (  # noqa: PLC0415
         ALL,
         Input,
         Output,

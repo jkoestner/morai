@@ -748,6 +748,7 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         raise dash.exceptions.PreventUpdate
 
     # initialize
+    logger.debug("Loading CDC COD charts")
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
     if not db_filepath.exists():
         logger.error("Database does not exist.")
@@ -866,6 +867,7 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
         ],
         className="shadow-sm mb-3",
     )
+    logger.debug("Completed CDC COD charts")
 
     return (
         active_filters_card,

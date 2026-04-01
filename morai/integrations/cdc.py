@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -197,17 +198,11 @@ def get_cdc_data_sql(db_filepath: str | Path, table_name: str) -> pd.DataFrame:
     query = f"""
             SELECT *
             FROM {table_name}
-            ORDER BY added_at
-            DESC LIMIT 1
-            """
-    last_date_row = sql.read_sql(db_filepath, query)
-    last_date = last_date_row["added_at"].iloc[0]
-
-    query = f"""
-            SELECT *
-            FROM {table_name}
             """
     cdc_df = sql.read_sql(db_filepath, query)
+
+    # get last date
+    last_date = cdc_df["added_at"].max()
 
     # correctly order the age groups
     if "age_groups" in cdc_df.columns:
@@ -224,17 +219,32 @@ def get_cdc_data_sql(db_filepath: str | Path, table_name: str) -> pd.DataFrame:
 
 
 def get_last_updated(table_name: str | None = None) -> str:
-    """Get the last updated date of a table."""
+    """
+    Get the last updated date of a table.
+
+    Parameters
+    ----------
+    table_name : str, optional
+        The name of the table to check. If None, defaults to "mcd18_cod".
+
+    Returns
+    -------
+    last_updated : str
+        The last updated date of the table.
+
+    """
     if table_name is None:
         table_name = "mcd18_cod"
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
     tables = sql.get_tables(db_filepath=db_filepath)
     if table_name not in tables:
         return ""
-    df = get_cdc_data_sql(db_filepath=db_filepath, table_name=table_name)
-    return df["added_at"].max()
+    query = f"SELECT MAX(added_at) as last_updated FROM {table_name}"
+    result = sql.read_sql(db_filepath, query)
+    return result["last_updated"].iloc[0] or ""
 
 
+@lru_cache(maxsize=10)
 def get_cdc_reference(sheet_name: str) -> pd.DataFrame:
     """
     Get CDC reference data.
@@ -309,7 +319,7 @@ def map_reference(
     # merge the col into the df
     df = check_merge(pd.merge)(
         left=df,
-        right=mapping[[reference_on, col]],
+        right=mapping,
         how="left",
         left_on=df_on,
         right_on=reference_on,
