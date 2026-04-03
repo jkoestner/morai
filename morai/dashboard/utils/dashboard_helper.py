@@ -298,6 +298,18 @@ def generate_filters(
         else:
             num_cols_list.append(col)
 
+    # apply filter type overrides from config
+    filter_type_overrides = config.get("filter_type_overrides", {}) if config else {}
+    for col, filter_type in filter_type_overrides.items():
+        if col not in columns:
+            continue
+        if filter_type == "checklist" and col in num_cols_list:
+            num_cols_list.remove(col)
+            cat_cols.append(col)
+        elif filter_type == "slider" and col in cat_cols:
+            cat_cols.remove(col)
+            num_cols_list.append(col)
+
     # get categorical values - collect
     cat_values: dict[str, list] = {}
     if cat_cols:

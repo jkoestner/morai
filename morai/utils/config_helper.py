@@ -157,5 +157,5 @@ HMD_EMAIL = _integrations_config.get("hmd_email", None)
 HMD_PASSWORD = _integrations_config.get("hmd_password", None)
 
 # dashboard
-_dashboard_config = get_config_options(dashboard_config_file, "general")
+_dashboard_config = get_config_options(dashboard_config_file, "tokens")
 ANALYTICS_TOKEN = _dashboard_config.get("analytics_token", None)
