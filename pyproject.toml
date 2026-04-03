@@ -41,6 +41,7 @@ dependencies = [
     "dash-extensions>=2.0.4",           # only for dash
     "dash-mantine-components>=2.6.0",   # only for dash
     "gunicorn>=25.1.0",                 # only for dash
+    "psutil>=6.0.0",                    # only for analytics page
 
     # models
     "catboost>=1.2.10",                 # only for catboost

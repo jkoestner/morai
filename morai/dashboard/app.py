@@ -72,6 +72,7 @@ app.index_string = """
 page_links = [
     dbc.NavItem(dbc.NavLink(page["name"], href=page["relative_path"]))
     for page in dash.page_registry.values()
+    if not page.get("hidden", False)
 ]
 
 navbar = dbc.Navbar(
@@ -156,7 +157,7 @@ dh.register_export_callback(app)
     [dash.Input("navbar-toggler", "n_clicks")],
     [dash.State("navbar-collapse", "is_open")],
 )
-def toggle_navbar_collapse(n, is_open):
+def toggle_navbar_collapse(n: int, is_open: bool) -> bool:
     """Toggle the navbar collapse on mobile."""
     if n:
         return not is_open

@@ -1,7 +1,7 @@
 """Load config."""
 
-import configparser
 import os
+from typing import Any
 
 import yaml
 
@@ -12,7 +12,7 @@ logger = custom_logger.setup_logging(__name__)
 
 def get_config(path: str) -> dict:
     """
-    Get the config path.
+    Get the config contents in a dictionary.
 
     Parameters
     ----------
@@ -21,12 +21,10 @@ def get_config(path: str) -> dict:
 
     Returns
     -------
-    config : configparser.ConfigParser
+    config : dict
         the config parser
 
     """
-    config = configparser.ConfigParser()
-
     # test if path exists and try default directories
     # (FILES_PATH)
     paths_to_try = [
@@ -89,15 +87,15 @@ def get_config_options(path: str, *sections: str) -> dict:
     return options
 
 
-def _config_reference(config, value, *sections):
+def _config_reference(config: dict, value: Any, *sections: str) -> Any:  # noqa: PLR0911
     """
     Get the value of references in config.
 
     Parameters
     ----------
-    config : ConfigParser
-        the config parser
-    value : any
+    config : dict
+        the config dictionary
+    value : Any
         The value in the section
     *sections : str
         the section of the config file to load
@@ -151,8 +149,13 @@ def _config_reference(config, value, *sections):
 
 
 config_file = os.path.join(helpers.FILES_PATH, "config.yaml")
+dashboard_config_file = os.path.join(helpers.FILES_PATH, "dashboard_config.yaml")
 
 # integrations
 _integrations_config = get_config_options(config_file, "config", "integrations")
 HMD_EMAIL = _integrations_config.get("hmd_email", None)
 HMD_PASSWORD = _integrations_config.get("hmd_password", None)
+
+# dashboard
+_dashboard_config = get_config_options(dashboard_config_file, "general")
+ANALYTICS_TOKEN = _dashboard_config.get("analytics_token", None)
