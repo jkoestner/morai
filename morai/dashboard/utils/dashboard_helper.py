@@ -1184,6 +1184,7 @@ def load_config(dash_config_path: str = helpers.DASH_CONFIG_PATH) -> dict[str, A
     """
     with open(dash_config_path, "r") as file:
         config = yaml.safe_load(file)
+    config.pop("tokens", None)
     return config
 
 
