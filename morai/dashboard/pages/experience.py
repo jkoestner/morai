@@ -1,4 +1,8 @@
-"""Experience dashboard."""
+"""
+Experience dashboard.
+
+Uses Serverside for storing the filter_dict, as it contains dash components.
+"""
 
 import ast
 
@@ -44,7 +48,9 @@ def layout():
     """Experience layout."""
     return html.Div(
         [
-            dcc.Store(id="store-exp-filter", storage_type="session"),
+            dcc.Store(id="store-initial-filters", storage_type="session"),
+            dcc.Store(id="store-filter-values", storage_type="session"),
+            dcc.Store(id="store-bookmarks", storage_type="local"),
             _build_header(),
             _build_cards_row(),
             _build_main_content(),
@@ -209,7 +215,94 @@ def _build_main_content():
                                     html.I(className="fas fa-filter me-2"),
                                     "Data Filters",
                                 ],
-                                className="mb-4",
+                                className="mb-3",
+                            ),
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H6(
+                                            [
+                                                html.I(
+                                                    className="fas fa-bookmark me-2"
+                                                ),
+                                                "Bookmarks",
+                                            ],
+                                            className="mb-0",
+                                        )
+                                    ),
+                                    dbc.CardBody(
+                                        [
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(
+                                                        dbc.Input(
+                                                            id="bookmark-name-input",
+                                                            placeholder="Bookmark name...",
+                                                            size="sm",
+                                                        ),
+                                                        width=9,
+                                                    ),
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            "Save",
+                                                            id="save-bookmark-button",
+                                                            color="success",
+                                                            size="sm",
+                                                            n_clicks=0,
+                                                            className="w-100",
+                                                        ),
+                                                        width=3,
+                                                    ),
+                                                ],
+                                                className="mb-2 g-1",
+                                            ),
+                                            dcc.Dropdown(
+                                                id="bookmark-dropdown",
+                                                placeholder="Select bookmark...",
+                                                className="mb-2",
+                                            ),
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            [
+                                                                html.I(
+                                                                    className="fas fa-upload me-1"
+                                                                ),
+                                                                "Load",
+                                                            ],
+                                                            id="load-bookmark-button",
+                                                            color="primary",
+                                                            size="sm",
+                                                            n_clicks=0,
+                                                            className="w-100",
+                                                        ),
+                                                        width=6,
+                                                    ),
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            [
+                                                                html.I(
+                                                                    className="fas fa-trash me-1"
+                                                                ),
+                                                                "Delete",
+                                                            ],
+                                                            id="delete-bookmark-button",
+                                                            color="outline-danger",
+                                                            size="sm",
+                                                            n_clicks=0,
+                                                            className="w-100",
+                                                        ),
+                                                        width=6,
+                                                    ),
+                                                ],
+                                                className="g-1",
+                                            ),
+                                        ],
+                                        className="p-2",
+                                    ),
+                                ],
+                                className="mb-3 shadow-sm",
                             ),
                             html.Button(
                                 [
@@ -323,21 +416,26 @@ def _build_selectors_column():
 
 @callback(
     [
-        Output("store-exp-filter", "data"),
+        Output("store-initial-filters", "data"),
         Output("chart-selectors", "children"),
         Output("chart-filters", "children"),
         Output("card", "children"),
     ],
     [Input("store-dataset", "data")],
-    [State("store-config", "data")],
+    [State("store-config", "data"), State("store-filter-values", "data")],
 )
-def load_data(dataset, config):
+def load_data(dataset, config, saved_filter_values):
     """Load data and create selectors."""
     if dataset is None:
         raise dash.exceptions.PreventUpdate
 
     logger.debug("generate selectors and filters")
-    filter_dict = dh.generate_filters(df=dataset, prefix="chart", config=config)
+    filter_dict = dh.generate_filters(
+        df=dataset,
+        prefix="chart",
+        config=config,
+        initial_values=saved_filter_values,
+    )
     selectors_default = dh.generate_selectors(
         config=config,
         prefix="chart",
@@ -402,7 +500,7 @@ def load_data(dataset, config):
         State({"type": "chart-num-filter", "index": ALL}, "value"),
         # stores
         State("store-dataset", "data"),
-        State("store-exp-filter", "data"),
+        State("store-initial-filters", "data"),
         State("store-config", "data"),
     ],
     prevent_initial_call=True,
@@ -808,7 +906,7 @@ def update_tool_description(tool):
         Output({"type": "chart-num-filter", "index": ALL}, "value"),
     ],
     [Input("reset-filters-button", "n_clicks")],
-    [State("store-dataset", "data"), State("store-exp-filter", "data")],
+    [State("store-dataset", "data"), State("store-initial-filters", "data")],
     prevent_initial_call=True,
 )
 def reset_filters(n_clicks, dataset, filter_dict):
@@ -895,7 +993,7 @@ def toggle_collapse(n_clicks, is_open, children):
     [
         State({"type": "chart-str-filter", "index": ALL}, "id"),
         State({"type": "chart-num-filter", "index": ALL}, "id"),
-        State("store-exp-filter", "data"),
+        State("store-initial-filters", "data"),
     ],
 )
 def update_active_filters_card(
@@ -936,3 +1034,100 @@ def update_active_filters_card(
         ]
 
     return content
+
+
+@callback(
+    Output("store-filter-values", "data"),
+    Input({"type": "chart-str-filter", "index": ALL}, "value"),
+    Input({"type": "chart-num-filter", "index": ALL}, "value"),
+    State({"type": "chart-str-filter", "index": ALL}, "id"),
+    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def save_filter_state(str_vals, num_vals, str_ids, num_ids):
+    """Persist current filter values to session store for cross-navigation restore."""
+    str_filters = {
+        id_["index"]: val for id_, val in zip(str_ids, str_vals, strict=False)
+    }
+    num_filters = {
+        id_["index"]: val for id_, val in zip(num_ids, num_vals, strict=False)
+    }
+    return {"str_filters": str_filters, "num_filters": num_filters}
+
+
+@callback(
+    Output("bookmark-dropdown", "options"),
+    Input("store-bookmarks", "data"),
+)
+def update_bookmark_dropdown(bookmarks):
+    """Populate the bookmark dropdown from the bookmarks store."""
+    if not bookmarks:
+        return []
+    return [{"label": name, "value": name} for name in sorted(bookmarks.keys())]
+
+
+@callback(
+    Output("store-bookmarks", "data"),
+    Output("bookmark-name-input", "value"),
+    Input("save-bookmark-button", "n_clicks"),
+    State("bookmark-name-input", "value"),
+    State({"type": "chart-str-filter", "index": ALL}, "value"),
+    State({"type": "chart-num-filter", "index": ALL}, "value"),
+    State({"type": "chart-str-filter", "index": ALL}, "id"),
+    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    State("store-bookmarks", "data"),
+    prevent_initial_call=True,
+)
+def save_bookmark(n_clicks, name, str_vals, num_vals, str_ids, num_ids, bookmarks):
+    """Save current filter state as a named bookmark."""
+    if not name or not name.strip():
+        raise dash.exceptions.PreventUpdate
+    bookmarks = dict(bookmarks) if bookmarks else {}
+    str_filters = {
+        id_["index"]: val for id_, val in zip(str_ids, str_vals, strict=False)
+    }
+    num_filters = {
+        id_["index"]: val for id_, val in zip(num_ids, num_vals, strict=False)
+    }
+    bookmarks[name.strip()] = {"str_filters": str_filters, "num_filters": num_filters}
+    return bookmarks, ""
+
+
+@callback(
+    Output({"type": "chart-str-filter", "index": ALL}, "value", allow_duplicate=True),
+    Output({"type": "chart-num-filter", "index": ALL}, "value", allow_duplicate=True),
+    Input("load-bookmark-button", "n_clicks"),
+    State("bookmark-dropdown", "value"),
+    State("store-bookmarks", "data"),
+    State({"type": "chart-str-filter", "index": ALL}, "id"),
+    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    State({"type": "chart-num-filter", "index": ALL}, "value"),
+    prevent_initial_call=True,
+)
+def load_bookmark(n_clicks, selected, bookmarks, str_ids, num_ids, current_num_vals):
+    """Apply a saved bookmark's filter values to the current filters."""
+    if not selected or not bookmarks or selected not in bookmarks:
+        raise dash.exceptions.PreventUpdate
+    bookmark = bookmarks[selected]
+    str_vals = [bookmark["str_filters"].get(id_["index"], []) for id_ in str_ids]
+    num_vals = [
+        bookmark["num_filters"].get(id_["index"], current_num_vals[i])
+        for i, id_ in enumerate(num_ids)
+    ]
+    return str_vals, num_vals
+
+
+@callback(
+    Output("store-bookmarks", "data", allow_duplicate=True),
+    Input("delete-bookmark-button", "n_clicks"),
+    State("bookmark-dropdown", "value"),
+    State("store-bookmarks", "data"),
+    prevent_initial_call=True,
+)
+def delete_bookmark(n_clicks, selected, bookmarks):
+    """Delete the selected bookmark from the store."""
+    if not selected or not bookmarks or selected not in bookmarks:
+        raise dash.exceptions.PreventUpdate
+    bookmarks = dict(bookmarks)
+    del bookmarks[selected]
+    return bookmarks

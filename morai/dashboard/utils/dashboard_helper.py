@@ -190,6 +190,7 @@ def generate_filters(
     config: dict[str, Any] | None = None,
     exclude_cols: list[str] | None = None,
     mult_table: pd.DataFrame | pl.LazyFrame | None = None,
+    initial_values: dict | None = None,
 ) -> dict:
     """
     Generate a dictionary of dashboard options from dataframe.
@@ -208,6 +209,9 @@ def generate_filters(
         List of columns to exclude from the dropdown options.
     mult_table : pd.DataFrame or pl.LazyFrame, optional
         Options to include from the mult_table.
+    initial_values : dict, optional
+        Initial values for the filters, with keys "str_filters" and "num_filters"
+        mapping to dicts of column name to selected values.
 
     Returns
     -------
@@ -354,7 +358,11 @@ def generate_filters(
                         dcc.Checklist(
                             id={"type": prefix_str_filter, "index": col},
                             options=options,
-                            value=[],
+                            value=(
+                                initial_values.get("str_filters", {}).get(col, [])
+                                if initial_values
+                                else []
+                            ),
                             className="ms-2",
                             labelStyle={"display": "block"},
                         ),
@@ -388,7 +396,13 @@ def generate_filters(
                             max=max_val,
                             step=1,
                             marks=None,
-                            value=[min_val, max_val],
+                            value=(
+                                initial_values.get("num_filters", {}).get(
+                                    col, [min_val, max_val]
+                                )
+                                if initial_values
+                                else [min_val, max_val]
+                            ),
                             tooltip={"always_visible": True, "placement": "bottom"},
                         ),
                         id={"type": f"{prefix}-collapse", "index": col},
