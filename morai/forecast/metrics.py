@@ -556,7 +556,7 @@ class ModelResults:
 
         # apply weights to predictions
         if weights_train is not None:
-            if weights_test is None:
+            if weights_test is None and y_true_test is not None:
                 raise ValueError("weights_test must be provided if weights_train is")
             y_true_train = y_true_train * weights_train
             y_pred_train = y_pred_train * weights_train
