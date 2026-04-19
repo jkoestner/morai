@@ -308,13 +308,16 @@ def test_normalize_ratio() -> None:
 
 def test_exposure_policy() -> None:
     """Tests using policy exposure instead of calendar exposure."""
-    test_df = experience.calc_exposure(
+    test_df = experience.create_study(
         df=experience_df,
         bos="1/1/2023",
         eos="12/31/2023",
+        study_frequency="annually",
         study_decrement="D",
         exposure_method="annual",
         calendar_exposure=False,
+        get_exposures=True,
+        get_actuals=False,
     )
 
     # 2024 is a leap year and uses 366 days and the policy duration crosses.
@@ -332,14 +335,18 @@ def test_exposure_policy() -> None:
 
 def test_exposure_annual_calendar() -> None:
     """Tests the annual exposure calculation."""
-    test_df = experience.calc_exposure(
+    test_df = experience.create_study(
         df=experience_df,
         bos="1/1/2022",
         eos="3/31/2024",
+        study_frequency="annually",
         study_decrement="D",
         exposure_method="annual",
         calendar_exposure=True,
+        get_exposures=True,
+        get_actuals=False,
     )
+    test_df = test_df[test_df["exposure"] != 0]
 
     # not in study period
     # issued after study period
@@ -617,31 +624,54 @@ def test_exposure_annual_calendar() -> None:
     )
 
     # frequency exposure check
-    frequency_df = experience.calc_exposure(
+    frequency_df = experience.create_study(
         df=experience_df,
         bos="1/1/2022",
         eos="12/31/2022",
+        study_frequency="monthly",
         study_decrement="D",
         exposure_method="annual",
-        study_frequency="semi-annually",
         calendar_exposure=True,
+        get_exposures=True,
+        get_actuals=False,
     )
 
     assert frequency_df[frequency_df["exposure"] < 0].empty, (
         "There should be no negative exposures"
     )
 
+    assert (
+        frequency_df[
+            (frequency_df["id"] == 9)
+            & (frequency_df["bos_date"] == "4/1/2022")
+            & (frequency_df["policy_dur"] == 9)
+        ]["exposure"].iloc[0]
+        == 8 / 365
+    ), "Expected exposure to be from bos to anniversary"
+    assert (
+        frequency_df[
+            (frequency_df["id"] == 9)
+            & (frequency_df["bos_date"] == "12/1/2022")
+            & (frequency_df["policy_dur"] == 10)
+        ]["exposure"].iloc[0]
+        == 31 / 365
+    ), "Expected exposure to be from bos to eos"
+
 
 def test_exposure_distributed_calendar() -> None:
     """Tests the distributed exposure calculation."""
-    test_df = experience.calc_exposure(
+    test_df = experience.create_study(
         df=experience_df,
         bos="1/1/2022",
         eos="3/31/2024",
+        study_frequency="annually",
         study_decrement="D",
         exposure_method="distributed",
         calendar_exposure=True,
+        get_exposures=True,
+        get_actuals=False,
     )
+    test_df = test_df[test_df["exposure"] != 0]
 
     # not in study period
     # issued after study period
@@ -933,31 +963,55 @@ def test_exposure_distributed_calendar() -> None:
     )
 
     # frequency exposure check
-    frequency_df = experience.calc_exposure(
+    frequency_df = experience.create_study(
         df=experience_df,
-        bos="1/1/2022",
-        eos="12/31/2022",
+        bos="1/1/2023",
+        eos="12/31/2023",
+        study_frequency="monthly",
         study_decrement="D",
         exposure_method="distributed",
-        study_frequency="semi-annually",
         calendar_exposure=True,
+        get_exposures=True,
+        get_actuals=False,
     )
 
     assert frequency_df[frequency_df["exposure"] < 0].empty, (
         "There should be no negative exposures"
     )
 
+    assert (
+        frequency_df[
+            (frequency_df["id"] == 12)
+            & (frequency_df["bos_date"] == "3/1/2023")
+            & (frequency_df["policy_dur"] == 11)
+        ]["exposure"].iloc[0]
+        == 25 / 365
+    ), "Expected exposure to be from bos to anniversary"
+
+    assert (
+        frequency_df[
+            (frequency_df["id"] == 12)
+            & (frequency_df["bos_date"] == "4/1/2023")
+            & (frequency_df["policy_dur"] == 11)
+        ]["exposure"].iloc[0]
+        == 30 / 365
+    ), "Expected exposure to be from bos to anniversary"
+
 
 def test_exposure_exact_calendar() -> None:
     """Tests the exact exposure calculation."""
-    test_df = experience.calc_exposure(
+    test_df = experience.create_study(
         df=experience_df,
         bos="1/1/2022",
         eos="3/31/2024",
+        study_frequency="annually",
         study_decrement="D",
         exposure_method="exact",
         calendar_exposure=True,
+        get_exposures=True,
+        get_actuals=False,
     )
+    test_df = test_df[test_df["exposure"] != 0]
 
     # not in study period
     # issued after study period
@@ -1231,16 +1285,27 @@ def test_exposure_exact_calendar() -> None:
     )
 
     # frequency exposure check
-    frequency_df = experience.calc_exposure(
+    frequency_df = experience.create_study(
         df=experience_df,
-        bos="1/1/2022",
-        eos="12/31/2022",
+        bos="1/1/2023",
+        eos="12/31/2023",
+        study_frequency="monthly",
         study_decrement="D",
         exposure_method="exact",
-        study_frequency="semi-annually",
         calendar_exposure=True,
+        get_exposures=True,
+        get_actuals=False,
     )
 
     assert frequency_df[frequency_df["exposure"] < 0].empty, (
         "There should be no negative exposures"
     )
+
+    assert (
+        frequency_df[
+            (frequency_df["id"] == 12)
+            & (frequency_df["bos_date"] == "3/1/2023")
+            & (frequency_df["policy_dur"] == 11)
+        ]["exposure"].iloc[0]
+        == 1 / 365
+    ), "Expected exposure to be from bos to anniversary"
