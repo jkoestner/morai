@@ -1,17 +1,23 @@
 """Metrics used in the models."""
 
+from __future__ import annotations
+
 import json as std_json
 from io import StringIO
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 import polars as pl
 import sklearn.metrics as skm
 
+from morai.forecast import preprocessors
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def smape(
@@ -69,11 +75,13 @@ def ae(y_true: pd.Series, y_pred: pd.Series) -> float:
 
 
 def ae_rank(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     features: list,
     actuals: str,
     expecteds: str,
     exposures: str,
+    bin_threshold: int | None = None,
+    n_bins: int = 10,
 ) -> pd.DataFrame:
     """
     Calculate the actual/expected ranking.
@@ -98,6 +106,11 @@ def ae_rank(
         The expecteds.
     exposures : str
         The exposures.
+    bin_threshold : int, default=None
+        If a feature has more unique values than this threshold, bin it into
+        `n_bins` bins.
+    n_bins : int, default=10
+        Number of bins to create when binning.
 
     Returns
     -------
@@ -120,6 +133,13 @@ def ae_rank(
     total_exposure = agg_result["total_exposure"][0]
     ae = agg_result["total_actuals"][0] / agg_result["total_expecteds"][0]
     logger.info(f"The total AE with {expecteds} as E for dataset is {ae * 100:.1f}%")
+
+    # bin features with many unique values
+    if bin_threshold is not None:
+        for feature in features:
+            n_unique = df.select(pl.col(feature).n_unique()).collect().item()
+            if n_unique > bin_threshold:
+                df = preprocessors.lazy_bin_feature(df, feature, n_bins, inplace=True)
 
     # dataframe with attributes and attribute values
     melted_dfs = []
@@ -188,8 +208,8 @@ def calculate_metrics(
     y_pred: pd.Series,
     metrics: list,
     prefix: str = "",
-    model: Optional[Any] = None,
-    sample_weight: Optional[pd.Series] = None,
+    model: Any | None = None,
+    sample_weight: pd.Series | None = None,
     **kwargs,
 ) -> dict:
     """
@@ -230,7 +250,7 @@ def calculate_metrics(
              negative if the model is worse than the mean
 
     """
-    metric_dict = {}
+    metric_dict: dict[str, Any] = {}
     for metric in metrics:
         if metric == "smape":
             metric_dict[f"{prefix}_{metric}"] = smape(
@@ -280,18 +300,17 @@ class ModelResults:
     """
 
     def __init__(
-        self, filepath: Optional[str] = None, metrics: Optional[list] = None
+        self, filepath: str | None = None, metrics: list | None = None
     ) -> None:
-        self.filepath = filepath
-
         # load model results from file
         if filepath is not None:
+            self.filepath = filepath
             filepath = helpers.test_path(filepath)
             if not str(filepath).endswith(".json"):
                 raise ValueError("Filepath must end with .json")
             logger.info(f"loading results from {filepath}")
 
-            with open(filepath, "r") as file:
+            with open(filepath, "r") as file:  # type: ignore[arg-type]
                 data = std_json.load(file)
             model_df = pd.read_json(
                 StringIO(std_json.dumps(data["model"])), orient="split"
@@ -315,7 +334,7 @@ class ModelResults:
             self.model = pd.DataFrame()
             self.scorecard = pd.DataFrame()
             self.importance = pd.DataFrame()
-            self.metrics = metrics
+            self.metrics = metrics or []
 
     def add_model(
         self,
@@ -434,7 +453,7 @@ class ModelResults:
         self.scorecard = self.scorecard[self.scorecard["model_name"] != model_name]
         self.importance = self.importance[self.importance["model_name"] != model_name]
 
-    def save_model(self, filepath: Optional[str] = None) -> None:
+    def save_model(self, filepath: str | Path | None = None) -> None:
         """
         Save the model as a json file.
 
@@ -474,6 +493,9 @@ class ModelResults:
             "scorecard": scorecard_json,
             "importance": importance_json,
         }
+
+        if filepath is None:
+            raise ValueError("Filepath must be provided")
         with open(filepath, "w") as file:
             std_json.dump(model_results, file, indent=4)
 
@@ -485,8 +507,8 @@ class ModelResults:
         y_true_test: pd.Series = None,
         y_pred_test: pd.Series = None,
         weights_test: pd.Series = None,
-        metrics: Optional[list] = None,
-        model: Optional[Any] = None,
+        metrics: list | None = None,
+        model: Any | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -534,7 +556,7 @@ class ModelResults:
 
         # apply weights to predictions
         if weights_train is not None:
-            if weights_test is None:
+            if weights_test is None and y_true_test is not None:
                 raise ValueError("weights_test must be provided if weights_train is")
             y_true_train = y_true_train * weights_train
             y_pred_train = y_pred_train * weights_train

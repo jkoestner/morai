@@ -1,8 +1,10 @@
 """Collection of exploratory data analysis (eda) tools."""
 
+from __future__ import annotations
+
 import itertools
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -20,10 +22,10 @@ logger = custom_logger.setup_logging(__name__)
 
 def correlation(
     df: pd.DataFrame,
-    features: Optional[List[str]] = None,
+    features: list[str] | None = None,
     numeric: bool = True,
     method: str = "pearson",
-    **kwargs: Dict[str, Any],
+    **kwargs: dict[str, Any],
 ) -> pd.DataFrame:
     """
     Create a correlation matrix for the DataFrame.
@@ -92,8 +94,8 @@ def correlation(
 
 def mutual_info(
     df: pd.DataFrame,
-    features: Optional[List[str]] = None,
-    n_jobs: Optional[int] = None,
+    features: list[str] | None = None,
+    n_jobs: int | None = None,
     display: bool = True,
     threshold: float = 0.5,
     **kwargs: dict,
@@ -153,7 +155,7 @@ def mutual_info(
 
     def compute_mi(
         col_i: str, col_j: str, df: pd.DataFrame, **kwargs: dict
-    ) -> Tuple[str, str, np.ndarray]:
+    ) -> tuple[str, str, np.ndarray]:
         logger.debug(f"Calculating the mutual information for '{col_i}' and '{col_j}'.")
         mi_value = mutual_info_regression(
             np.copy(df[col_i].values).reshape(-1, 1), np.copy(df[col_j]), **kwargs
@@ -192,7 +194,7 @@ def mutual_info(
 
 
 def cramers_v(
-    confusion_matrix: Union[pd.DataFrame, np.ndarray], correction: bool = False
+    confusion_matrix: pd.DataFrame | np.ndarray, correction: bool = False
 ) -> float:
     """
     Calculate Cramer's V for categorical-categorical association.
@@ -217,7 +219,7 @@ def cramers_v(
     - https://en.wikipedia.org/wiki/Cram%C3%A9r%27s_V
 
     """
-    chi2, p, dof, ex = chi2_contingency(confusion_matrix, correction=correction)
+    chi2, _p, _dof, _ex = chi2_contingency(confusion_matrix, correction=correction)
     n = confusion_matrix.sum().sum()
     phi2 = chi2 / n
     r, k = confusion_matrix.shape
@@ -227,7 +229,7 @@ def cramers_v(
 
 def gvif(
     df: pd.DataFrame,
-    features: Optional[List[str]] = None,
+    features: list[str] | None = None,
     constant_col: str = "constant",
     numeric_only: bool = True,
 ) -> pd.DataFrame:
@@ -282,8 +284,8 @@ def gvif(
         features = [*list(features), constant_col]
 
     # get the features to use
-    features_num = df[features].select_dtypes(include=[np.number]).columns
-    features_cat = df[features].select_dtypes(exclude=[np.number]).columns
+    features_num = df[features].select_dtypes(include=[np.number]).columns.tolist()
+    features_cat = df[features].select_dtypes(exclude=[np.number]).columns.tolist()
     if numeric_only:
         if len(features_cat) > 0:
             logger.warning(

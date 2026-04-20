@@ -7,15 +7,21 @@ from pytest import approx
 from morai.forecast import preprocessors
 from morai.utils import helpers
 
-torch = pytest.importorskip("torch", reason="torch required for neural tests")
-
-from morai.models import neural  # noqa: E402
-
 test_forecast_path = helpers.ROOT_PATH / "tests" / "files" / "forecast" / "models"
 seed = 42
 
 
-def test_neural_poisson():
+# avoiding importing torch at top to speed up test collection
+@pytest.fixture()
+def neural():
+    """Fixture for neural tests."""
+    pytest.importorskip("torch", reason="torch required for neural tests")
+    from morai.models import neural  # noqa: PLC0415
+
+    return neural
+
+
+def test_neural_poisson(neural):
     """Test the Neural network model - poisson."""
     # create model
     sigmoid_data = pd.read_csv(test_forecast_path / "sigmoid_data.csv")
@@ -62,7 +68,7 @@ def test_neural_poisson():
     assert predictions_mean == approx(y_mean, abs=0.02)
 
 
-def test_neural_binomial():
+def test_neural_binomial(neural):
     """
     Test the Neural network model - binomial.
 

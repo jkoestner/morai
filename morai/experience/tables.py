@@ -1,9 +1,12 @@
 """Mortality Table Builder."""
 
+from __future__ import annotations
+
 import copy
 import itertools
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -20,7 +23,6 @@ from morai.utils.helpers import check_merge
 logger = custom_logger.setup_logging(__name__)
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from xml.etree.ElementTree import Element
 
 
@@ -35,8 +37,8 @@ class MortTable:
 
     def __init__(
         self,
-        rate: Optional[pd.DataFrame] = None,
-        rate_filename: Optional[Union[str, "Path"]] = None,
+        rate: pd.DataFrame | None = None,
+        rate_filename: str | Path | None = None,
     ) -> None:
         """
         Initialize the Table class.
@@ -54,7 +56,7 @@ class MortTable:
         self.mi_table = None
         self.rate_dict = None
         self.rate_name = None
-        self.select_period = None
+        self.select_period: int | None = None
         self.max_age = 121
         if rate_filename is None:
             rate_filename = "rate_map.yaml"
@@ -95,8 +97,8 @@ class MortTable:
                 self.mi_table = self.get_mi_table(mi_filename)
 
     def build_table_workbook(
-        self, file_location: Union[str, "Path"], has_mults: bool = False
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        self, file_location: str | Path, has_mults: bool = False
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Build a 1-d mortality table from a workbook.
 
@@ -147,11 +149,11 @@ class MortTable:
 
     def build_table_soa(
         self,
-        table_list: List[int],
-        extra_dims: Optional[Dict[str, List[str]]] = None,
-        juv_list: Optional[List[int]] = None,
+        table_list: list[int],
+        extra_dims: dict[str, Any] | None = None,
+        juv_list: list[int | None] | None = None,
         extend: bool = False,
-        add_year: Optional[float] = None,
+        add_year: float | None = None,
     ) -> pd.DataFrame:
         """
         Build a 1-d mortality dataframe from a list of tables.
@@ -267,7 +269,7 @@ class MortTable:
                         )
 
                 # ult table
-                ult_table, _, min_age = self._process_soa_table(
+                ult_table, _select_period, _min_age = self._process_soa_table(
                     soa_xml=soa_xml, table_index=1, is_select=True
                 )
                 mort_table = self._merge_tables(
@@ -460,10 +462,10 @@ class MortTable:
 
     def calc_derived_table_from_mults(
         self,
-        selected_dict: Optional[dict[str, list]] = None,
+        selected_dict: dict[str, list] | None = None,
         keep_mult: bool = False,
-        rate_table: Optional[pd.DataFrame] = None,
-        mult_table: Optional[pd.DataFrame] = None,
+        rate_table: pd.DataFrame | None = None,
+        mult_table: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         """
         Calculate a derived rate table from the rate table and multiplier table.
@@ -517,8 +519,9 @@ class MortTable:
         # select the rows in mult_table that match the selected mults
         selected_mults = mult_table[
             mult_table.apply(
-                lambda row: row["subcategory"]
-                in selected_dict.get(row["category"], []),
+                lambda row: (
+                    row["subcategory"] in selected_dict.get(row["category"], [])
+                ),
                 axis=1,
             )
         ]
@@ -563,9 +566,9 @@ class MortTable:
         self,
         merge_table: pd.DataFrame,
         source_table: pd.DataFrame,
-        merge_keys: List[str],
+        merge_keys: list[str],
         column_rename: str,
-        extra_dims_list: Optional[List[Tuple[str, Any]]] = None,
+        extra_dims_list: list[tuple[str, Any]] | None = None,
     ) -> pd.DataFrame:
         """
         Merge the source table into the merge table.
@@ -607,8 +610,8 @@ class MortTable:
         return merge_table
 
     def _process_soa_table(
-        self, soa_xml: "Element", table_index: int, is_select: bool
-    ) -> Tuple[Any, int, int]:
+        self, soa_xml: Element, table_index: int, is_select: bool
+    ) -> tuple[Any, Any, Any | None]:
         """
         Gather the metadata from the soa table.
 
@@ -625,25 +628,25 @@ class MortTable:
         -------
         soa_table : pymort.MortXML
             an xml object from pymort.
-        select_period : int
+        select_period : int | None
             The select period.
-        min_age : int
+        min_age : int | None
             The minimum age.
 
         """
-        soa_table = soa_xml.Tables[table_index].Values.reset_index()
+        soa_table = soa_xml.Tables[table_index].Values.reset_index()  # type: ignore[attr-defined]
         soa_table.columns = soa_table.columns.str.lower()
 
         if table_index == 0 and is_select:
             soa_table = soa_table.rename(columns={"age": "issue_age"})
             select_period = (
-                soa_xml.Tables[table_index].MetaData.AxisDefs[1].MaxScaleValue
+                soa_xml.Tables[table_index].MetaData.AxisDefs[1].MaxScaleValue  # type: ignore[attr-defined]
             )
             min_age = None
         elif table_index == 1 and is_select:
             soa_table = soa_table.rename(columns={"age": "attained_age"})
             select_period = None
-            min_age = soa_xml.Tables[1].MetaData.AxisDefs[0].MinScaleValue
+            min_age = soa_xml.Tables[1].MetaData.AxisDefs[0].MinScaleValue  # type: ignore[attr-defined]
         else:
             soa_table = soa_table.rename(columns={"age": "attained_age"})
             select_period = None
@@ -654,13 +657,13 @@ class MortTable:
 
 def generate_table(
     model: Any,
-    mapping: Dict[str, Any],
-    preprocess_feature_dict: Dict[str, Any],
-    preprocess_params: Dict[str, Any],
-    grid: Optional[pd.DataFrame] = None,
-    mult_features: Optional[List[str]] = None,
+    mapping: dict[str, Any],
+    preprocess_feature_dict: dict[str, Any],
+    preprocess_params: dict[str, Any],
+    grid: pd.DataFrame | None = None,
+    mult_features: list[str] | None = None,
     mult_method: str = "glm",
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate a 1-d mortality table based on model predictions.
 
@@ -866,8 +869,8 @@ def generate_table(
 def map_rates(
     df: pd.DataFrame,
     rate: str,
-    rate_to_df_map: Optional[Dict[str, str]] = None,
-    rate_filename: Optional[str] = None,
+    rate_to_df_map: dict[str, str] | None = None,
+    rate_filename: str | None = None,
 ) -> pd.DataFrame:
     """
     Map rates to the DataFrame.
@@ -1124,22 +1127,20 @@ def compare_tables(
     unique_keys = {}
     for i, table in enumerate([table_1, table_2]):
         table_name = f"table_{i + 1}"
-        unique_keys[table_name] = list(
-            set(table.columns) - set(common_keys) - {value_col}
-        )
-        if unique_keys[table_name]:
+        unique_cols = set(table.columns) - set(common_keys) - {value_col}
+        if unique_cols:
             unique_keys[table_name] = {
-                key: len(table[key].unique()) for key in unique_keys[table_name]
+                key: len(table[key].unique()) for key in unique_cols
             }
             if table_name == "table_1":
-                logger.info(f"{table_name} has extra keys: {unique_keys[table_name]}.")
+                logger.info(f"{table_name} has extra keys: {unique_cols}.")
             # aggregate table_2 if it has extra keys
             elif table_name == "table_2":
                 table_2 = table_2.groupby(common_keys, as_index=False).agg(
                     {value_col: "mean"}
                 )
                 logger.info(
-                    f"{table_name} has extra keys: {unique_keys[table_name]}. "
+                    f"{table_name} has extra keys: {unique_cols}. "
                     f"Calculated mean for '{value_col}' column."
                 )
 
@@ -1295,7 +1296,7 @@ def add_aa_ia_dur_cols(df: pd.DataFrame, max_age: int = 121) -> pd.DataFrame:
 
 
 def add_ultimate(
-    select_table: pd.DataFrame, ultimate_table: Optional[pd.DataFrame] = None
+    select_table: pd.DataFrame, ultimate_table: pd.DataFrame | None = None
 ) -> pd.DataFrame:
     """
     Extend the select table with the ultimate table.
@@ -1402,7 +1403,7 @@ def add_ultimate(
 def output_table(
     rate_table: pd.DataFrame,
     filename: str = "table.csv",
-    mult_table: Optional[pd.DataFrame] = None,
+    mult_table: pd.DataFrame | None = None,
 ) -> None:
     """
     Output the table to a csv file.
@@ -1496,7 +1497,7 @@ def get_su_table(df: pd.DataFrame, select_period: int) -> pd.DataFrame:
     return df
 
 
-def get_rates(rate_filename: Optional[str] = None) -> List[str]:
+def get_rates(rate_filename: str | None = None) -> list[str]:
     """
     Get the possible rates in rate mapping file.
 
@@ -1524,7 +1525,7 @@ def get_rates(rate_filename: Optional[str] = None) -> List[str]:
     return rates
 
 
-def get_rate_dict(rate: str, rate_filename: Optional[str] = None) -> Dict[str, str]:
+def get_rate_dict(rate: str, rate_filename: str | Path | None = None) -> dict[str, Any]:
     """
     Process the rate file.
 
@@ -1561,25 +1562,25 @@ def get_rate_dict(rate: str, rate_filename: Optional[str] = None) -> Dict[str, s
     return rate_dict
 
 
-def get_filepath(filename: str) -> "Path":
+def get_filepath(filename: str | Path) -> Path:
     """
     Get the file path based on a number of paths.
 
     Parameters
     ----------
-    filename : str
+    filename : str | Path
         The file location.
 
     Returns
     -------
-    filepath : file
+    filepath : Path
         The file.
 
     """
     filepaths = [
         helpers.FILES_PATH / "rates" / filename,
         helpers.ROOT_PATH / "tests" / "files" / "experience" / "tables" / filename,
-        filename,
+        Path(filename),
     ]
     for filepath in filepaths:
         if filepath.exists():
@@ -1590,7 +1591,7 @@ def get_filepath(filename: str) -> "Path":
 
 
 def _add_null_mult_features(
-    df: pd.DataFrame, mapping: Dict[str, Dict[str, Any]], mult_features: List[str]
+    df: pd.DataFrame, mapping: dict[str, dict[str, Any]], mult_features: list[str]
 ) -> pd.DataFrame:
     logger.debug("adding initial value for multiplier features")
     for feature in mult_features:
@@ -1606,8 +1607,8 @@ def _add_null_mult_features(
 
 
 def _remove_mult_from_rate_mapping(
-    mapping: Dict[str, Dict[str, Any]], mult_features: List[str]
-) -> Dict[str, Dict[str, Any]]:
+    mapping: dict[str, dict[str, Any]], mult_features: list[str]
+) -> dict[str, dict[str, Any]]:
     logger.debug("removing multiplier features from rate mapping")
     mapping = copy.deepcopy(mapping)
     for key, sub_dict in mapping.items():
@@ -1641,11 +1642,11 @@ def _remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _create_grid(
-    dims: Optional[Dict[str, Union[List[Any], np.ndarray]]] = None,
-    mapping: Optional[Dict[str, Dict[str, Union[List[Any], np.ndarray]]]] = None,
+    dims: dict[str, list[Any] | np.ndarray] | None = None,
+    mapping: dict[str, dict[str, Any]] | None = None,
     max_age: int = 121,
     max_grid_size: int = 5_000_000,
-    mult_features: Optional[List[str]] = None,
+    mult_features: list[str] | None = None,
 ) -> pd.DataFrame:
     """
     Create an empty grid from the dimensions.
@@ -1669,12 +1670,14 @@ def _create_grid(
         The grid.
 
     """
-    if (not dims and not mapping) or (dims and mapping):
+    if dims and mapping:
         raise ValueError("Either dims or mapping must be provided.")
     if mapping:
         if mult_features:
             mapping = _remove_mult_from_rate_mapping(mapping, mult_features)
         dims = {col: list(val["values"].keys()) for col, val in mapping.items()}
+    if not dims:
+        raise ValueError("Dims should be provided if mapping is not provided.")
     dimensions = list(dims.values())
 
     # check the grid size before creating it
@@ -1710,9 +1713,7 @@ def _create_grid(
     return mort_grid
 
 
-def _formula_grade(
-    df: pd.DataFrame, multiple: Union[float, str], formula: str
-) -> pd.Series:
+def _formula_grade(df: pd.DataFrame, multiple: float | str, formula: str) -> pd.Series:
     """
     Calculate individual grade from a formula string and multiple.
 

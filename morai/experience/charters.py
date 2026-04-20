@@ -1,8 +1,10 @@
 """Collection of visualization tools."""
 
+from __future__ import annotations
+
 import itertools
 import math
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -28,22 +30,22 @@ chart_width = 1000
 
 
 def chart(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     x_axis: str,
-    y_axis: Optional[str] = None,
-    color: Optional[str] = None,
+    y_axis: str,
+    color: str | None = None,
     type: str = "line",
-    numerator: Optional[str] = None,
-    denominator: Optional[str] = None,
-    title: Optional[str] = None,
+    numerator: str | None = None,
+    denominator: str | None = None,
+    title: str | None = None,
     y_sort: bool = False,
-    x_bins: Optional[int] = None,
+    x_bins: int | None = None,
     y_log: bool = False,
     add_line: bool = False,
     agg: str = "sum",
     display: bool = True,
     **kwargs: Any,
-) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
+) -> go.Figure | pd.DataFrame | pl.LazyFrame:
     """
     Create a chart with Plotly Express.
 
@@ -67,6 +69,7 @@ def chart(
         of two columns.
     color : str, optional (default=None)
         The column name to use for the color.
+        Needed for "heatmap" and "contour".
     type : str, optional (default="line")
         The type of chart to create. Options are "line", "heatmap", "bar", or "area".
     numerator : str, optional (default=None)
@@ -127,7 +130,7 @@ def chart(
         agg_cols = [numerator, denominator]
         check_cols.remove(y_axis)
     else:
-        agg_cols = y_axis
+        agg_cols = [y_axis]
 
     # check if missing columns
     if is_lazy:
@@ -157,7 +160,7 @@ def chart(
             logger.info(f"Binning feature: [{x_axis}] with {x_bins} bins")
             df = preprocessors.lazy_bin_feature(df, x_axis, x_bins, inplace=True)
 
-        grouped_data = preprocessors.lazy_groupby(df, groupby_cols, agg_cols, agg)
+        grouped_data = preprocessors.lazy_groupby(df, groupby_cols, agg_cols, agg)  # type: ignore[arg-type]
         grouped_data = grouped_data.collect().to_pandas()
 
     else:  # pandas
@@ -204,10 +207,16 @@ def chart(
         )
         if add_line:
             # using scatter to add to legend
-            if isinstance(grouped_data[x_axis].dtype, pd.CategoricalDtype):
-                grouped_data[x_axis] = grouped_data[x_axis].cat.as_ordered()
+            if pd.api.types.is_numeric_dtype(grouped_data[x_axis].dtype):
+                add_line_x = [
+                    grouped_data[x_axis].min(),
+                    grouped_data[x_axis].max(),
+                ]
+            else:
+                add_line_x = sorted(grouped_data[x_axis].unique())
+                add_line_x = [add_line_x[0], add_line_x[-1]]
             fig.add_scatter(
-                x=[grouped_data[x_axis].min(), grouped_data[x_axis].max()],
+                x=add_line_x,
                 y=[1, 1],
                 mode="lines",
                 line={"dash": "dot", "color": "grey"},
@@ -294,19 +303,19 @@ def chart(
 
 
 def relative_risk(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     y_axis: str,
-    features: List[str],
-    numerator: Optional[str] = None,
-    denominator: Optional[str] = None,
-    x_bins: Optional[int] = None,
-    relative_to: Optional[str] = "aggregate",
-    relative_cols: Optional[List[str] | str] = None,
-    subset_dict: Optional[Dict[str, Any]] = None,
-    flip_x_color: Optional[bool] = False,
+    features: list[str],
+    numerator: str | None = None,
+    denominator: str | None = None,
+    x_bins: int | None = None,
+    relative_to: str | None = "aggregate",
+    relative_cols: list[str] | str | None = None,
+    subset_dict: dict[str, Any] | None = None,
+    flip_x_color: bool | None = False,
     display: bool = True,
     **kwargs: Any,
-) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
+) -> go.Figure | pd.DataFrame | pl.LazyFrame:
     """
     Chart relative risk by a feature.
 
@@ -463,17 +472,17 @@ def relative_risk(
 
 
 def compare_rates(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     x_axis: str,
-    rates: List[str],
-    line_feature: Optional[str] = None,
-    weights: Optional[List[str]] = None,
-    secondary: Optional[str] = None,
+    rates: list[str],
+    line_feature: str | None = None,
+    weights: list[str] | None = None,
+    secondary: str | None = None,
     y_log: bool = False,
-    x_bins: Optional[int] = None,
+    x_bins: int | None = None,
     display: bool = True,
     **kwargs: Any,
-) -> Union[go.Figure, Union[pd.DataFrame, pl.LazyFrame]]:
+) -> go.Figure | pd.DataFrame | pl.LazyFrame:
     """
     Compare rates by a feature.
 
@@ -667,10 +676,10 @@ def compare_rates(
 
 
 def frequency(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     cols: int = 1,
-    features: Optional[List[str]] = None,
-    sum_var: Optional[str] = None,
+    features: list[str] | None = None,
+    sum_var: str | None = None,
 ) -> go.Figure:
     """
     Generate frequency plots.
@@ -702,7 +711,7 @@ def frequency(
             features = [
                 col
                 for col, dtype in schema.items()
-                if schema[col] not in pl.datatypes.group.NUMERIC_DTYPES
+                if schema[col] not in pl.datatypes.group.NUMERIC_DTYPES  # noqa: PLR1733
             ]
         else:
             features = df.select_dtypes(exclude=[np.number]).columns.to_list()
@@ -730,9 +739,9 @@ def frequency(
             frequency = frequency.sort_values(
                 by=col,
                 ascending=True,
-                key=lambda x: x.astype(str)
-                if isinstance(x.dtype, CategoricalDtype)
-                else x,
+                key=lambda x: (
+                    x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x
+                ),
             )
 
         # create the subplot
@@ -756,17 +765,17 @@ def pdp(
     model: Any,
     df: pd.DataFrame,
     x_axis: str,
-    line_color: Optional[str] = None,
-    weight: Optional[str] = None,
-    secondary: Optional[str] = None,
-    mapping: Optional[Dict[str, Dict[str, Union[str, Dict[str, str]]]]] = None,
-    spline_dict: Optional[Dict[str, Any]] = None,
-    x_bins: Optional[int] = None,
+    line_color: str | None = None,
+    weight: str | None = None,
+    secondary: str | None = None,
+    mapping: dict[str, Any] | None = None,
+    spline_dict: dict[str, Any] | None = None,
+    x_bins: int | None = None,
     center: str = "global",
     quick: bool = False,
-    n_jobs: Optional[int] = None,
+    n_jobs: int | None = None,
     display: bool = True,
-) -> Union[go.Figure, pd.DataFrame]:
+) -> go.Figure | pd.DataFrame:
     """
     Create a partial dependence plot (PDP) for the DataFrame.
 
@@ -868,11 +877,11 @@ def pdp(
             # values dict: {original_value: ohe_column_name}
             x_axis_cols = list(mapping[x_axis]["values"].values())
             df[x_axis] = _reconstruct_col_from_ohe_expanded(df, x_axis, mapping)
-            x_axis_values = list(df[x_axis].unique())
+            x_axis_values = np.array(df[x_axis].unique())
         else:
-            x_axis_values = list(df[x_axis].unique())
+            x_axis_values = np.array(df[x_axis].unique())
     elif x_axis in df.select_dtypes(exclude=[np.number]).columns:
-        x_axis_values = list(df[x_axis].unique())
+        x_axis_values = np.array(df[x_axis].unique())
     else:
         if pd.api.types.is_integer_dtype(df[x_axis].dtype):
             df[x_axis] = df[x_axis].astype(float)
@@ -911,9 +920,9 @@ def pdp(
             .reset_index()
             .sort_values(
                 by=grouped_features,
-                key=lambda x: x.astype(str)
-                if isinstance(x.dtype, CategoricalDtype)
-                else x,
+                key=lambda x: (
+                    x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x
+                ),
             )
         )
 
@@ -1038,7 +1047,9 @@ def pdp(
             )
         else:
             pdp_df = (
-                pdp_df.groupby(grouped_features, observed=True).mean().reset_index()
+                pdp_df.groupby(grouped_features, observed=True)
+                .mean(numeric_only=True)
+                .reset_index()
             )
 
     # create the plots
@@ -1104,7 +1115,7 @@ def pdp(
 def scatter(
     df: pd.DataFrame,
     target: str,
-    features: List[str],
+    features: list[str],
     sample_nbr: float = 100,
     cols: int = 3,
 ) -> go.Figure:
@@ -1228,14 +1239,14 @@ def matrix(
 
 
 def target(
-    df: Union[pd.DataFrame, pl.LazyFrame],
-    target: Union[List[str], str],
-    features: List[str],
+    df: pd.DataFrame | pl.LazyFrame,
+    target: list[str] | str,
+    features: list[Any],
     cols: int = 3,
-    numerator: Optional[Union[List[str], str]] = None,
-    denominator: Optional[Union[List[str], str]] = None,
-    weights: Optional[Union[List[str], str]] = None,
-    normalize: Optional[List[str]] = None,
+    numerator: list[str] | str | None = None,
+    denominator: list[str] | str | None = None,
+    weights: list[str] | str | None = None,
+    normalize: list[str] | None = None,
     add_line: bool = False,
     generate_pairwise: bool = False,
     y_log: bool = False,
@@ -1310,7 +1321,7 @@ def target(
     if is_lazy:
         df = df.with_columns(pl.lit(1).alias("_aggregate"))
     else:  # pandas
-        df.loc[:, "_aggregate"] = 1
+        df = df.assign(_aggregate=1)
 
     # ensure all features are in df
     if is_lazy:
@@ -1331,11 +1342,12 @@ def target(
         raise ValueError(
             f"Target '{target}' needs to be in DataFrame columns, 'ratio', or 'risk'"
         )
-    if target in ["ratio", "risk"] and (numerator is None or denominator is None):
-        raise ValueError("Numerator/Denominator is required for ratio or risk target.")
-    if target not in ["ratio", "risk"] and (
-        numerator is not None or denominator is not None
-    ):
+    if target in ["ratio", "risk"]:
+        if numerator is None or denominator is None:
+            raise ValueError(
+                "Numerator/Denominator is required for ratio or risk target."
+            )
+    elif numerator is not None or denominator is not None:
         logger.warning(
             "Parameters 'numerator' and 'denominator' are ignored if target is "
             "not 'ratio' or 'risk'."
@@ -1347,7 +1359,7 @@ def target(
             df = experience.normalize(
                 df,
                 features=normalize,
-                normalize_col=numerator,
+                normalize_col=numerator,  # type: ignore[arg-type]
                 weight_col=denominator,
                 ratio=True,
             )
@@ -1509,9 +1521,11 @@ def target(
         # sort values and then convert to string if categorical
         grouped_data = grouped_data.sort_values(
             by=plot_feature,
-            key=lambda x: x.astype(str)
-            if isinstance(x.dtype, pd.CategoricalDtype) and not x.cat.ordered
-            else x,
+            key=lambda x: (
+                x.astype(str)
+                if isinstance(x.dtype, pd.CategoricalDtype) and not x.cat.ordered
+                else x
+            ),
         )
         for feature in plot_feature:
             if isinstance(grouped_data[feature].dtype, pd.CategoricalDtype):
@@ -1628,7 +1642,7 @@ def target(
     return fig
 
 
-def get_stats(df: Union[pd.DataFrame, pl.LazyFrame], features: list) -> pd.DataFrame:
+def get_stats(df: pd.DataFrame | pl.LazyFrame, features: list) -> pd.DataFrame:
     """
     Generate summary statistics for the dataset.
 
@@ -1715,8 +1729,8 @@ def qq(residuals: pd.Series, distribution: str = "norm") -> go.Figure:
 
     """
     # calculate values
-    (theoretical_quantiles, sample_quantiles), (slope, intercept, r) = probplot(
-        residuals, dist="norm"
+    (theoretical_quantiles, sample_quantiles), (slope, intercept, _) = probplot(
+        residuals, dist=distribution
     )
 
     # create the plot
@@ -1952,7 +1966,7 @@ def get_category_orders(
     measure: str,
     ascending: bool = False,
     agg: str = "sum",
-) -> Dict[str, List[Any]]:
+) -> dict[str, list[Any]]:
     """
     Get the category order.
 
@@ -2020,27 +2034,31 @@ def _pdp_make_prediction(
     X: pd.DataFrame,
     x_axis: str,
     x_axis_type: str,
-    x_axis_cols: Optional[List[str]],
+    x_axis_cols: list[str] | None,
     x_axis_transformer: Any,
     value: Any,
     line_color: str,
     line_color_type: str,
-    line_color_cols: Optional[List[str]],
+    line_color_cols: list[str] | None,
     line_value: Any,
     quick: bool,
-    weights: Optional[pd.Series],
-) -> Dict[str, Any]:
+    weights: pd.Series | None,
+) -> dict[str, Any]:
     """Make predictions for PDP."""
     X_temp = X.copy()
 
     # set x_axis values
     if x_axis_type == "ohe":
+        if x_axis_cols is None:
+            raise ValueError("x_axis_cols is required for ohe type.")
         for col in x_axis_cols[1:]:
             X_temp[col] = 0
         target_col = f"{x_axis}_{value}"
         if target_col in x_axis_cols:
             X_temp[target_col] = 1
     elif x_axis_type == "spline":
+        if x_axis_cols is None:
+            raise ValueError("x_axis_cols is required for spline type.")
         spline_values = x_axis_transformer.transform(pd.DataFrame({x_axis: [value]}))
         for i, col in enumerate(x_axis_cols):
             X_temp[col] = spline_values[0, i]
@@ -2051,6 +2069,8 @@ def _pdp_make_prediction(
     if line_color and line_color != "Overall":
         # handle ohe
         if line_color_type == "ohe":
+            if line_color_cols is None:
+                raise ValueError("line_color_cols is required for ohe type.")
             for col in line_color_cols:
                 X_temp[col] = 0
             target_col = f"{line_color}_{line_value}"
@@ -2077,7 +2097,7 @@ def _pdp_make_prediction(
 def _reconstruct_col_from_ohe_expanded(
     df: pd.DataFrame,
     feature_name: str,
-    mapping: Dict[str, Dict[str, Union[str, Dict[str, str]]]],
+    mapping: dict[str, Any],
 ) -> pd.Series:
     """
     Reconstruct a categorical column from one-hot expanded columns.

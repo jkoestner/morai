@@ -1,13 +1,14 @@
 """R models for forecasting mortality rates."""
 
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
-from rpy2.robjects.packages import importr
 from scipy import stats
 from sklearn.base import BaseEstimator, RegressorMixin
 
@@ -46,6 +47,7 @@ class GAMR(BaseEstimator, RegressorMixin):
         self.feature_names = None
         self.coefs = None
         self.is_fitted_ = False
+        self._r_initialized = False
 
     def setup_model(
         self,
@@ -54,8 +56,8 @@ class GAMR(BaseEstimator, RegressorMixin):
         weights: pd.Series = None,
         distribution: str = "quasibinomial",
         link: str = "logit",
-        spline_dict: Optional[dict] = None,
-        extra_text: Optional[str] = "",
+        spline_dict: dict | None = None,
+        extra_text: str | None = "",
         save: bool = True,
     ) -> Any:
         """
@@ -99,9 +101,7 @@ class GAMR(BaseEstimator, RegressorMixin):
         )
 
         # activate pandas2ri and import R packages
-        pandas2ri.activate()
-        importr("base")
-        importr("mgcv")
+        self._ensure_r_initialized()
 
         # clean up r environment
         ro.r("rm(list=ls())")
@@ -188,7 +188,7 @@ class GAMR(BaseEstimator, RegressorMixin):
         return None
 
     def get_formula(
-        self, X: pd.DataFrame, y: pd.Series, spline_dict: Optional[dict] = None
+        self, X: pd.DataFrame, y: pd.Series, spline_dict: dict | None = None
     ) -> str:
         """
         Get the formula for the GAM model.
@@ -271,6 +271,8 @@ class GAMR(BaseEstimator, RegressorMixin):
 
         if self.model is None:
             raise ValueError("please create a model first")
+
+        self._ensure_r_initialized()
 
         # initialize variables
         coefs = self.coefs
@@ -398,6 +400,8 @@ class GAMR(BaseEstimator, RegressorMixin):
         if self.model is None:
             raise ValueError("please create a model first")
 
+        self._ensure_r_initialized()
+
         X = self._clean_data(X)
         ro.globalenv["newdata"] = X
 
@@ -498,3 +502,24 @@ class GAMR(BaseEstimator, RegressorMixin):
         ]
 
         return X
+
+    def _ensure_r_initialized(self) -> None:
+        """Ensure R environment is initialized with required packages."""
+        # check if r is initialized
+        if getattr(self, "_r_initialized", False):
+            return
+
+        # imports
+        from rpy2.robjects import pandas2ri  # noqa: PLC0415
+        from rpy2.robjects.packages import importr  # noqa: PLC0415
+
+        pandas2ri.activate()
+        importr("base")
+        importr("mgcv")
+
+        # add model to r environment
+        if "model" not in ro.globalenv:
+            if self.model is not None:
+                ro.globalenv["model"] = self.model
+
+        self._r_initialized = True

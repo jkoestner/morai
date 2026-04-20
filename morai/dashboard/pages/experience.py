@@ -1,10 +1,15 @@
-"""Experience dashboard."""
+"""
+Experience dashboard.
+
+Uses Serverside for storing the filter_dict, as it contains dash components.
+"""
 
 import ast
 
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import dash_mantine_components as dmc
 import polars as pl
 from dash_extensions.enrich import (
     ALL,
@@ -43,7 +48,9 @@ def layout():
     """Experience layout."""
     return html.Div(
         [
-            dcc.Store(id="store-exp-filter", storage_type="session"),
+            dcc.Store(id="store-initial-filters", storage_type="session"),
+            dcc.Store(id="store-filter-values", storage_type="session"),
+            dcc.Store(id="store-bookmarks", storage_type="local"),
             _build_header(),
             _build_cards_row(),
             _build_main_content(),
@@ -88,9 +95,16 @@ def _build_cards_row():
     return dbc.Row(
         [
             dbc.Col(
-                html.Div(
-                    id="card",
-                    className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                dcc.Loading(
+                    children=[
+                        html.Div(
+                            id="card",
+                            className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                            style={"minHeight": "250px", "minWidth": "250px"},
+                        ),
+                    ],
+                    id="loading-card",
+                    custom_spinner=dmc.Skeleton(visible=True, h="100%", w="100%"),
                 ),
                 width="auto",
             ),
@@ -100,11 +114,11 @@ def _build_cards_row():
                         html.Div(
                             id="filtered-card",
                             className="bg-white rounded-3 shadow-sm p-3 border border-light hover-shadow",
+                            style={"minHeight": "250px", "minWidth": "250px"},
                         ),
                     ],
                     id="loading-filtered-card",
-                    type="default",
-                    color="#007bff",
+                    custom_spinner=dmc.Skeleton(visible=True, h="100%", w="100%"),
                 ),
                 width="auto",
             ),
@@ -172,8 +186,9 @@ def _build_main_content():
                         [
                             dcc.Loading(
                                 id="loading-tab-content",
-                                type="default",
-                                color="#007bff",
+                                custom_spinner=dmc.Skeleton(
+                                    visible=True, h="100%", w="100%"
+                                ),
                                 children=html.Div(
                                     id="tab-content",
                                     className="bg-white rounded-3 shadow-sm p-4 border border-light",
@@ -181,8 +196,9 @@ def _build_main_content():
                             ),
                             dcc.Loading(
                                 id="loading-chart-secondary",
-                                type="default",
-                                color="#007bff",
+                                custom_spinner=dmc.Skeleton(
+                                    visible=True, h="100%", w="100%"
+                                ),
                                 children=html.Div(
                                     id="chart-secondary",
                                     className="mt-4 bg-white rounded-3 shadow-sm p-4 border border-light",
@@ -199,7 +215,94 @@ def _build_main_content():
                                     html.I(className="fas fa-filter me-2"),
                                     "Data Filters",
                                 ],
-                                className="mb-4",
+                                className="mb-3",
+                            ),
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        html.H6(
+                                            [
+                                                html.I(
+                                                    className="fas fa-bookmark me-2"
+                                                ),
+                                                "Bookmarks",
+                                            ],
+                                            className="mb-0",
+                                        )
+                                    ),
+                                    dbc.CardBody(
+                                        [
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(
+                                                        dbc.Input(
+                                                            id="bookmark-name-input",
+                                                            placeholder="Bookmark name...",
+                                                            size="sm",
+                                                        ),
+                                                        width=9,
+                                                    ),
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            "Save",
+                                                            id="save-bookmark-button",
+                                                            color="success",
+                                                            size="sm",
+                                                            n_clicks=0,
+                                                            className="w-100",
+                                                        ),
+                                                        width=3,
+                                                    ),
+                                                ],
+                                                className="mb-2 g-1",
+                                            ),
+                                            dcc.Dropdown(
+                                                id="bookmark-dropdown",
+                                                placeholder="Select bookmark...",
+                                                className="mb-2",
+                                            ),
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            [
+                                                                html.I(
+                                                                    className="fas fa-upload me-1"
+                                                                ),
+                                                                "Load",
+                                                            ],
+                                                            id="load-bookmark-button",
+                                                            color="primary",
+                                                            size="sm",
+                                                            n_clicks=0,
+                                                            className="w-100",
+                                                        ),
+                                                        width=6,
+                                                    ),
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            [
+                                                                html.I(
+                                                                    className="fas fa-trash me-1"
+                                                                ),
+                                                                "Delete",
+                                                            ],
+                                                            id="delete-bookmark-button",
+                                                            color="outline-danger",
+                                                            size="sm",
+                                                            n_clicks=0,
+                                                            className="w-100",
+                                                        ),
+                                                        width=6,
+                                                    ),
+                                                ],
+                                                className="g-1",
+                                            ),
+                                        ],
+                                        className="p-2",
+                                    ),
+                                ],
+                                className="mb-3 shadow-sm",
                             ),
                             html.Button(
                                 [
@@ -257,10 +360,20 @@ def _build_selectors_column():
                     ],
                     value="chart",
                     clearable=False,
-                    className="border-0 shadow-sm mb-4",
+                    className="border-0 shadow-sm mb-2",
                     style={
                         "borderRadius": "8px",
                         "fontSize": "15px",
+                    },
+                ),
+                html.P(
+                    "Visualize experience data across features with flexible charting.",
+                    id="tool-description",
+                    style={
+                        "fontSize": "0.85em",
+                        "color": "gray",
+                        "marginTop": "0px",
+                        "marginBottom": "10px",
                     },
                 ),
                 html.Button(
@@ -303,22 +416,26 @@ def _build_selectors_column():
 
 @callback(
     [
-        Output("store-exp-filter", "data"),
+        Output("store-initial-filters", "data"),
         Output("chart-selectors", "children"),
         Output("chart-filters", "children"),
         Output("card", "children"),
     ],
     [Input("store-dataset", "data")],
-    [State("store-config", "data")],
+    [State("store-config", "data"), State("store-filter-values", "data")],
 )
-def load_data(dataset, config):
+def load_data(dataset, config, saved_filter_values):
     """Load data and create selectors."""
     if dataset is None:
         raise dash.exceptions.PreventUpdate
 
     logger.debug("generate selectors and filters")
-
-    filter_dict = dh.generate_filters(df=dataset, prefix="chart", config=config)
+    filter_dict = dh.generate_filters(
+        df=dataset,
+        prefix="chart",
+        config=config,
+        initial_values=saved_filter_values,
+    )
     selectors_default = dh.generate_selectors(
         config=config,
         prefix="chart",
@@ -344,9 +461,10 @@ def load_data(dataset, config):
             "relative_cols": False,
             "subset_dict": False,
             "flip_x_color": False,
+            "rank_columns": True,
         },
     )
-
+    logger.debug("generating card")
     card = dh.generate_card(
         df=dataset,
         card_list=dh.get_card_list(config),
@@ -382,7 +500,7 @@ def load_data(dataset, config):
         State({"type": "chart-num-filter", "index": ALL}, "value"),
         # stores
         State("store-dataset", "data"),
-        State("store-exp-filter", "data"),
+        State("store-initial-filters", "data"),
         State("store-config", "data"),
     ],
     prevent_initial_call=True,
@@ -426,6 +544,7 @@ def update_tab_content(
     relative_cols = dh._inputs_parse_id(states_info, "relative_cols_selector")
     subset_dict = dh._inputs_parse_id(states_info, "subset_dict_selector")
     flip_x_color = dh._inputs_parse_id(states_info, "flip_x_color_selector")
+    rank_columns = dh._inputs_parse_id(states_info, "rank_columns_selector")
     if not subset_dict or subset_dict.strip() == "":
         subset_dict = None
     else:
@@ -436,7 +555,17 @@ def update_tab_content(
             subset_dict = None
 
     # filter the dataset - only filter what's needed
-    filtered_df = dh.filter_data(df=dataset, callback_context=states_info)
+    # pre-collect to avoid multiple downstream collections
+    logger.debug("filtering dataset")
+    filtered_df = dh.filter_data(
+        df=dataset,
+        callback_context=states_info,
+        str_cols=filter_dict["str_cols"],
+        num_cols=filter_dict["num_cols"],
+    )
+    if isinstance(filtered_df, pl.LazyFrame):
+        filtered_df = filtered_df.collect().lazy()
+    logger.debug("filtered dataset")
 
     # create cards
     card_list = dh.get_card_list(config)
@@ -620,12 +749,17 @@ def update_tab_content(
         tab_content = html.Div([export_button, grid])
 
     elif active_tab == "tab-rank":
+        rank_features = (
+            rank_columns if rank_columns else config_dataset["columns"]["features"]
+        )
         rank = metrics.ae_rank(
             df=filtered_df,
-            features=config_dataset["columns"]["features"],
+            features=rank_features,
             actuals=config_dataset["columns"]["actuals_amt"],
             expecteds=config_dataset["columns"]["expecteds_amt"],
             exposures=config_dataset["columns"]["exposure_amt"],
+            bin_threshold=20,
+            n_bins=10,
         )
 
         columnDefs = dash_formats.get_column_defs(rank)
@@ -653,7 +787,20 @@ def update_tab_content(
             columnSize="sizeToFit",
         )
 
-        tab_content = html.Div([export_button, grid])
+        rank_description = html.P(
+            children=[
+                "Rank identifies features driving A/E deviations. "
+                "'Issue' ranks high-loss values with high-loss percentages. "
+                "'Driver' ranks high-loss values with small exposure.",
+                html.Br(),
+                "Issue = abs((actuals - expected) * (actuals/expected - 1))",
+                html.Br(),
+                "Driver = abs((actuals - expected) * (1 - exposure/total_exposure))",
+            ],
+            style={"fontSize": "0.85em", "color": "gray", "marginBottom": "6px"},
+        )
+
+        tab_content = html.Div([rank_description, export_button, grid])
 
     return tab_content, chart_secondary, filtered_card
 
@@ -681,6 +828,7 @@ def toggle_tool(tool, all_selectors):
         "add_line",
         "normalize",
         "y_log",
+        "rank_columns",
     ]
     compare_selectors = [
         "x_axis",
@@ -733,12 +881,32 @@ def toggle_tool(tool, all_selectors):
 
 
 @callback(
+    Output("tool-description", "children"),
+    [Input("tool-selector", "value")],
+    prevent_initial_call=True,
+)
+def update_tool_description(tool):
+    """Update tool description based on selected tool."""
+    descriptions = {
+        "chart": "Visualize experience data across features with flexible charting.",
+        "compare": "Compare multiple rate side by side.",
+        "target": "Analyze how features relate to a selected target metric.",
+        "relative": (
+            "Relative risk compares the 'y-axis' of each 'relative feature' "
+            "against a reference level, with the option to split by 'relative "
+            "columns'. "
+        ),
+    }
+    return descriptions.get(tool, "")
+
+
+@callback(
     [
         Output({"type": "chart-str-filter", "index": ALL}, "value"),
         Output({"type": "chart-num-filter", "index": ALL}, "value"),
     ],
     [Input("reset-filters-button", "n_clicks")],
-    [State("store-dataset", "data"), State("store-exp-filter", "data")],
+    [State("store-dataset", "data"), State("store-initial-filters", "data")],
     prevent_initial_call=True,
 )
 def reset_filters(n_clicks, dataset, filter_dict):
@@ -825,11 +993,11 @@ def toggle_collapse(n_clicks, is_open, children):
     [
         State({"type": "chart-str-filter", "index": ALL}, "id"),
         State({"type": "chart-num-filter", "index": ALL}, "id"),
-        State("store-dataset", "data"),
+        State("store-initial-filters", "data"),
     ],
 )
 def update_active_filters_card(
-    str_filters, num_filters, str_filter_ids, num_filter_ids, dataset
+    str_filters, num_filters, str_filter_ids, num_filter_ids, filter_dict
 ):
     """Update the card showing active filters."""
     active_filters = []
@@ -837,7 +1005,7 @@ def update_active_filters_card(
     # Check string filters
     for filter_val, filter_id in zip(str_filters, str_filter_ids, strict=False):
         col = filter_id["index"]
-        unique_count = dataset.select(pl.col(col).unique()).collect().height
+        unique_count = len(filter_dict["cat_values"][col])
         if filter_val and len(filter_val) < unique_count:
             active_filters.append(col)
 
@@ -845,8 +1013,8 @@ def update_active_filters_card(
     for filter_val, filter_id in zip(num_filters, num_filter_ids, strict=False):
         if filter_val:
             col = filter_id["index"]
-            min_val = dataset.select(pl.col(col).min()).collect().item()
-            max_val = dataset.select(pl.col(col).max()).collect().item()
+            min_val = filter_dict["min_max"][f"{col}_min"]
+            max_val = filter_dict["min_max"][f"{col}_max"]
             if (filter_val[0] > min_val) or (filter_val[1] < max_val):
                 active_filters.append(col)
 
@@ -866,3 +1034,100 @@ def update_active_filters_card(
         ]
 
     return content
+
+
+@callback(
+    Output("store-filter-values", "data"),
+    Input({"type": "chart-str-filter", "index": ALL}, "value"),
+    Input({"type": "chart-num-filter", "index": ALL}, "value"),
+    State({"type": "chart-str-filter", "index": ALL}, "id"),
+    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def save_filter_state(str_vals, num_vals, str_ids, num_ids):
+    """Persist current filter values to session store for cross-navigation restore."""
+    str_filters = {
+        id_["index"]: val for id_, val in zip(str_ids, str_vals, strict=False)
+    }
+    num_filters = {
+        id_["index"]: val for id_, val in zip(num_ids, num_vals, strict=False)
+    }
+    return {"str_filters": str_filters, "num_filters": num_filters}
+
+
+@callback(
+    Output("bookmark-dropdown", "options"),
+    Input("store-bookmarks", "data"),
+)
+def update_bookmark_dropdown(bookmarks):
+    """Populate the bookmark dropdown from the bookmarks store."""
+    if not bookmarks:
+        return []
+    return [{"label": name, "value": name} for name in sorted(bookmarks.keys())]
+
+
+@callback(
+    Output("store-bookmarks", "data"),
+    Output("bookmark-name-input", "value"),
+    Input("save-bookmark-button", "n_clicks"),
+    State("bookmark-name-input", "value"),
+    State({"type": "chart-str-filter", "index": ALL}, "value"),
+    State({"type": "chart-num-filter", "index": ALL}, "value"),
+    State({"type": "chart-str-filter", "index": ALL}, "id"),
+    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    State("store-bookmarks", "data"),
+    prevent_initial_call=True,
+)
+def save_bookmark(n_clicks, name, str_vals, num_vals, str_ids, num_ids, bookmarks):
+    """Save current filter state as a named bookmark."""
+    if not name or not name.strip():
+        raise dash.exceptions.PreventUpdate
+    bookmarks = dict(bookmarks) if bookmarks else {}
+    str_filters = {
+        id_["index"]: val for id_, val in zip(str_ids, str_vals, strict=False)
+    }
+    num_filters = {
+        id_["index"]: val for id_, val in zip(num_ids, num_vals, strict=False)
+    }
+    bookmarks[name.strip()] = {"str_filters": str_filters, "num_filters": num_filters}
+    return bookmarks, ""
+
+
+@callback(
+    Output({"type": "chart-str-filter", "index": ALL}, "value", allow_duplicate=True),
+    Output({"type": "chart-num-filter", "index": ALL}, "value", allow_duplicate=True),
+    Input("load-bookmark-button", "n_clicks"),
+    State("bookmark-dropdown", "value"),
+    State("store-bookmarks", "data"),
+    State({"type": "chart-str-filter", "index": ALL}, "id"),
+    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    State({"type": "chart-num-filter", "index": ALL}, "value"),
+    prevent_initial_call=True,
+)
+def load_bookmark(n_clicks, selected, bookmarks, str_ids, num_ids, current_num_vals):
+    """Apply a saved bookmark's filter values to the current filters."""
+    if not selected or not bookmarks or selected not in bookmarks:
+        raise dash.exceptions.PreventUpdate
+    bookmark = bookmarks[selected]
+    str_vals = [bookmark["str_filters"].get(id_["index"], []) for id_ in str_ids]
+    num_vals = [
+        bookmark["num_filters"].get(id_["index"], current_num_vals[i])
+        for i, id_ in enumerate(num_ids)
+    ]
+    return str_vals, num_vals
+
+
+@callback(
+    Output("store-bookmarks", "data", allow_duplicate=True),
+    Input("delete-bookmark-button", "n_clicks"),
+    State("bookmark-dropdown", "value"),
+    State("store-bookmarks", "data"),
+    prevent_initial_call=True,
+)
+def delete_bookmark(n_clicks, selected, bookmarks):
+    """Delete the selected bookmark from the store."""
+    if not selected or not bookmarks or selected not in bookmarks:
+        raise dash.exceptions.PreventUpdate
+    bookmarks = dict(bookmarks)
+    del bookmarks[selected]
+    return bookmarks

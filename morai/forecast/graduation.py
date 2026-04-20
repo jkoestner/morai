@@ -1,10 +1,11 @@
 """Graduation functions."""
 
-from typing import Optional, Union
+from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 from scipy.linalg import solve
+from scipy.sparse import spmatrix
 from scipy.special import comb, expit, logit
 
 from morai.utils import custom_logger
@@ -13,17 +14,17 @@ logger = custom_logger.setup_logging(__name__)
 
 
 def whl(
-    rates: Union[pd.Series, np.ndarray],
+    rates: pd.Series | np.ndarray,
     horizontal_order: int,
     horizontal_lambda: float,
-    weights: Union[pd.Series, np.ndarray] = None,
+    weights: pd.Series | np.ndarray = None,
     horizontal_expo: float = 0,
     vertical_order: int = 0,
     vertical_lambda: float = 0,
     vertical_expo: float = 0,
     normalize_weights: bool = True,
-    standard_rates: Union[pd.Series, np.ndarray] = None,
-    standard_weights: Union[pd.Series, np.ndarray] = None,
+    standard_rates: pd.Series | np.ndarray = None,
+    standard_weights: pd.Series | np.ndarray = None,
     blending_factor: float = 0,
 ) -> np.ndarray:
     """
@@ -128,7 +129,7 @@ def whl(
 
     # normalize weights to number of data points
     if normalize_weights:
-        total_weight = np.sum(weights)
+        total_weight = sum(weights)
         weights = weights / total_weight * N
 
     # blending to a standard table
@@ -156,7 +157,7 @@ def whl(
 
         # normalize standard weights
         if normalize_weights:
-            total_std_weight = np.sum(w_std)
+            total_std_weight = sum(w_std)
             w_std = w_std / total_std_weight * N
     else:
         y_std = np.zeros_like(y)
@@ -170,7 +171,7 @@ def whl(
     # difference matrix
     def build_difference_matrix(
         size: int, order: int, expo_rate: float = 0, axis: int = 0
-    ) -> np.ndarray:
+    ) -> spmatrix:
         """
         Build the difference matrix for a given order and exponential rate.
 
@@ -187,17 +188,18 @@ def whl(
 
         Returns
         -------
-        np.ndarray
+        spmatrix
             The difference matrix.
 
         """
         if order == 0:
-            return None
+            raise ValueError("Order must be greater than 0.")
 
         # initialize
-        data = []
-        row_indices = []
-        col_indices = []
+        data: list[float] = []
+        row_indices: list[int] = []
+        col_indices: list[int] = []
+        indices_list: list[np.ndarray] = []
 
         # 1 dimension
         if rates.ndim == 1:
@@ -206,12 +208,10 @@ def whl(
         # 2 dimension (horizontal)
         elif axis == 0:
             num_diffs = (cols - order) * rows
-            indices_list = []
             for i in range(rows):
                 for j in range(cols - order):
                     base_idx = i * cols + j
-                    indices = base_idx + np.arange(order + 1)
-                    indices_list.append(indices)
+                    indices_list.append(base_idx + np.arange(order + 1))
         # 2 dimension (vertical)
         else:
             num_diffs = (rows - order) * cols
@@ -219,8 +219,9 @@ def whl(
             for i in range(rows - order):
                 for j in range(cols):
                     base_idx = i * cols + j
-                    indices = base_idx + np.arange(0, (order + 1) * cols, cols)
-                    indices_list.append(indices)
+                    indices_list.append(
+                        base_idx + np.arange(0, (order + 1) * cols, cols)
+                    )
 
         # compute expo factors
         if expo_rate != 0:
@@ -284,7 +285,7 @@ def exponential(
     ages: np.ndarray,
     expo_low: int,
     expo_high: int,
-    calc_ages: Optional[np.ndarray] = None,
+    calc_ages: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     Graduate data by fitting a logistic model using weighted least squares.
@@ -329,14 +330,11 @@ def exponential(
     """
     # initialize variables
     ages = np.asarray(ages, dtype=float)
-    if calc_ages is None:
-        calc_ages = ages.copy()
-    else:
-        calc_ages = np.asarray(calc_ages, dtype=float)
+    calc_ages = ages.copy() if calc_ages is None else np.asarray(calc_ages, dtype=float)
     ages = ages + 0.5
     calc_ages = calc_ages + 0.5
     weights = np.asarray(weights, dtype=float)
-    exponents = np.arange(expo_low, expo_high + 1)
+    exponents = range(expo_low, expo_high + 1)
 
     # checks
     if len(ages) != len(rates) or len(ages) != len(weights):
@@ -352,7 +350,7 @@ def exponential(
 
     # solve for parameters
     ages_matrix = np.column_stack([ages**e for e in exponents])
-    calc_ages_matrix = np.column_stack([(calc_ages) ** e for e in exponents])
+    calc_ages_matrix = np.column_stack([(calc_ages) ** e for e in exponents])  # type: ignore[operator]
     weights_matrix = np.diag(weights)
     A = ages_matrix.T @ weights_matrix @ ages_matrix
     B = ages_matrix.T @ weights_matrix @ y

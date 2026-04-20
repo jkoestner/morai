@@ -4,10 +4,13 @@ Utilities for app.
 Provides functions for common used functions in app.
 """
 
+from __future__ import annotations
+
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import dash_bootstrap_components as dbc
+import duckdb
 import pandas as pd
 import polars as pl
 import yaml
@@ -17,6 +20,9 @@ from morai.experience import tables
 from morai.utils import custom_logger, helpers
 
 logger = custom_logger.setup_logging(__name__)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 num_to_str_count = 10
 
@@ -43,13 +49,13 @@ def convert_to_short_number(number: float) -> str:
     return f"{number:.1f}T"
 
 
-def read_table(filepath: str) -> pl.LazyFrame:
+def read_table(filepath: "Path") -> pl.LazyFrame:
     """
     Read table from file.
 
     Parameters
     ----------
-    filepath : str
+    filepath : Path
         Path to the file.
     **kwargs
         Additional arguments for reading the file.
@@ -77,13 +83,15 @@ def read_table(filepath: str) -> pl.LazyFrame:
 
 
 def filter_data(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     callback_context: list[dict],
+    str_cols: list[str] | None = None,
+    num_cols: list[str] | None = None,
     num_to_str_count: int = num_to_str_count,
-    mult_table: Optional[pd.DataFrame] = None,
-) -> Union[pd.DataFrame, pl.LazyFrame]:
+    mult_table: pd.DataFrame | None = None,
+) -> pd.DataFrame | pl.LazyFrame:
     """
-    Filter data based on the number of unique values.
+    Filter data based on the callback context.
 
     Parameters
     ----------
@@ -91,6 +99,10 @@ def filter_data(
         Lazy dataframe to filter.
     callback_context : list
         List of callback context.
+    str_cols : list, optional
+        List of string/categorical columns from generate_filters.
+    num_cols : list, optional
+        List of numeric columns from generate_filters.
     num_to_str_count : int
         Number of unique values to convert to string.
     mult_table : pd.DataFrame
@@ -107,17 +119,31 @@ def filter_data(
         df = pl.from_pandas(df).lazy()
     schema = df.collect_schema()
 
-    str_cols = []
-    num_cols = []
-    for col_name, dtype in schema.items():
-        if dtype in pl.datatypes.group.NUMERIC_DTYPES:
-            unique_count = df.select(pl.col(col_name).n_unique()).collect().item()
-            if unique_count < num_to_str_count:
-                str_cols.append(col_name)
-            else:
-                num_cols.append(col_name)
-        else:
-            str_cols.append(col_name)
+    # get string and numeric columns if not provided - collect
+    # ideally would avoid to collect
+    if str_cols is None or num_cols is None:
+        str_cols = []
+        num_cols = []
+        numeric_cols_from_schema = [
+            col_name
+            for col_name, dtype in schema.items()
+            if dtype in pl.datatypes.group.NUMERIC_DTYPES
+        ]
+        if numeric_cols_from_schema:
+            unique_counts = df.select(
+                [pl.col(c).n_unique().alias(c) for c in numeric_cols_from_schema]
+            ).collect()
+            for col_name in numeric_cols_from_schema:
+                if unique_counts[col_name][0] < num_to_str_count:
+                    str_cols.append(col_name)
+                else:
+                    num_cols.append(col_name)
+        non_numeric_cols = [
+            col_name
+            for col_name, dtype in schema.items()
+            if dtype not in pl.datatypes.group.NUMERIC_DTYPES
+        ]
+        str_cols.extend(non_numeric_cols)
 
     filtered_df = df
 
@@ -125,12 +151,9 @@ def filter_data(
     for col in str_cols:
         str_values = _inputs_parse_id(callback_context, col)
         if str_values:
-            # check col type and if numeric convert to int
             if schema[col] in pl.datatypes.group.NUMERIC_DTYPES:
                 str_values = [float(i) for i in str_values]
-                filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
-            else:
-                filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
+            filtered_df = filtered_df.filter(pl.col(col).is_in(str_values))
 
     # filter numeric columns
     for col in num_cols:
@@ -145,7 +168,6 @@ def filter_data(
         filtered_df = filtered_df.collect().to_pandas()
 
     # apply the multiplier table if exists
-    # this is for a rate_table
     if mult_table is not None and not mult_table.empty:
         mult_table_cols = mult_table["category"].tolist()
         selected_dict = {}
@@ -162,12 +184,13 @@ def filter_data(
 
 
 def generate_filters(
-    df: Union[pd.DataFrame, pl.LazyFrame],
+    df: pd.DataFrame | pl.LazyFrame,
     prefix: str,
     num_to_str_count: int = num_to_str_count,
-    config: Optional[Dict[str, Any]] = None,
-    exclude_cols: Optional[List[str]] = None,
-    mult_table: Optional[Union[pd.DataFrame, pl.LazyFrame]] = None,
+    config: dict[str, Any] | None = None,
+    exclude_cols: list[str] | None = None,
+    mult_table: pd.DataFrame | pl.LazyFrame | None = None,
+    initial_values: dict | None = None,
 ) -> dict:
     """
     Generate a dictionary of dashboard options from dataframe.
@@ -186,6 +209,9 @@ def generate_filters(
         List of columns to exclude from the dropdown options.
     mult_table : pd.DataFrame or pl.LazyFrame, optional
         Options to include from the mult_table.
+    initial_values : dict, optional
+        Initial values for the filters, with keys "str_filters" and "num_filters"
+        mapping to dicts of column name to selected values.
 
     Returns
     -------
@@ -202,10 +228,15 @@ def generate_filters(
     num_cols = []
     prefix_str_filter = f"{prefix}-str-filter"
     prefix_num_filter = f"{prefix}-num-filter"
+    duckdb_source = None
 
     # get column types
     is_lazy = isinstance(df, pl.LazyFrame)
+    cat_orders: dict = {}
     if not is_lazy:
+        for _col in df.columns:
+            if hasattr(df[_col], "cat") and df[_col].cat.ordered:
+                cat_orders[_col] = df[_col].cat.categories.tolist()
         df = pl.from_pandas(df).lazy()
     schema = df.collect_schema()
     columns = list(schema.keys())
@@ -215,6 +246,21 @@ def generate_filters(
         config_columns = config_dataset["columns"]["features"]
         columns = [col for col in columns if col in config_columns]
 
+        # remove measure and rates from filters
+        config_measures = config_dataset["columns"]["measures"]
+        config_rates = config_dataset["columns"]["rates"]
+        measures_and_rates = [
+            col for col in columns if col in config_measures or col in config_rates
+        ]
+        exclude_cols = (
+            exclude_cols + measures_and_rates if exclude_cols else measures_and_rates
+        )
+
+        # filepath of the data source
+        duckdb_source = (
+            f"'{helpers.FILES_PATH / 'dataset' / config_dataset['filename']}'"
+        )
+
     if exclude_cols:
         columns = [col for col in columns if col not in exclude_cols]
 
@@ -223,28 +269,91 @@ def generate_filters(
 
     columns = sorted(columns)
 
-    # create filters
+    # get unique counts - collect
+    if duckdb_source:
+        counts_sql = ", ".join(
+            [f'COUNT(DISTINCT "{col}") as "{col}"' for col in columns]
+        )
+        unique_counts = (
+            duckdb.sql(f"SELECT {counts_sql} FROM {duckdb_source}")
+            .pl()
+            .row(0, named=True)
+        )
+    else:
+        unique_counts = (
+            df.select([pl.col(col).n_unique().alias(col) for col in columns])
+            .collect()
+            .row(0, named=True)
+        )
+
+    # classify columns as categorical or numeric
+    cat_cols = []
+    num_cols_list = []
     for col in columns:
         col_dtype = schema[col]
-
-        # check if categorical (non-numeric or low unique count)
-        is_categorical = False
         if col_dtype not in pl.datatypes.group.NUMERIC_DTYPES:
-            is_categorical = True
+            cat_cols.append(col)
+        elif unique_counts[col] < num_to_str_count:
+            cat_cols.append(col)
         else:
-            unique_count = df.select(pl.col(col).n_unique()).collect().item()
-            if unique_count < num_to_str_count:
-                is_categorical = True
+            num_cols_list.append(col)
 
-        # create options for categorical
-        if is_categorical:
-            unique_values = (
-                df.select(pl.col(col)).drop_nulls().unique().collect().to_pandas()
-            )
-            options = [
-                {"label": str(i), "value": i}
-                for i in sorted(unique_values[col].astype(str).unique())
-            ]
+    # apply filter type overrides from config
+    filter_type_overrides = config.get("filter_type_overrides", {}) if config else {}
+    for col, filter_type in filter_type_overrides.items():
+        if col not in columns:
+            continue
+        if filter_type == "checklist" and col in num_cols_list:
+            num_cols_list.remove(col)
+            cat_cols.append(col)
+        elif filter_type == "slider" and col in cat_cols:
+            cat_cols.remove(col)
+            num_cols_list.append(col)
+
+    # get categorical values - collect
+    cat_values: dict[str, list] = {}
+    if cat_cols:
+        if duckdb_source:
+            for col in cat_cols:
+                unique_vals = set(
+                    duckdb.sql(
+                        f'SELECT DISTINCT CAST("{col}" AS VARCHAR) as "{col}" '
+                        f"FROM {duckdb_source}"
+                    )
+                    .pl()[col]
+                    .drop_nulls()
+                    .to_list()
+                )
+                if col in cat_orders:
+                    ordered = [v for v in cat_orders[col] if str(v) in unique_vals]
+                    cat_values[col] = ordered
+                else:
+                    cat_values[col] = sorted(unique_vals)
+        else:
+            cat_df = df.select(cat_cols).collect()
+            for col in cat_cols:
+                unique_vals = set(
+                    cat_df[col].drop_nulls().unique().cast(pl.Utf8).to_list()
+                )
+                if col in cat_orders:
+                    ordered = [v for v in cat_orders[col] if str(v) in unique_vals]
+                    cat_values[col] = ordered
+                else:
+                    cat_values[col] = sorted(unique_vals)
+
+    # get numeric min/max values - collect
+    min_max: dict[str, Any] = {}
+    if num_cols_list:
+        min_max_exprs = []
+        for col in num_cols_list:
+            min_max_exprs.append(pl.col(col).min().alias(f"{col}_min"))
+            min_max_exprs.append(pl.col(col).max().alias(f"{col}_max"))
+        min_max = df.select(min_max_exprs).collect().row(0, named=True)
+
+    # create filters
+    for col in columns:
+        if col in cat_cols:
+            options = [{"label": str(i), "value": i} for i in cat_values[col]]
 
             filter = html.Div(
                 [
@@ -261,7 +370,11 @@ def generate_filters(
                         dcc.Checklist(
                             id={"type": prefix_str_filter, "index": col},
                             options=options,
-                            value=[],
+                            value=(
+                                initial_values.get("str_filters", {}).get(col, [])
+                                if initial_values
+                                else []
+                            ),
                             className="ms-2",
                             labelStyle={"display": "block"},
                         ),
@@ -273,10 +386,9 @@ def generate_filters(
             )
             str_cols.append(col)
 
-        # create slider for numeric columns
         else:
-            min_val = df.select(pl.col(col).min()).collect().item()
-            max_val = df.select(pl.col(col).max()).collect().item()
+            min_val = min_max[f"{col}_min"]
+            max_val = min_max[f"{col}_max"]
 
             filter = html.Div(
                 [
@@ -296,7 +408,13 @@ def generate_filters(
                             max=max_val,
                             step=1,
                             marks=None,
-                            value=[min_val, max_val],
+                            value=(
+                                initial_values.get("num_filters", {}).get(
+                                    col, [min_val, max_val]
+                                )
+                                if initial_values
+                                else [min_val, max_val]
+                            ),
                             tooltip={"always_visible": True, "placement": "bottom"},
                         ),
                         id={"type": f"{prefix}-collapse", "index": col},
@@ -319,7 +437,6 @@ def generate_filters(
                 {"label": str(i), "value": i} for i in sorted(mult_table_options)
             ]
 
-            # set default value as the first option
             default_value = options[0]["value"] if len(options) > 0 else None
 
             filter = html.Div(
@@ -350,14 +467,20 @@ def generate_filters(
             str_cols.append(category)
             filters.append(filter)
 
-    filter_dict = {"filters": filters, "str_cols": str_cols, "num_cols": num_cols}
+    filter_dict = {
+        "filters": filters,
+        "str_cols": str_cols,
+        "num_cols": num_cols,
+        "cat_values": cat_values,
+        "min_max": min_max,
+    }
     return filter_dict
 
 
 def get_active_filters(
     callback_context: Any,
-    str_filters: Optional[list[Any]] = None,
-    num_filters: Optional[list[Any]] = None,
+    str_filters: list[Any] | None = None,
+    num_filters: list[Any] | None = None,
 ) -> list[Any]:
     """
     Create a list of active filters for display.
@@ -417,8 +540,8 @@ def get_active_filters(
 
 
 def toggle_collapse(
-    callback_context: Any, is_open: List[bool], children: List[dict]
-) -> tuple[List[bool], List[List[dict]]]:
+    callback_context: Any, is_open: list[bool], children: list[dict]
+) -> tuple[list[Any], list[Any]]:
     """
     Toggle collapse state of filter checklists.
 
@@ -475,7 +598,7 @@ def toggle_collapse(
     return new_is_open, new_children
 
 
-def get_card_list(config: Dict[str, Any]) -> List[str]:
+def get_card_list(config: dict[str, Any]) -> list[str]:
     """
     Get list of variables to display in cards.
 
@@ -502,7 +625,7 @@ def get_card_list(config: Dict[str, Any]) -> List[str]:
 
 def generate_card(
     df: pl.LazyFrame,
-    card_list: List[str],
+    card_list: list[str],
     title: str = "Data",
     color: str = "Azure",
     inverse: bool = False,
@@ -534,8 +657,10 @@ def generate_card(
     """
     card_body_content = []
 
+    # calculate sums for the card list columns in one go to optimize performance
+    sums = df.select([pl.col(c).sum().alias(c) for c in card_list]).collect()
     for column in card_list:
-        column_sum = df.select(pl.col(column).sum()).collect().item()
+        column_sum = sums[column][0]
         value_text = f"{column}: {convert_to_short_number(column_sum)}"
         card_body_content.append(html.P(value_text, className="card-text"))
 
@@ -551,10 +676,10 @@ def generate_card(
 
 
 def generate_selectors(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     prefix: str,
-    selector_dict: Dict[str, bool],
-) -> List[html.Div]:
+    selector_dict: dict[str, bool],
+) -> list[html.Div]:
     """
     Generate selectors.
 
@@ -629,7 +754,7 @@ def generate_selectors(
                     [
                         html.Label("X-Axis/Relative Feature"),
                         html.Span(
-                            "ℹ",  # Info icon
+                            "ℹ",  # Info icon  # noqa: RUF001
                             id="relative-info",
                             style={
                                 "marginLeft": "8px",
@@ -805,7 +930,7 @@ def generate_selectors(
                     [
                         html.Label("Normalize"),
                         html.Span(
-                            "ℹ",  # Info icon
+                            "ℹ",  # Info icon  # noqa: RUF001
                             id="normalize-info",
                             style={
                                 "marginLeft": "8px",
@@ -948,7 +1073,31 @@ def generate_selectors(
         html.Div(
             id={"type": prefix_group, "index": "relative_to"},
             children=[
-                html.Label("Relative To"),
+                html.Div(
+                    [
+                        html.Label("Relative To"),
+                        html.Span(
+                            "ℹ",  # Info icon  # noqa: RUF001
+                            id="relative-info",
+                            style={
+                                "marginLeft": "8px",
+                                "cursor": "help",
+                                "color": "#007bff",
+                                "fontWeight": "bold",
+                                "fontSize": "16px",
+                                "position": "relative",
+                            },
+                            title=(
+                                "Aggregate: compares to the overall aggregate. "
+                                "Reference: compares to the lowest value in the group, "
+                                "so that the lowest point will be 1."
+                                "Subset: compares to a specific subset based on the "
+                                "subset dict. "
+                            ),
+                        ),
+                    ],
+                    style={"display": "flex", "alignItems": "center"},
+                ),
                 dcc.Dropdown(
                     id={"type": prefix_selector, "index": "relative_to_selector"},
                     options=["aggregate", "subset", "reference"],
@@ -987,6 +1136,25 @@ def generate_selectors(
             if selector_dict.get("flip_x_color") == True
             else {"display": "none"},
         ),
+        html.Div(
+            id={"type": prefix_group, "index": "rank_columns"},
+            children=[
+                html.Label("Rank Columns"),
+                dcc.Dropdown(
+                    id={
+                        "type": prefix_selector,
+                        "index": "rank_columns_selector",
+                    },
+                    options=config_dataset["columns"]["features"],
+                    value=config_dataset["columns"]["features"],
+                    multi=True,
+                    placeholder="Select Rank Columns",
+                ),
+            ],
+            style={"display": "block"}
+            if selector_dict.get("rank_columns") == True
+            else {"display": "none"},
+        ),
     ]
 
     # filter selectors
@@ -999,7 +1167,7 @@ def generate_selectors(
     return selectors
 
 
-def load_config(dash_config_path: str = helpers.DASH_CONFIG_PATH) -> Dict[str, Any]:
+def load_config(dash_config_path: str = helpers.DASH_CONFIG_PATH) -> dict[str, Any]:
     """
     Load the yaml configuration file.
 
@@ -1016,11 +1184,12 @@ def load_config(dash_config_path: str = helpers.DASH_CONFIG_PATH) -> Dict[str, A
     """
     with open(dash_config_path, "r") as file:
         config = yaml.safe_load(file)
+    config.pop("tokens", None)
     return config
 
 
 def write_config(
-    config: Dict[str, Any], dash_config_path: str = helpers.DASH_CONFIG_PATH
+    config: dict[str, Any], dash_config_path: str = helpers.DASH_CONFIG_PATH
 ) -> None:
     """
     Write the yaml configuration file.
@@ -1038,7 +1207,7 @@ def write_config(
         yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
 
-def list_files_in_folder(folder_path: str) -> List[str]:
+def list_files_in_folder(folder_path: str) -> list[str]:
     """
     List files in the directory.
 
@@ -1065,8 +1234,8 @@ def list_files_in_folder(folder_path: str) -> List[str]:
 
 
 def flatten_columns(
-    df: Union[pd.DataFrame, pl.LazyFrame],
-) -> Union[pd.DataFrame, pl.LazyFrame]:
+    df: pd.DataFrame | pl.LazyFrame,
+) -> pd.DataFrame | pl.LazyFrame:
     """
     Flatten columns in dataframe.
 
@@ -1112,7 +1281,7 @@ def flatten_columns(
     return df
 
 
-def _inputs_flatten_list(input_list: List[Any]) -> List[Any]:
+def _inputs_flatten_list(input_list: list[Any]) -> list[Any]:
     flat_list = []
     for item in input_list:
         if isinstance(item, dict):
@@ -1122,7 +1291,7 @@ def _inputs_flatten_list(input_list: List[Any]) -> List[Any]:
     return flat_list
 
 
-def _inputs_parse_id(input_list: List[Any], id_value: str) -> Any:
+def _inputs_parse_id(input_list: list[Any], id_value: str) -> Any:
     """
     Parse inputs for id value.
 
@@ -1153,7 +1322,7 @@ def _inputs_parse_id(input_list: List[Any], id_value: str) -> Any:
     return None
 
 
-def _inputs_parse_type(input_list: List[Any], type_value: str) -> List[Any]:
+def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
     """
     Parse inputs for type value.
 
@@ -1206,9 +1375,9 @@ def register_export_callback(app) -> None:  # noqa: ANN001
     The tab and page values must match between the button and table for proper pairing.
 
     """
-    import dash
-    import pandas as pd
-    from dash_extensions.enrich import (
+    import dash  # noqa: PLC0415
+    import pandas as pd  # noqa: PLC0415
+    from dash_extensions.enrich import (  # noqa: PLC0415
         ALL,
         Input,
         Output,
@@ -1225,7 +1394,7 @@ def register_export_callback(app) -> None:  # noqa: ANN001
         prevent_initial_call=True,
     )
     def export_table(
-        n_clicks_list: List[Optional[int]], table_data_list: List[List[Any]]
+        n_clicks_list: list[int | None], table_data_list: list[list[Any]]
     ) -> None:
         """
         Export table data to CSV.

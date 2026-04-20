@@ -5,9 +5,11 @@ inspired by:
 https://gist.github.com/joshbode/58fac7ababc700f51e2a9ecdebe563ad
 """
 
+from __future__ import annotations
+
 import logging
 import sys
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from colorama import Back, Fore, Style
 
@@ -15,7 +17,7 @@ from colorama import Back, Fore, Style
 class ColoredFormatter(logging.Formatter):
     """Colored log formatter."""
 
-    def __init__(self, *args, colors: Optional[dict] = None, **kwargs) -> None:
+    def __init__(self, *args, colors: dict | None = None, **kwargs) -> None:
         """Initialize the formatter with specified format strings."""
         super().__init__(*args, **kwargs)
 
@@ -132,16 +134,16 @@ def get_log_level(module_prefix: str = "morai") -> str:
     # root logger level
     if not module_prefix:
         level = logging.getLogger().getEffectiveLevel()
-        return level_name_map.get(level)
+        return level_name_map.get(level, "UNKNOWN")
 
     for logger_name in list(logging.Logger.manager.loggerDict.keys()):
         # Check if the logger's name starts with the specified prefix
         if logger_name.startswith(module_prefix):
             logger = logging.getLogger(logger_name)
             level = logger.getEffectiveLevel()
-            return level_name_map.get(level)
+            return level_name_map.get(level, "UNKNOWN")
 
-    return None
+    return "UNKNOWN"
 
 
 def suppress_logs(func: Callable) -> Callable:

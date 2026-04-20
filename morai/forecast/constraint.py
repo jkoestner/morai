@@ -1,6 +1,6 @@
 """Constraint functions."""
 
-from typing import Optional
+from __future__ import annotations
 
 import pandas as pd
 
@@ -45,7 +45,7 @@ class TableConstrainer:
         issue_age_col: str,
         duration_col: str,
         attained_age_col: str,
-        other_feature_cols: Optional[list] = None,
+        other_feature_cols: list | None = None,
         min_increase: float = 0.001,
         iteration_limit: int = 10,
     ) -> None:
@@ -83,13 +83,20 @@ class TableConstrainer:
             The fixed dataframe
 
         """
+        # initialize variables
         logger.info(f"Fixing dataframe on `{self.col_to_fix}`")
         fixed_df = df
         fixed_col = f"{self.col_to_fix}_fixed"
         fixed_df[fixed_col] = fixed_df[self.col_to_fix]
         fixed_ind = "fixed_ind"
         fixed_df[fixed_ind] = 0
+        issue_age_col = self.issue_age_col
+        duration_col = self.duration_col
+        attained_age_col = self.attained_age_col
+        other_feature_cols = self.other_feature_cols or []
+        iteration_limit = self.iteration_limit
 
+        # set up parameters and constraints
         params = {
             "col_to_fix": fixed_col,
             "min_increase": self.min_increase,
@@ -98,16 +105,16 @@ class TableConstrainer:
 
         inner_constraints = [
             {
-                "constraint_col": self.issue_age_col,
-                "other_feature_cols": [self.duration_col, *self.other_feature_cols],
+                "constraint_col": issue_age_col,
+                "other_feature_cols": [duration_col, *other_feature_cols],
             },
             {
-                "constraint_col": self.duration_col,
-                "other_feature_cols": [self.issue_age_col, *self.other_feature_cols],
+                "constraint_col": duration_col,
+                "other_feature_cols": [issue_age_col, *other_feature_cols],
             },
             {
-                "constraint_col": self.attained_age_col,
-                "other_feature_cols": [self.issue_age_col, *self.other_feature_cols],
+                "constraint_col": attained_age_col,
+                "other_feature_cols": [issue_age_col, *other_feature_cols],
             },
         ]
 
@@ -115,16 +122,16 @@ class TableConstrainer:
             {
                 "constraint_col": col,
                 "other_feature_cols": [
-                    self.issue_age_col,
-                    self.duration_col,
-                    *[c for c in self.other_feature_cols if c != col],
+                    issue_age_col,
+                    duration_col,
+                    *[c for c in other_feature_cols if c != col],
                 ],
             }
-            for col in (self.other_feature_cols or [])
+            for col in other_feature_cols
         ]
 
         # fix the wrong rates
-        for iteration in range(1, self.iteration_limit + 1):
+        for iteration in range(1, iteration_limit + 1):
             starting_fixes = fixed_df["fixed_ind"].sum()
 
             # inner constraints
@@ -208,7 +215,7 @@ def run_constraint(
     constraint_col: str,
     other_feature_cols: list,
     min_increase: float = 0.001,
-    fixed_col: Optional[str] = None,
+    fixed_col: str | None = None,
 ) -> pd.DataFrame:
     """
     Run constraint on a dataframe.

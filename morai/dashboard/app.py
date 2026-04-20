@@ -16,6 +16,7 @@ with "standard font"
 
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, ServersideOutputTransform, dcc, html
 
 from morai.dashboard.utils import dashboard_helper as dh
@@ -71,6 +72,7 @@ app.index_string = """
 page_links = [
     dbc.NavItem(dbc.NavLink(page["name"], href=page["relative_path"]))
     for page in dash.page_registry.values()
+    if not page.get("hidden", False)
 ]
 
 navbar = dbc.Navbar(
@@ -134,14 +136,16 @@ navbar = dbc.Navbar(
     sticky="top",
 )
 
-app.layout = html.Div(
-    [
-        dcc.Store(id="store-config", storage_type="session"),
-        dcc.Store(id="store-dataset", storage_type="session"),
-        dcc.Location(id="url", refresh=False),
-        navbar,
-        dash.page_container,
-    ]
+app.layout = dmc.MantineProvider(
+    html.Div(
+        [
+            dcc.Store(id="store-config", storage_type="session"),
+            dcc.Store(id="store-dataset", storage_type="session"),
+            dcc.Location(id="url", refresh=False),
+            navbar,
+            dash.page_container,
+        ]
+    )
 )
 
 dh.register_export_callback(app)
@@ -153,7 +157,7 @@ dh.register_export_callback(app)
     [dash.Input("navbar-toggler", "n_clicks")],
     [dash.State("navbar-collapse", "is_open")],
 )
-def toggle_navbar_collapse(n, is_open):
+def toggle_navbar_collapse(n: int, is_open: bool) -> bool:
     """Toggle the navbar collapse on mobile."""
     if n:
         return not is_open

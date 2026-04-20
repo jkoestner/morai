@@ -7,7 +7,10 @@ collection of data from the CDC Wonder database.
 Link: https://wonder.cdc.gov/
 
 There are data limitations from the CDC web service listed here
-https://wonder.cdc.gov/wonder/help/WONDER-API.html
+https://wonder.cdc.gov/datause.html#
+
+For API use the following link is a reference on how to use.
+https://wonder.cdc.gov/wonder/help/wonder-api.html
 
 For instance the web service does not provide support for location based filters.
 
@@ -17,10 +20,13 @@ reference.
 Link: https://github.com/alipphardt/cdc-wonder-api
 """
 
+from __future__ import annotations
+
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Optional
+from functools import lru_cache
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import requests
@@ -32,10 +38,34 @@ from morai.utils.helpers import check_merge
 
 logger = custom_logger.setup_logging(__name__)
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+# global variables
+AGE_GROUP_ORDER = [
+    "Not Stated",
+    "< 1 year",
+    "1-4 years",
+    "5-9 years",
+    "10-14 years",
+    "5-14 years",
+    "15-19 years",
+    "20-24 years",
+    "15-24 years",
+    "25-34 years",
+    "35-44 years",
+    "45-54 years",
+    "55-64 years",
+    "65-74 years",
+    "75-84 years",
+    "85+ years",
+    "total",
+]
+
 
 def get_cdc_data_xml(
     xml_filename: str,
-    parse_date_col: Optional[str] = None,
+    parse_date_col: str | None = None,
     convert_dtypes: bool = True,
     clean_df: bool = True,
 ) -> pd.DataFrame:
@@ -147,13 +177,13 @@ def get_cdc_data_txt(
     return cdc_df
 
 
-def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
+def get_cdc_data_sql(db_filepath: str | Path, table_name: str) -> pd.DataFrame:
     """
     Get CDC data from a SQLite database.
 
     Parameters
     ----------
-    db_filepath : str
+    db_filepath : str | Path
         Database file path.
     table_name : str
         Table name.
@@ -168,41 +198,16 @@ def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
     query = f"""
             SELECT *
             FROM {table_name}
-            ORDER BY added_at
-            DESC LIMIT 1
-            """
-    last_date_row = sql.read_sql(db_filepath, query)
-    last_date = last_date_row["added_at"].iloc[0]
-
-    query = f"""
-            SELECT *
-            FROM {table_name}
             """
     cdc_df = sql.read_sql(db_filepath, query)
 
+    # get last date
+    last_date = cdc_df["added_at"].max()
+
     # correctly order the age groups
     if "age_groups" in cdc_df.columns:
-        age_group_order = [
-            "Not Stated",
-            "< 1 year",
-            "1-4 years",
-            "5-9 years",
-            "10-14 years",
-            "5-14 years",
-            "15-19 years",
-            "20-24 years",
-            "15-24 years",
-            "25-34 years",
-            "35-44 years",
-            "45-54 years",
-            "55-64 years",
-            "65-74 years",
-            "75-84 years",
-            "85+ years",
-            "total",
-        ]
         cdc_df["age_groups"] = pd.Categorical(
-            cdc_df["age_groups"], categories=age_group_order, ordered=True
+            cdc_df["age_groups"], categories=AGE_GROUP_ORDER, ordered=True
         )
         cdc_df["age_groups"] = cdc_df["age_groups"].cat.remove_unused_categories()
 
@@ -213,18 +218,33 @@ def get_cdc_data_sql(db_filepath: str, table_name: str) -> pd.DataFrame:
     return cdc_df
 
 
-def get_last_updated(table_name: Optional[str] = None) -> str:
-    """Get the last updated date of a table."""
+def get_last_updated(table_name: str | None = None) -> str:
+    """
+    Get the last updated date of a table.
+
+    Parameters
+    ----------
+    table_name : str, optional
+        The name of the table to check. If None, defaults to "mcd18_cod".
+
+    Returns
+    -------
+    last_updated : str
+        The last updated date of the table.
+
+    """
     if table_name is None:
         table_name = "mcd18_cod"
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
     tables = sql.get_tables(db_filepath=db_filepath)
     if table_name not in tables:
         return ""
-    df = get_cdc_data_sql(db_filepath=db_filepath, table_name=table_name)
-    return df["added_at"].max()
+    query = f"SELECT MAX(added_at) as last_updated FROM {table_name}"
+    result = sql.read_sql(db_filepath, query)
+    return result["last_updated"].iloc[0] or ""
 
 
+@lru_cache(maxsize=10)
 def get_cdc_reference(sheet_name: str) -> pd.DataFrame:
     """
     Get CDC reference data.
@@ -253,9 +273,9 @@ def get_cdc_reference(sheet_name: str) -> pd.DataFrame:
 def map_reference(
     df: pd.DataFrame,
     col: str,
-    on_dict: Optional[dict] = None,
+    on_dict: dict | None = None,
     sheet_name: str = "cod",
-    category: Optional[str] = None,
+    category: str | None = None,
 ) -> pd.DataFrame:
     """
     Map a column from the CDC reference to the DataFrame.
@@ -299,7 +319,7 @@ def map_reference(
     # merge the col into the df
     df = check_merge(pd.merge)(
         left=df,
-        right=mapping[[reference_on, col]],
+        right=mapping,
         how="left",
         left_on=df_on,
         right_on=reference_on,
@@ -373,8 +393,8 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
 def compare_dfs(
     left_df: pd.DataFrame,
     right_df: pd.DataFrame,
-    compare_col_dict: Optional[dict] = None,
-    compare_value_dict: Optional[dict] = None,
+    compare_col_dict: dict | None = None,
+    compare_value_dict: dict | None = None,
 ) -> pd.DataFrame:
     """
     Compare two DataFrames.
@@ -463,13 +483,18 @@ def get_top_deaths_by_age_group(
         on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
 
+    # re-apply categorical ordering
+    df_year["age_groups"] = pd.Categorical(
+        df_year["age_groups"], categories=AGE_GROUP_ORDER, ordered=True
+    )
+
     # group the data for top 10 deaths in each age_group
     grouped = (
-        df_year.groupby(["age_groups", cod_col], observed=False)["deaths"]
+        df_year.groupby(["age_groups", cod_col], observed=True)["deaths"]
         .sum()
         .reset_index()
     )
-    grouped = grouped.sort_values(by=["age_groups", "deaths"], ascending=[False, False])
+    grouped = grouped.sort_values(by=["age_groups", "deaths"], ascending=[True, False])
     top_deaths = grouped.groupby("age_groups", observed=False).head(10).copy()
     top_deaths["rank"] = top_deaths.groupby("age_groups", observed=False)[
         "deaths"
@@ -484,7 +509,7 @@ def get_top_deaths_by_age_group(
 
 def _xml_parse_dataid(xml_string: str) -> str:
     """
-    Parse the data-id from an XML string object.
+    Parse the data-id from an XML string object for CDC Wonder.
 
     Parameters
     ----------
@@ -498,7 +523,12 @@ def _xml_parse_dataid(xml_string: str) -> str:
 
     """
     root = ET.fromstring(xml_string)
-    value = root.find(".//parameter[name='B_1']/value").text
+    param = root.find(".//parameter[name='B_1']/value")
+    if param is None:
+        raise ValueError("Could not find parameter 'B_1' in XML.")
+    value = param.text
+    if value is None:
+        raise ValueError("Parameter 'B_1' has no text value.")
     data_id = value.split(".")[0]
 
     return data_id
@@ -522,11 +552,24 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
 
     """
     root = ET.fromstring(xml_response)
+
+    # initialize variables
+    column_values: list[str | None] = []
+    cells: list[str | None] = []
+    data_through: str | datetime | None = None
+
     # get the data-table
     data_table = root.find(".//data-table")
+    if data_table is None:
+        raise ValueError("Could not find 'data-table' in XML.")
 
     # check if show-totals is true
-    show_totals = root.find(".//parameter[@code='O_show_totals']/value").text
+    param = root.find(".//parameter[@code='O_show_totals']/value")
+    if param is None:
+        raise ValueError("Could not find parameter 'O_show_totals' in XML.")
+    show_totals = param.text
+    if show_totals is None:
+        raise ValueError("Parameter 'O_show_totals' has no text value.")
     if show_totals == "true":
         logger.warning(
             "show totals is true, this should be false with option `O_show_totals`"
@@ -539,25 +582,30 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
     cdc_mapping = cdc_mapping["value"].to_dict()
 
     # get the column names
-    byvariables = [
-        var.get("code").split(".")[1] for var in root.findall(".//byvariables/variable")
-    ]
-    measure_selections = [
-        measure.get("code").split(".")[1]
-        for measure in root.find(".//measure-selections").findall(".//measure")
-    ]
+    byvariables = []
+    for var in root.findall(".//byvariables/variable"):
+        code = var.get("code")
+        if code is not None:
+            byvariables.append(code.split(".")[1])
+
+    measure_parent = root.find(".//measure-selections")
+    if measure_parent is None:
+        raise ValueError("Could not find 'measure-selections' in XML.")
+    measure_selections = []
+    for measure in measure_parent.findall(".//measure"):
+        code = measure.get("code")
+        if code is not None:
+            measure_selections.append(code.split(".")[1])
     columns = byvariables + measure_selections
     columns = [cdc_mapping.get(key, key) for key in columns]
     num_columns = len(columns)
-
-    # create the data table
-    rows = []
 
     # initialize row-span counts and values for each column
     row_span_counts = [0] * num_columns
     column_values = [None] * num_columns
 
     # iterate over the rows
+    rows = []
     for row in data_table.findall("r"):
         row_cells = row.findall("c")
         cell_idx = 0
@@ -573,7 +621,7 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
                     if "r" in cell.attrib:
                         # row-spanning cell
                         value = cell.get("l") or cell.get("v") or cell.text
-                        row_span_counts[idx] = int(cell.get("r")) - 1
+                        row_span_counts[idx] = int(cell.attrib["r"]) - 1
                         column_values[idx] = value
                     else:
                         # regular cell
@@ -658,7 +706,7 @@ def _infer_dtypes(df: pd.DataFrame) -> pd.DataFrame:
             continue
         df[col] = pd.to_numeric(df[col].str.replace(",", ""), errors="coerce")
 
-    float_cols = [col for col in [] if col in df.columns]
+    float_cols = [col for col in ["placeholder"] if col in df.columns]
     for col in float_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 

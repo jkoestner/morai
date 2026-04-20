@@ -1,36 +1,35 @@
 """Collection of helpers."""
 
+from __future__ import annotations
+
 import gc
 import json
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
 
 from morai.utils import custom_logger
 
+_files_env = os.getenv("MORAI_FILES_PATH")
 ROOT_PATH = Path(__file__).resolve().parent.parent.parent
 TESTS_PATH = ROOT_PATH / "tests" / "files"
-FILES_PATH = (
-    Path(os.getenv("MORAI_FILES_PATH"))
-    if os.getenv("MORAI_FILES_PATH")
-    else ROOT_PATH / "files"
-)
+FILES_PATH = Path(_files_env) if _files_env else ROOT_PATH / "files"
 DASH_CONFIG_PATH = FILES_PATH / "dashboard_config.yaml"
 
 logger = custom_logger.setup_logging(__name__)
 
 
 def clean_df(
-    data: Union[pd.DataFrame, dict],
+    data: pd.DataFrame | dict,
     lowercase: bool = True,
     underscore: bool = True,
     update_cat: bool = True,
-) -> Union[pd.DataFrame, dict]:
+) -> pd.DataFrame | dict:
     """
     Clean the DataFrame.
 
@@ -225,7 +224,7 @@ def delete_jupyter_objects(objects: list) -> None:  # pragma: no cover
     logger.info(f"deleted `{len(objects)}` objects in the Jupyter notebook")
 
 
-def test_path(path: str) -> Path:
+def test_path(path: str) -> str:
     """
     Test the path with a few different options and return if it exists.
 
@@ -236,8 +235,8 @@ def test_path(path: str) -> Path:
 
     Returns
     -------
-    path : pathlib.Path
-        The path as a pathlib.Path.
+    path : str
+        The path as a str.
 
     """
     paths_to_try = [
@@ -372,7 +371,7 @@ def check_merge(func: Callable) -> Callable:
 
 
 def _weighted_mean(
-    values: Union[list, np.ndarray], weights: Optional[Union[list, np.ndarray]] = None
+    values: list | np.ndarray, weights: list | np.ndarray | None = None
 ) -> float:
     """
     Calculate the weighted mean.
@@ -391,15 +390,15 @@ def _weighted_mean(
 
     """
     if weights is None or len(weights) == 0:
-        return values.mean()
-    elif isinstance(weights, list):
-        weights = np.array(weights)
+        return float(np.mean(values))
 
-    if weights.sum() == 0:
+    w = np.asarray(weights)
+
+    if w.sum() == 0:
         logger.warning("The sum of the weights is 0, returning NaN")
-        return np.nan
-    else:
-        return np.average(values, weights=weights)
+        return float(np.nan)
+
+    return float(np.average(values, weights=w))
 
 
 def _convert_object_to_category(df: pd.DataFrame, column: str) -> pd.DataFrame:
@@ -419,12 +418,12 @@ def _convert_object_to_category(df: pd.DataFrame, column: str) -> pd.DataFrame:
         The DataFrame with the column converted to a category.
 
     """
-    if df[column].dtype == "object":
+    if df[column].dtype == "object" or isinstance(df[column].dtype, pd.StringDtype):
         df[column] = df[column].astype("category")
     return df
 
 
-def _to_list(val: Union[str, list, dict, None]) -> list:
+def _to_list(val: str | list | dict | None) -> list:
     """
     Convert a string, dict, or None to a list.
 

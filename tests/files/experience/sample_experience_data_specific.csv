@@ -1,0 +1,16 @@
+id,gender,smoker,issue_date, amount ,termination_date,termination_reason,notes
+1,M,NS,10/23/2023,"100,000",,,not in the study (2022) - new issue
+2,M,NS,11/25/2019,"50,000",12/1/2022,D,annual - not in the study (2023) - death | distributed - inforce (2023) - death
+3,F,NS,4/9/2013,"100,000",10/23/2022,L,not in the study (2023) - lapse
+4,M,NS,11/26/2019,"100,000",,,inforce
+5,M,NS,10/23/2023,"100,000",,,new issue - inforce (2023)
+6,F,NS,11/26/2023,"100,000",12/10/2024,D,new issue - death (2023)
+7,F,NS,11/26/2023,"100,000",12/10/2024,L,new issue - lapse (2023)
+8,F,NS,11/27/2020,"50,000",11/25/2023,L,lapse before anniversary
+9,F,NS,4/9/2013,"50,000",4/9/2023,L,lapse on anniversary
+10,F,S,7/17/2016,"50,000",10/24/2023,L,lapse after anniversary
+11,M,NS,5/11/2014,"50,000",2/2/2023,D,death before anniversary
+12,M,NS,3/7/2013,"100,000",3/7/2023,D,death on anniversary
+13,F,NS,11/26/2019,"100,000",12/28/2023,D,death after anniversary
+14,F,NS,3/7/2013,"50,000",4/8/2024,L,partial year (6/30/2024) - lapse
+15,M,NS,11/27/2020,"50,000",3/7/2024,D,partial year (6/30/2024) - death

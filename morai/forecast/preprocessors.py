@@ -1,6 +1,8 @@
 """Preprocessors used in the models."""
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +23,7 @@ def preprocess_data(
     standardize: bool = False,
     scale_weights: bool = False,
     clean: bool = False,
-    preset: Optional[str] = None,
+    preset: str | None = None,
 ) -> dict:
     """
     Preprocess the features.
@@ -72,10 +74,10 @@ def preprocess_data(
     """
     # initializing the variables
     feature_dict = feature_dict.copy()
-    mapping = {}
-    y = None
-    weights = None
-    constant_col = []
+    mapping: dict[str, dict] = {}
+    y: pd.Series | None = None
+    weights: pd.Series | None = None
+    constant_col: list[str] = []
 
     # check if the feature_dict has the acceptable keys
     for key in feature_dict.keys():
@@ -115,9 +117,8 @@ def preprocess_data(
     for features in model_feature_dict.values():
         model_features.extend(features)
     if len(model_features) != len(set(model_features)):
-        seen = set()
-        duplicates = {x for x in model_features if x in seen or seen.add(x)}
-        raise ValueError(f"duplicates found: {duplicates}")
+        duplicates = [x for x in model_features if model_features.count(x) > 1]
+        raise ValueError(f"duplicates found: {set(duplicates)}")
 
     # get the dictionary values
     model_target = model_feature_dict.get("target", [])
@@ -157,15 +158,15 @@ def preprocess_data(
             "or 'ohe' and instead uses 'ordinal'"
         )
         ordinal_cols = ordinal_cols + nominal_cols + ohe_cols + spline_cols
-        nominal_cols = None
-        ohe_cols = None
+        nominal_cols = []
+        ohe_cols = []
     elif preset == "pass":
         logger.info("using 'pass' preset which makes all features passthrough")
         passthrough_cols = model_features
-        cat_pass_cols = None
-        ordinal_cols = None
-        nominal_cols = None
-        ohe_cols = None
+        cat_pass_cols = []
+        ordinal_cols = []
+        nominal_cols = []
+        ohe_cols = []
 
     # get y, weights, and X
     if model_target:
@@ -500,9 +501,9 @@ def lazy_bin_feature(
 
 def lazy_groupby(
     df: pl.LazyFrame,
-    groupby_cols: Union[str, List[str]],
-    agg_cols: Union[str, List[str]],
-    aggs: Union[str, List[str]],
+    groupby_cols: str | list[str],
+    agg_cols: str | list[str],
+    aggs: str | list[str],
 ) -> pl.LazyFrame:
     """
     Mimics a Pandas groupby call using Polars' lazy API.
@@ -562,7 +563,7 @@ def lazy_groupby(
     return grouped_df
 
 
-def get_dimensions(mapping: Dict[str, Any]) -> pd.DataFrame:
+def get_dimensions(mapping: dict[str, Any]) -> pd.DataFrame:
     """
     Get the dimensions for each feature in the mapping.
 
@@ -590,7 +591,7 @@ def get_dimensions(mapping: Dict[str, Any]) -> pd.DataFrame:
     return dimensions
 
 
-def remap_values(df: pd.DataFrame, mapping: Dict[str, Any]) -> pd.DataFrame:
+def remap_values(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
     """
     Remap the values using the mapping.
 
@@ -626,7 +627,7 @@ def remap_values(df: pd.DataFrame, mapping: Dict[str, Any]) -> pd.DataFrame:
     return df
 
 
-def update_mapping(mapping: Dict[str, Any], key: str, values: Any) -> Dict[str, Any]:
+def update_mapping(mapping: dict[str, Any], key: str, values: Any) -> dict[str, Any]:
     """
     Update the mapping key values.
 
@@ -659,10 +660,10 @@ def update_mapping(mapping: Dict[str, Any], key: str, values: Any) -> Dict[str, 
 
 def time_based_split(
     *arrays,
-    time_col: Optional[str] = None,
-    cutoff: Optional[int] = None,
+    time_col: str | None = None,
+    cutoff: int | None = None,
     **kwargs: dict,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series]:
+) -> list[Any]:
     """
     Split X, y, weights by a calendar/time column and a cutoff value.
 

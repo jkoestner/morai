@@ -1,6 +1,8 @@
 """Creates neural models for forecasting mortality rates."""
 
-from typing import Dict, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -56,8 +58,8 @@ class Neural(nn.Module):
     def __init__(
         self,
         task: str = "poisson",
-        embedding_cols: Optional[list] = None,
-        embedding_dims: Optional[Dict[str, int]] = None,
+        embedding_cols: list | None = None,
+        embedding_dims: dict[str, int] | None = None,
     ) -> None:
         """
         Initialize the model.
@@ -77,19 +79,24 @@ class Neural(nn.Module):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.task = task
-        self.feature_names = None
+        self.feature_names: list[str] | None = None
         if embedding_cols is None:
             embedding_cols = []
         self.embedding_cols = embedding_cols
-        self.num_cols = []
+        self.num_cols: list[str] = []
         if embedding_dims is None:
             embedding_dims = {}
         self.embedding_dims = embedding_dims
         self.embeddings = nn.ModuleDict()
-        self.wide_linear = None
-        self.fc1 = self.fc2 = self.fc3 = self.output = None
-        self.relu1 = self.relu2 = self.relu3 = None
-        self.label_encoders = {}
+        self.wide_linear: nn.Linear | None = None
+        self.fc1: nn.Linear | None = None
+        self.fc2: nn.Linear | None = None
+        self.fc3: nn.Linear | None = None
+        self.output: nn.Linear | None = None
+        self.relu1: nn.ReLU | None = None
+        self.relu2: nn.ReLU | None = None
+        self.relu3: nn.ReLU | None = None
+        self.label_encoders: dict[str, Any] = {}
         self._is_fitted = False
         self.to(self.device)
         logger.info(
@@ -144,7 +151,7 @@ class Neural(nn.Module):
             self.output.bias.fill_(0.0)
 
     def forward(
-        self, X_torch_num: torch.Tensor, X_torch_embed_idx: [torch.Tensor]
+        self, X_torch_num: torch.Tensor, X_torch_embed_idx: list[torch.Tensor]
     ) -> torch.Tensor:
         """
         Forward function to be called from nn.Module.
@@ -164,6 +171,18 @@ class Neural(nn.Module):
             The output tensor
 
         """
+        # check if model is set up
+        if (
+            self.wide_linear is None
+            or self.fc1 is None
+            or self.fc2 is None
+            or self.fc3 is None
+            or self.output is None
+            or self.relu1 is None
+            or self.relu2 is None
+            or self.relu3 is None
+        ):
+            raise RuntimeError("Model not initialized.")
         if self.embedding_cols:
             embedding_vectors = [
                 self.embeddings[col](idx)
@@ -209,13 +228,13 @@ class Neural(nn.Module):
         weights_test: pd.Series,
         epochs: int = 100,
         lr: float = 0.001,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
         dropout: float = 0.0,
         weight_decay: float = 0.0001,
         early_stopping: bool = True,
         warmup_epochs: int = 50,
         max_patience: int = 20,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> None:
         """
         Fit the model.
@@ -281,6 +300,8 @@ class Neural(nn.Module):
                 "model has already been set up and calling fit again"
                 "will update existing weights."
             )
+        if self.wide_linear is None or self.output is None:
+            raise RuntimeError("Model not initialized.")
         if self.task not in ("poisson", "binomial"):
             raise ValueError("task must be 'poisson' or 'binomial'")
         if not (X.index.equals(y.index) and X.index.equals(weights.index)):
@@ -365,7 +386,7 @@ class Neural(nn.Module):
             epoch_loss = 0.0
             num_batches = 0
 
-            if use_mini_batch:
+            if use_mini_batch and batch_size is not None:
                 # shuffle
                 perm = torch.randperm(y_torch_length, device=self.device)
 
@@ -555,7 +576,7 @@ class Neural(nn.Module):
 
     def predict(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
     ) -> np.ndarray:
         """
         Predict the target.
@@ -591,9 +612,9 @@ class Neural(nn.Module):
             if X[col].dtype == "object" or isinstance(X[col].iloc[0], str):
                 valid_values = set(self.label_encoders[col].keys())
                 X[col] = X[col].apply(
-                    lambda x, valid_values=valid_values: x
-                    if x in valid_values
-                    else "__UNK__"
+                    lambda x, valid_values=valid_values: (
+                        x if x in valid_values else "__UNK__"
+                    )
                 )
             # map integers back to strings
             else:
@@ -826,7 +847,7 @@ class Neural(nn.Module):
 
     def _prepare_input_tensor(
         self, X: pd.DataFrame
-    ) -> Tuple[torch.Tensor, [torch.Tensor]]:
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """
         Prepare input tensor by combining numerical features and embeddings list.
 
@@ -900,7 +921,7 @@ class Shap:
         model: Neural,
         background_df: pd.DataFrame,
         n_samples: int = 100,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> None:
         """
         Initialize the SHAP wrapper.
@@ -980,7 +1001,7 @@ class Shap:
         self,
         explain_df: pd.DataFrame,
         n_samples: int = 100,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> shap.Explanation:
         """
         Compute SHAP values for a dataset.

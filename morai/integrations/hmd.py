@@ -8,9 +8,10 @@ Link: https://www.mortality.org/Home/Index
 
 """
 
+from __future__ import annotations
+
 import re
 from io import StringIO
-from typing import Optional
 
 import pandas as pd
 import requests
@@ -23,8 +24,8 @@ logger = custom_logger.setup_logging(__name__)
 
 
 def get_hmd_data(
-    email: Optional[str] = None,
-    password: Optional[str] = None,
+    email: str | None = None,
+    password: str | None = None,
     url: str = "https://www.mortality.org/File/GetDocument/hmd.v6/USA/STATS/Deaths_1x1.txt",
     clean_df: bool = True,
 ) -> pd.DataFrame:
@@ -112,8 +113,8 @@ def get_hmd_data(
 
 
 def get_hmd_exposure_and_deaths(
-    email: Optional[str] = None,
-    password: Optional[str] = None,
+    email: str | None = None,
+    password: str | None = None,
 ) -> pd.DataFrame:  # pragma: no cover
     """
     Get HMD exposure and deaths data.

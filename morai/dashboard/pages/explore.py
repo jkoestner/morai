@@ -2,6 +2,7 @@
 
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import dash_mantine_components as dmc
 import polars as pl
 from dash_extensions.enrich import (
     Input,
@@ -87,8 +88,9 @@ def layout():
                                     dbc.CardBody(
                                         dcc.Loading(
                                             id="loading-table-stats",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(id="table-stats"),
                                         ),
                                     ),
@@ -114,8 +116,9 @@ def layout():
                                     dbc.CardBody(
                                         dcc.Loading(
                                             id="loading-chart-freq-num",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(id="chart-freq-num"),
                                         ),
                                     ),
@@ -141,8 +144,9 @@ def layout():
                                     dbc.CardBody(
                                         dcc.Loading(
                                             id="loading-chart-freq-cat",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(id="chart-freq-cat"),
                                         ),
                                     ),
@@ -168,8 +172,9 @@ def layout():
                                     dbc.CardBody(
                                         dcc.Loading(
                                             id="loading-chart-target",
-                                            type="default",
-                                            color="#007bff",
+                                            custom_spinner=dmc.Skeleton(
+                                                visible=True, h="100%"
+                                            ),
                                             children=html.Div(id="chart-target"),
                                         ),
                                     ),

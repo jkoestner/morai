@@ -7,7 +7,7 @@
 ![workflow badge](https://github.com/jkoestner/morai/actions/workflows/test-and-deploy.yml/badge.svg)
 [![license badge](https://img.shields.io/github/license/jkoestner/morai)](https://github.com/jkoestner/morai/blob/main/LICENSE.md)
 [![codecov](https://codecov.io/gh/jkoestner/morai/branch/main/graph/badge.svg?token=386HHBN1AK)](https://codecov.io/gh/jkoestner/morai)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Code style: black](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 ![Python](https://img.shields.io/badge/python-3.12-blue.svg)
 
 ## Table of Contents
@@ -134,4 +134,9 @@ custom_logger.set_log_level("DEBUG")
 To see the test coverage the following command is run in the root directory.
 ```
 pytest --cov=morai --cov-report=html
+```
+
+To test static typing
+```
+mypy morai
 ```

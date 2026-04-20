@@ -1,4 +1,8 @@
-"""Data Input dashboard."""
+"""
+Data Input dashboard.
+
+Uses Serverside for storing the dataset as it is too large to store in browser.
+"""
 
 import json
 
