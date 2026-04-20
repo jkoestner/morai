@@ -5,15 +5,19 @@
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.3...v0.3.4)
 
 **Enhancements**
-- update dependencies (i.e. pandas to 3.0.0)
+- add exposure and experience study logic
+- dashboard enhancements (bookmarks, analytics page, skeleton loads)
+- update dependencies (i.e. pandas to 3.0.0) and actions
 
 **Bug Fixes**
 - enhance edge case for pdp
-- performance improvements
+- performance improvements, especially in dashboard
 - add r initialization from a saved state
 
 **Documentation**
+- new notebooks including (duckdb v polars, experience_study)
 - update tests
+- add mypy static type checker
 
 ## [0.3.3](https://github.com/jkoestner/morai/tree/v0.3.3)
 

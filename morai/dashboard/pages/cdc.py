@@ -42,8 +42,8 @@ thread_lock = threading.Lock()
 # the 99 dataset ends in 2020 and the 18 dataset starts in 2018
 NEW_DATASET_START_YEAR = 2021
 # training for cod trend and population trend
-TRAIN_START_YEAR = 2015
-TRAIN_END_YEAR = 2019
+TRAIN_START_YEAR = 2023
+TRAIN_END_YEAR = 2025
 # grouping for cod analysis
 CATEGORY_COL = "simple_grouping"
 
@@ -143,7 +143,30 @@ def layout():
                                                     ),
                                                 ],
                                             ),
-                                            "Note: Small rounding variance expected (~0.03% / year).",
+                                            "Notes: ",
+                                            html.Br(),
+                                            html.Ul(
+                                                [
+                                                    html.Li(
+                                                        "Small rounding variance expected (~0.03% / year)."
+                                                    ),
+                                                    html.Li(
+                                                        [
+                                                            "Cause of death assignment takes time:",
+                                                            html.Ul(
+                                                                [
+                                                                    html.Li(
+                                                                        "'Other' deaths → ~4 months"
+                                                                    ),
+                                                                    html.Li(
+                                                                        "'Delay' deaths → ~6 months (mainly external causes)"
+                                                                    ),
+                                                                ]
+                                                            ),
+                                                        ]
+                                                    ),
+                                                ]
+                                            ),
                                         ],
                                         className="card-text mb-0 small text-muted",
                                     ),
