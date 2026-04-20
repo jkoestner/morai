@@ -626,8 +626,8 @@ def test_exposure_annual_calendar() -> None:
     # frequency exposure check
     frequency_df = experience.create_study(
         df=experience_df,
-        bos="1/1/2022",
-        eos="12/31/2022",
+        bos="1/1/2023",
+        eos="12/31/2023",
         study_frequency="monthly",
         study_decrement="D",
         exposure_method="annual",
@@ -642,17 +642,27 @@ def test_exposure_annual_calendar() -> None:
 
     assert (
         frequency_df[
-            (frequency_df["id"] == 9)
-            & (frequency_df["bos_date"] == "4/1/2022")
-            & (frequency_df["policy_dur"] == 9)
+            (frequency_df["id"] == 12)
+            & (frequency_df["bos_date"] == "3/1/2023")
+            & (frequency_df["policy_dur"] == 11)
         ]["exposure"].iloc[0]
-        == 8 / 365
+        == 365 / 365
     ), "Expected exposure to be from bos to anniversary"
+
     assert (
         frequency_df[
-            (frequency_df["id"] == 9)
-            & (frequency_df["bos_date"] == "12/1/2022")
-            & (frequency_df["policy_dur"] == 10)
+            (frequency_df["id"] == 12)
+            & (frequency_df["bos_date"] == "4/1/2023")
+            & (frequency_df["policy_dur"] == 11)
+        ]["exposure"].iloc[0]
+        == 0 / 365
+    ), "Expected exposure to be from bos to anniversary"
+
+    assert (
+        frequency_df[
+            (frequency_df["id"] == 11)
+            & (frequency_df["bos_date"] == "1/1/2023")
+            & (frequency_df["policy_dur"] == 9)
         ]["exposure"].iloc[0]
         == 31 / 365
     ), "Expected exposure to be from bos to eos"
@@ -952,7 +962,7 @@ def test_exposure_distributed_calendar() -> None:
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 4)
         ]["exposure"].iloc[0]
-        == 331 / 366
+        == 91 / 366
     ), "Expected exposure to be up until anniversary for decrement under study"
     assert test_df[
         (test_df["id"] == 15)
@@ -996,6 +1006,15 @@ def test_exposure_distributed_calendar() -> None:
         ]["exposure"].iloc[0]
         == 30 / 365
     ), "Expected exposure to be from bos to anniversary"
+
+    assert (
+        frequency_df[
+            (frequency_df["id"] == 11)
+            & (frequency_df["bos_date"] == "1/1/2023")
+            & (frequency_df["policy_dur"] == 9)
+        ]["exposure"].iloc[0]
+        == 31 / 365
+    ), "Expected exposure to be from bos to eos"
 
 
 def test_exposure_exact_calendar() -> None:
@@ -1177,7 +1196,7 @@ def test_exposure_exact_calendar() -> None:
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 9)
         ]["exposure"].iloc[0]
-        == 2 / 365
+        == 33 / 365
     ), "Expected exposure to be up until date of decrement for decrement under study"
     assert test_df[
         (test_df["id"] == 11)
@@ -1309,3 +1328,12 @@ def test_exposure_exact_calendar() -> None:
         ]["exposure"].iloc[0]
         == 1 / 365
     ), "Expected exposure to be from bos to anniversary"
+
+    assert (
+        frequency_df[
+            (frequency_df["id"] == 11)
+            & (frequency_df["bos_date"] == "1/1/2023")
+            & (frequency_df["policy_dur"] == 9)
+        ]["exposure"].iloc[0]
+        == 31 / 365
+    ), "Expected exposure to be from bos to eos"

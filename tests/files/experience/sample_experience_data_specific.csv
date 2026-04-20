@@ -9,7 +9,7 @@ id,gender,smoker,issue_date, amount ,termination_date,termination_reason,notes
 8,F,NS,11/27/2020,"50,000",11/25/2023,L,lapse before anniversary
 9,F,NS,4/9/2013,"50,000",4/9/2023,L,lapse on anniversary
 10,F,S,7/17/2016,"50,000",10/24/2023,L,lapse after anniversary
-11,M,NS,5/11/2014,"50,000",1/2/2023,D,death before anniversary
+11,M,NS,5/11/2014,"50,000",2/2/2023,D,death before anniversary
 12,M,NS,3/7/2013,"100,000",3/7/2023,D,death on anniversary
 13,F,NS,11/26/2019,"100,000",12/28/2023,D,death after anniversary
 14,F,NS,3/7/2013,"50,000",4/8/2024,L,partial year (6/30/2024) - lapse

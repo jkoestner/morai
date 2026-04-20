@@ -1,4 +1,9 @@
-"""Experience study model."""
+"""
+Experience study model.
+
+There are several functions related to experience studies in this module.
+This includes (exposures, actuals, variance, moments, etc...)
+"""
 
 from __future__ import annotations
 
@@ -74,7 +79,12 @@ def create_study(
 
     """
     study_df = format_study_df(
-        df=df, bos=bos, eos=eos, study_frequency=study_frequency, mapping=mapping
+        df=df,
+        bos=bos,
+        eos=eos,
+        study_decrement=study_decrement,
+        study_frequency=study_frequency,
+        mapping=mapping,
     )
     if get_exposures:
         study_df["exposure"] = calc_exposures(
@@ -96,6 +106,7 @@ def format_study_df(
     df: pd.DataFrame,
     bos: str,
     eos: str,
+    study_decrement: str,
     study_frequency: str = "annually",
     mapping: dict | None = None,
 ) -> pd.DataFrame:
@@ -115,6 +126,8 @@ def format_study_df(
         Beginning of the study.
     eos : str
         End of the study.
+    study_decrement : str
+        Decrement under study, for example "death".
     study_frequency : str, optional default="annually"
         Study period to calculate exposures for.
         The available options are "annually", "semi-annually",
@@ -218,9 +231,8 @@ def format_study_df(
         )
 
         # remove policies that will have zero exposure for the year
-        # termination (study decrement) before prior anniversary
-        # termination (non-study decrement) before current anniversary
-        # or issue date after eos
+        # - termination before prior anniversary
+        # - or issue date after eos
         _df_period = _df_period[
             ~(
                 (
@@ -230,28 +242,46 @@ def format_study_df(
                 | (_df_period[issue_date_col] > _df_period[eos_date_col])
             )
         ].copy()
-        # check if df is empty
         if _df_period.empty:
             continue
 
-        # create policy_dur column and exclude rows that are not logical
-        # for example:
-        # - duration can't be 0
-        # - the before row will need to be after bos
-        # - the after row will need to be before eos
         dur = (
             _df_period[anniversary_date_col].dt.year
             - _df_period[issue_date_col].dt.year
         )
 
+        # creating before/after records
+        # before
         _before = _df_period.assign(policy_dur=dur, anniversary_position="before")
-        _before = _before[
-            (_before["policy_dur"] != 0)
-            & (_before[anniversary_date_col] >= _before[bos_date_col])
-        ]
+        term_b = _before[termination_date_col]
+        is_study_dec_b = _before[termination_reason_col] == study_decrement
 
+        keep_before = (
+            # anniversary after bos
+            (_before[anniversary_date_col] > _before[bos_date_col])
+            # not issued newly issued
+            & (_before["policy_dur"] != 0)
+            # inforce or (termination after_on bos) or (study decrement)
+            # - study decrements before bos are kept for distributed
+            & (term_b.isna() | (term_b >= _before[bos_date_col]) | is_study_dec_b)
+        )
+        _before = _before[keep_before]
+
+        # after
         _after = _df_period.assign(policy_dur=dur + 1, anniversary_position="on_after")
-        _after = _after[_after[anniversary_date_col] <= _after[eos_date_col]]
+        term_a = _after[termination_date_col]
+        is_study_dec_a = _after[termination_reason_col] == study_decrement
+
+        keep_after = (
+            # anniversary before or on eos
+            (_after[anniversary_date_col] <= _after[eos_date_col])
+            # inforce or (terminated after_on anniversary)
+            & (term_a.isna() | (term_a >= _after[anniversary_date_col]))
+            # inforce or (terminated after_on bos) or (study decrement)
+            # - study decrements before bos are kept for distributed
+            & (term_a.isna() | (term_a >= _after[bos_date_col]) | is_study_dec_a)
+        )
+        _after = _after[keep_after]
 
         dfs.extend([_before, _after])
 
@@ -287,6 +317,7 @@ def calc_exposures(
     - annual: before gets proportional days, after gets a full year (Balducci)
     - distributed: before gets proportional days, after gets proportional days (UDD)
     - exact: both before and after get exact days to decrement (constant force)
+      - mx ≈ ux
       - qx = 1 - exp(-ux)
       - ux = -log(1-ux)
 
@@ -299,6 +330,9 @@ def calc_exposures(
     -----
     - `anniversary_date` is included in the `exposure_after` column.
     - `termination_date` is included in the exposure.
+    - when the study_frequency is daily the qx that is calculated at that frequency
+      is basically the force of mortality (ux). If the exposure is grouped at a
+      higher frequency than daily to calculate the qx it will not equal ux.
 
     References
     ----------
@@ -331,6 +365,10 @@ def calc_exposures(
     anniversary_date_col = "anniversary_date"
     bos_date_col = "bos_date"
     eos_date_col = "eos_date"
+    if "id" in study_df.columns:
+        idx_col = "id"
+    else:
+        idx_col = None
 
     # handle mapping
     if mapping:
@@ -342,21 +380,21 @@ def calc_exposures(
         anniversary_date_col = mapping.get("anniversary_date", anniversary_date_col)
         bos_date_col = mapping.get("bos_date", bos_date_col)
         eos_date_col = mapping.get("eos_date", eos_date_col)
+        idx_col = mapping.get("idx", idx_col)
 
     # validations
     # missing columns
-    missing_cols = [
-        col
-        for col in [
-            termination_date_col,
-            termination_reason_col,
-            issue_date_col,
-            anniversary_date_col,
-            bos_date_col,
-            eos_date_col,
-        ]
-        if col not in study_df.columns
+    required_cols = [
+        termination_date_col,
+        termination_reason_col,
+        issue_date_col,
+        anniversary_date_col,
+        bos_date_col,
+        eos_date_col,
     ]
+    if idx_col is not None:
+        required_cols.append(idx_col)
+    missing_cols = [col for col in required_cols if col not in study_df.columns]
     if missing_cols:
         raise ValueError(
             f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
@@ -364,7 +402,7 @@ def calc_exposures(
 
     # logging
     logger.info("getting exposures...")
-    rate_type = "qx" if exposure_method in ["annual", "distributed"] else "ux"
+    rate_type = "qx" if exposure_method in ["annual", "distributed"] else "mx"
     logger.info(f"exposure method: `{exposure_method}` - rate type: `{rate_type}`")
     logger.info(f"calendar exposure: `{calendar_exposure}`")
     logger.info(f"study decrement: `{study_decrement}`")
@@ -411,12 +449,16 @@ def calc_exposures(
     # logic conditions
     terminated = study_df[termination_date_col].notna()
     term_before_bos = study_df[termination_date_col] < study_df[bos_date_col]
-    term_in_before = (study_df[termination_date_col] >= study_df[bos_date_col]) & (
-        study_df[termination_date_col] <= study_df[anniversary_date_col]
+    term_in_before = (
+        (study_df[termination_date_col] >= study_df[bos_date_col])
+        & (study_df[termination_date_col] <= study_df[eos_date_col])
+        & (study_df[termination_date_col] <= study_df[anniversary_date_col])
     )
     term_in_after = (
-        study_df[termination_date_col] >= study_df[anniversary_date_col]
-    ) & (study_df[termination_date_col] <= study_df[eos_date_col])
+        (study_df[termination_date_col] >= study_df[bos_date_col])
+        & (study_df[termination_date_col] <= study_df[eos_date_col])
+        & (study_df[termination_date_col] >= study_df[anniversary_date_col])
+    )
     issued_in_period = (
         study_df[issue_date_col].dt.year == study_df[eos_date_col].dt.year
     )
@@ -466,7 +508,7 @@ def calc_exposures(
     elif exposure_method == "distributed":
         study_decrement_days = np.where(
             is_before,
-            anniversary_minus_bos,
+            np.minimum(anniversary_minus_bos, eos_minus_bos),
             np.minimum(eos_minus_anniversary, eos_minus_bos),
         )
         # the distributed method has before exposure for policies that terminated in the
@@ -545,16 +587,28 @@ def calc_exposures(
     # check for errors
     num_negative = (exposures < 0).sum()
     if num_negative > 0:
-        logger.error(
-            f"Number of rows with negative exposure: {num_negative}, "
-            f"this should not happen."
-        )
+        logger.error(f"negative exposure: {num_negative}, this should not happen.")
 
-    num_zero = (exposures == 0).sum()
-    if num_zero > 0:
-        logger.warning(
-            f"Number of rows with zero exposure: {num_zero}. May want to review "
-            f"and delete these records"
+    if idx_col:
+        grouped_exposure = (
+            study_df.assign(exposure=exposures.values)
+            .groupby(["id", "policy_dur"], observed=True, sort=False)["exposure"]
+            .sum()
+            .reset_index()
+        )
+        num_zero_grouped = len(grouped_exposure[grouped_exposure["exposure"] == 0])
+        if num_zero_grouped > 0:
+            logger.warning(
+                f"zero exposure - grouped: {num_zero_grouped}, this may be due to "
+                f"using a partial year. It's worth reviewing."
+            )
+
+    num_zero_seriatim = (exposures == 0).sum()
+    if num_zero_seriatim > 0:
+        logger.debug(
+            f"zero exposure - seriatim: {num_zero_seriatim}, "
+            f"This is likely due to the distributed exposure would be non-zero "
+            f"at these cells."
         )
 
     return exposures
