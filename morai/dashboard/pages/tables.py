@@ -89,6 +89,7 @@ def layout():
                 dismissable=True,
                 icon="danger",
                 className="toast",
+                style={"position": "fixed", "top": 10, "right": 10, "zIndex": 1050},
             ),
             # Description Card
             dbc.Card(
@@ -638,73 +639,78 @@ def initialize_tables(
     if table1_id is None or table2_id is None:
         return (*no_upate_tuple, True, "No table selected.", dash.no_update)
 
-    # check if tables have changed
-    tables_changed = (
-        prev_table1_id is None
-        or prev_table2_id is None
-        or prev_table1_id != table1_id
-        or prev_table2_id != table2_id
-        or prev_table1_mi_years != table1_mi_years
-        or prev_table2_mi_years != table2_mi_years
-    )
+    try:
+        # check if tables have changed
+        tables_changed = (
+            prev_table1_id is None
+            or prev_table2_id is None
+            or prev_table1_id != table1_id
+            or prev_table2_id != table2_id
+            or prev_table1_mi_years != table1_mi_years
+            or prev_table2_mi_years != table2_mi_years
+        )
 
-    # generate filters only if tables have changed
-    if tables_changed:
-        # load tables
-        (
-            table_1,
-            table_2,
+        # generate filters only if tables have changed
+        if tables_changed:
+            # load tables
+            (
+                table_1,
+                table_2,
+                table_1_select_period,
+                table_2_select_period,
+                mults_1,
+                mults_2,
+                mi_table_1,
+                mi_table_2,
+                warning_tuple,
+            ) = load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years)
+
+            if True in warning_tuple:
+                return (*no_upate_tuple, *warning_tuple, dash.no_update)
+
+            # mi
+            mi_1_style = {"display": "none" if mi_table_1 is None else "block"}
+            mi_2_style = {"display": "none" if mi_table_2 is None else "block"}
+
+            # filters
+            filters_1 = dh.generate_filters(
+                df=table_1,
+                prefix="table-1",
+                exclude_cols=["vals", "constant"],
+                mult_table=mults_1,
+            ).get("filters")
+            filters_2 = dh.generate_filters(
+                df=table_2,
+                prefix="table-2",
+                exclude_cols=["vals", "constant"],
+                mult_table=mults_2,
+            ).get("filters")
+        else:
+            return (*no_upate_tuple, *warning_tuple, trigger_value)
+
+        return (
+            table1_id,
+            table2_id,
+            table_1.to_dict("records"),
+            table_2.to_dict("records"),
+            mults_1.to_dict("records"),
+            mults_2.to_dict("records"),
             table_1_select_period,
             table_2_select_period,
-            mults_1,
-            mults_2,
-            mi_table_1,
-            mi_table_2,
-            warning_tuple,
-        ) = load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years)
+            table1_mi_years,
+            table2_mi_years,
+            filters_1,
+            filters_2,
+            mi_1_style,
+            mi_2_style,
+            False,
+            False,
+            trigger_value,
+        )
 
-        if True in warning_tuple:
-            return (*no_upate_tuple, *warning_tuple, dash.no_update)
-
-        # mi
-        mi_1_style = {"display": "none" if mi_table_1 is None else "block"}
-        mi_2_style = {"display": "none" if mi_table_2 is None else "block"}
-
-        # filters
-        filters_1 = dh.generate_filters(
-            df=table_1,
-            prefix="table-1",
-            exclude_cols=["vals", "constant"],
-            mult_table=mults_1,
-        ).get("filters")
-        filters_2 = dh.generate_filters(
-            df=table_2,
-            prefix="table-2",
-            exclude_cols=["vals", "constant"],
-            mult_table=mults_2,
-        ).get("filters")
-    else:
-        return (*no_upate_tuple, *warning_tuple, trigger_value)
-
-    return (
-        table1_id,
-        table2_id,
-        table_1.to_dict("records"),
-        table_2.to_dict("records"),
-        mults_1.to_dict("records"),
-        mults_2.to_dict("records"),
-        table_1_select_period,
-        table_2_select_period,
-        table1_mi_years,
-        table2_mi_years,
-        filters_1,
-        filters_2,
-        mi_1_style,
-        mi_2_style,
-        False,
-        False,
-        trigger_value,
-    )
+    except Exception as e:
+        logger.error(f"Error initializing tables: {e}")
+        return (*no_upate_tuple, True, str(e), dash.no_update)
 
 
 @callback(
