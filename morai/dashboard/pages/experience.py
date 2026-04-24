@@ -191,6 +191,8 @@ def _build_main_content():
                         active_tab="tab-chart",
                         className="mb-3",
                     ),
+                    dh._build_export_button("table", "experience"),
+                    dh._build_export_button("rank", "experience"),
                     html.Div(
                         [
                             dcc.Loading(
@@ -595,7 +597,13 @@ def update_tab_content(
         if (active_tab in ["tab-chart", "tab-table"]) and (
             x_axis is None or y_axis is None
         ):
-            return "Select X-Axis and Y-Axis to view content", None, filtered_card, False, ""
+            return (
+                "Select X-Axis and Y-Axis to view content",
+                None,
+                filtered_card,
+                False,
+                "",
+            )
 
         # update tab content based on tab and tool
         if active_tab == "tab-chart":
@@ -734,12 +742,6 @@ def update_tab_content(
                 )
 
             columnDefs = dash_formats.get_column_defs(table)
-            export_button = html.Button(
-                "Export to CSV",
-                id={"type": "export-button", "tab": "table", "page": "experience"},
-                className="btn btn-primary mt-2 mb-2",
-            )
-
             grid = dag.AgGrid(
                 id={"type": "data-table", "tab": "table", "page": "experience"},
                 rowData=table.to_dict("records"),
@@ -758,7 +760,7 @@ def update_tab_content(
                 columnSize="sizeToFit",
             )
 
-            tab_content = html.Div([export_button, grid])
+            tab_content = html.Div([grid])
 
         elif active_tab == "tab-rank":
             rank_features = (
@@ -775,11 +777,6 @@ def update_tab_content(
             )
 
             columnDefs = dash_formats.get_column_defs(rank)
-            export_button = html.Button(
-                "Export to CSV",
-                id={"type": "export-button", "tab": "rank", "page": "experience"},
-                className="btn btn-primary mt-2 mb-2",
-            )
 
             grid = dag.AgGrid(
                 id={"type": "data-table", "tab": "rank", "page": "experience"},
@@ -812,7 +809,7 @@ def update_tab_content(
                 style={"fontSize": "0.85em", "color": "gray", "marginBottom": "6px"},
             )
 
-            tab_content = html.Div([rank_description, export_button, grid])
+            tab_content = html.Div([rank_description, grid])
 
         return tab_content, chart_secondary, filtered_card, False, ""
 
@@ -1050,6 +1047,26 @@ def update_active_filters_card(
         ]
 
     return content
+
+
+@callback(
+    [
+        Output(
+            {"type": "export-button", "tab": "table", "page": "experience"}, "style"
+        ),
+        Output({"type": "export-button", "tab": "rank", "page": "experience"}, "style"),
+    ],
+    Input("tabs", "active_tab"),
+)
+def toggle_export_button(active_tab):
+    """Toggle a hidden export into view."""
+    hide = {"display": "none"}
+    show = {"display": "inline-block"}
+    if active_tab == "tab-table":
+        return show, hide
+    elif active_tab == "tab-rank":
+        return hide, show
+    return hide, hide
 
 
 @callback(

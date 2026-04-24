@@ -1351,6 +1351,31 @@ def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
     return type_list
 
 
+def _build_export_button(tab: str, page: str) -> html.Button:
+    """
+    Build an export button.
+
+    Parameters
+    ----------
+    tab : str
+        The tab to create the button for
+    page : page
+        The page to create the button for
+
+    Returns
+    -------
+    export_button : html.Button
+        An html export button
+
+    """
+    return html.Button(
+        [html.I(className="fas fa-download me-2"), "Export to CSV"],
+        id={"type": "export-button", "tab": tab, "page": page},
+        className="btn btn-primary mt-2 mb-2",
+        style={"display": "none"},
+    )
+
+
 def register_export_callback(app) -> None:  # noqa: ANN001
     """
     Register a universal callback for exporting table data to CSV.
