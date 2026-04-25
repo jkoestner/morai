@@ -720,6 +720,7 @@ def update_tab_content(
                     numerator=numerator,
                     denominator=denominator,
                     x_bins=x_bins,
+                    add_total=True,
                     display=False,
                 )
             elif tool == "target":
