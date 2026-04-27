@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -59,7 +60,9 @@ def export_to_sql(
         conn.close()
 
 
-def read_sql(db_filepath: str | Path, query: str) -> pd.DataFrame:
+def read_sql(
+    db_filepath: str | Path, query: str, parse_dates: list | None = None
+) -> pd.DataFrame:
     """
     Read a SQLite database.
 
@@ -69,6 +72,8 @@ def read_sql(db_filepath: str | Path, query: str) -> pd.DataFrame:
         Database file path.
     query : str
         Query to execute.
+    parse_dates : list | None, optional
+        List of column names to parse as dates.
 
     Returns
     -------
@@ -82,9 +87,24 @@ def read_sql(db_filepath: str | Path, query: str) -> pd.DataFrame:
     # connect to the database
     conn = sqlite3.connect(db_filepath)
 
+    # get table_name
+    match = re.compile(
+        r"\bFROM\s+[\"`\[]?(\w+)[\"`\]]?",
+        re.IGNORECASE,
+    ).search(query)
+    table_name = match.group(1) if match else None
+
     # read the data
     try:
-        df = pd.read_sql_query(query, conn)
+        # infer parse_dates if not provided
+        if parse_dates is None and table_name is not None:
+            dtypes = table_dtypes(db_filepath, table_name)
+            parse_dates = [
+                col
+                for col, dtype in dtypes.items()
+                if "DATE" in dtype.upper() or "TIME" in dtype.upper()
+            ]
+        df = pd.read_sql_query(query, conn, parse_dates=parse_dates or None)
     finally:
         conn.close()
 
@@ -144,13 +164,13 @@ def table_remove(db_filepath: str, table_name: str) -> None:
         conn.close()
 
 
-def table_dtypes(db_filepath: str, table_name: str) -> dict:
+def table_dtypes(db_filepath: str | Path, table_name: str) -> dict:
     """
     Get the data types of a table from a SQLite database.
 
     Parameters
     ----------
-    db_filepath : str
+    db_filepath : str | Path
         Database file path.
     table_name : str
         Table name.

@@ -46,6 +46,23 @@ TRAIN_START_YEAR = 2023
 TRAIN_END_YEAR = 2025
 # grouping for cod analysis
 CATEGORY_COL = "simple_grouping"
+# ibnr adjustment factors for the lag week
+IBNR_FACTORS = {
+    0: 0.27,
+    1: 0.64,
+    2: 0.76,
+    3: 0.85,
+    4: 0.90,
+    5: 0.94,
+    6: 0.96,
+    7: 0.97,
+    8: 0.98,
+    9: 0.99,
+    10: 0.99,
+    11: 0.99,
+    12: 0.99,
+    13: 0.99,
+}
 
 
 def layout():
@@ -581,6 +598,53 @@ def layout():
                             "Monthly Analysis",
                         ],
                     ),
+                    # Weekly Analysis Section
+                    dbc.AccordionItem(
+                        [
+                            dbc.Row(
+                                dbc.Col(
+                                    dbc.Button(
+                                        [
+                                            html.I(className="fas fa-sync-alt me-2"),
+                                            "Load Weekly",
+                                        ],
+                                        id="button-weekly",
+                                        color="primary",
+                                        className="shadow-sm",
+                                    ),
+                                    width="auto",
+                                ),
+                                className="mb-3",
+                            ),
+                            dbc.Alert(
+                                [
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    f"Total US deaths per week. The deaths also have an adjustment which accounts"
+                                    f"for the lag in reporting. The lag adjustments are {list(IBNR_FACTORS.values())}",
+                                ],
+                                color="info",
+                                className="py-2 mb-3 small",
+                            ),
+                            dbc.Row(
+                                [
+                                    dcc.Loading(
+                                        id="loading-cdc-weekly",
+                                        custom_spinner=dmc.Skeleton(
+                                            visible=True, h="100%"
+                                        ),
+                                        children=html.Div(
+                                            id="cdc-weekly",
+                                            className="bg-white rounded-3 shadow-sm p-3",
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ],
+                        title=[
+                            html.I(className="fas fa-calendar-alt me-2"),
+                            "Weekly Analysis",
+                        ],
+                    ),
                     # Mortality Improvement Section
                     dbc.AccordionItem(
                         [
@@ -707,7 +771,7 @@ def update_cdc_data_async(n_clicks):
         try:
             last_updated = pd.to_datetime(cdc.get_last_updated())
             days_since_update = (pd.Timestamp.now() - last_updated).days
-            if days_since_update < 7:
+            if days_since_update < 5:
                 return "recent", None
             refresh_cdc_data()
             new_last_updated = cdc.get_last_updated()
@@ -722,7 +786,7 @@ def update_cdc_data_async(n_clicks):
     if status == "recent":
         return (
             True,
-            "Data was recently updated. Please wait 7 days before updating again.",
+            "Data was recently updated. Please wait 5 days before updating again.",
             "warning",
             "Warning",
             dash.no_update,
@@ -1249,14 +1313,102 @@ def display_cdc_monthly(n_clicks):
     )
     last_updated = mcd18_monthly["added_at"].max()
     mcd18_monthly = mcd18_monthly[mcd18_monthly["added_at"] == last_updated]
+
+    # color mapping
+    years = sorted(mcd18_monthly["year"].unique())
+    current_year = years[-1]
+    prior = years[:-1]
+    prior_color_map = px.colors.sample_colorscale(
+        "Blues", [0.3 + 0.7 * i / max(len(prior) - 1, 1) for i in range(len(prior))]
+    )
+    color_discrete_map = dict(zip(prior, prior_color_map, strict=False))
+    color_discrete_map[current_year] = "crimson"
+
+    # chart
     cdc_monthly_chart = charters.chart(
         df=mcd18_monthly,
         x_axis="month",
         y_axis="deaths",
-        type="area",
+        color="year",
+        type="line",
+        color_discrete_map=color_discrete_map,
     )
 
     return dcc.Graph(figure=cdc_monthly_chart), False, ""
+
+
+@callback(
+    [
+        Output("cdc-weekly", "children"),
+        Output("cdc-toast", "is_open", allow_duplicate=True),
+        Output("cdc-toast", "children", allow_duplicate=True),
+    ],
+    Input("button-weekly", "n_clicks"),
+)
+def display_cdc_weekly(n_clicks):
+    """Create cdc monthly."""
+    if n_clicks is None:
+        raise dash.exceptions.PreventUpdate
+
+    # initialize
+    db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+    tables = sql.get_tables(db_filepath=db_filepath)
+
+    # check if table does not exist in database
+    if "mcd18_weekly" not in tables:
+        logger.error("Table `mcd18_weekly` does not exist in database.")
+        return (
+            dash.no_update,
+            dash.no_update,
+            True,
+            "Table `mcd18_weekly` does not exist in database.",
+        )
+
+    # get the data
+    mcd18_weekly = cdc.get_cdc_data_sql(
+        db_filepath=db_filepath, table_name="mcd18_weekly"
+    )
+    last_updated = mcd18_weekly["added_at"].max()
+    mcd18_weekly = mcd18_weekly[mcd18_weekly["added_at"] == last_updated]
+    mcd18_weekly.dropna(subset=["mmwr_week"], inplace=True)
+    mcd18_weekly = mcd18_weekly.sort_values("mmwr_week_date").reset_index(drop=True)
+    mcd18_weekly["recent_week"] = range(len(mcd18_weekly) - 1, -1, -1)
+
+    # add ibnr adjusted deaths to current year
+    years = sorted(mcd18_weekly["mmwr_year"].unique())
+    current_year = years[-1]
+    prior_years = years[:-1]
+    current_year_adj = mcd18_weekly[mcd18_weekly["mmwr_year"] == current_year].copy()
+    current_year_adj["deaths"] = current_year_adj["deaths"] / current_year_adj[
+        "recent_week"
+    ].map(IBNR_FACTORS).fillna(1.0)
+    current_year_adj = current_year_adj[current_year_adj["recent_week"] >= 3]
+    current_year_adj["mmwr_year"] = f"{current_year}_adj"
+    mcd18_weekly = pd.concat([mcd18_weekly, current_year_adj], ignore_index=True)
+
+    # color mapping
+    prior_color_map = px.colors.sample_colorscale(
+        "Blues",
+        [0.3 + 0.7 * i / max(len(prior_years) - 1, 1) for i in range(len(prior_years))],
+    )
+    color_discrete_map = dict(zip(prior_years, prior_color_map, strict=False))
+    color_discrete_map[current_year] = "crimson"
+    color_discrete_map[f"{current_year}_adj"] = "crimson"
+
+    # chart
+    cdc_weekly_chart = charters.chart(
+        df=mcd18_weekly,
+        x_axis="mmwr_week",
+        y_axis="deaths",
+        color="mmwr_year",
+        type="line",
+        color_discrete_map=color_discrete_map,
+    )
+    for trace in cdc_weekly_chart.data:
+        if trace.name == f"{current_year}_adj":
+            trace.line.dash = "dash"
+
+    return dcc.Graph(figure=cdc_weekly_chart), False, ""
 
 
 @callback(
@@ -1413,7 +1565,7 @@ def refresh_cdc_data() -> None:
     """
     Refresh the cdc data.
 
-    Includes a 15 second sleep per call.
+    Includes a 15 second sleep per call, due to CDC guidelines.
     """
     try:
         db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
@@ -1442,6 +1594,17 @@ def refresh_cdc_data() -> None:
             df=mcd18_mi,
             db_filepath=db_filepath,
             table_name="mcd18_mi",
+            if_exists="replace",
+        )
+        time.sleep(15)
+
+        mcd18_weekly = cdc.get_cdc_data_xml(
+            xml_filename="mcd18_weekly.xml", parse_date_col="mmwr_week_date"
+        )
+        sql.export_to_sql(
+            df=mcd18_weekly,
+            db_filepath=db_filepath,
+            table_name="mcd18_weekly",
             if_exists="replace",
         )
     except Exception as e:

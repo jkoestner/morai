@@ -116,11 +116,8 @@ def get_cdc_data_xml(
     logger.debug("creating dataframe from response")
     cdc_df = _xml_create_df(xml_response=xml_response)
 
-    # parse the month column
+    # parse the date-like column
     if parse_date_col:
-        if parse_date_col not in cdc_df.columns:
-            logger.warning(f"Column not found: {parse_date_col}")
-            return cdc_df
         cdc_df[parse_date_col] = _parse_date_col(df=cdc_df, col=parse_date_col)
 
     # clean the dataframe
@@ -128,6 +125,12 @@ def get_cdc_data_xml(
         cdc_df = suppress_logs(helpers.clean_df)(cdc_df, update_cat=False)
         if "year" in cdc_df.columns:
             cdc_df["year"] = cdc_df["year"].str[:4]
+        if parse_date_col == "Month":
+            cdc_df["reported_date"] = cdc_df["month"]
+            cdc_df["month"] = cdc_df["month"].dt.month
+        if parse_date_col == "mmwr_week_date":
+            cdc_df["mmwr_week"] = cdc_df["mmwr_week_date"].dt.isocalendar().week
+            cdc_df["mmwr_year"] = cdc_df["mmwr_week_date"].dt.isocalendar().year
 
     if convert_dtypes:
         cdc_df = _infer_dtypes(cdc_df)
@@ -597,7 +600,7 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
         if code is not None:
             measure_selections.append(code.split(".")[1])
     columns = byvariables + measure_selections
-    columns = [cdc_mapping.get(key, key) for key in columns]
+    columns = [cdc_mapping.get(col, col) for col in columns]
     num_columns = len(columns)
 
     # initialize row-span counts and values for each column
@@ -653,18 +656,25 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
 
 def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
     """
-    Parse the date column to a datetime object.
+    Parse a cdc column that is date-like into a datetime series.
 
-    CDC has the "Month" column as a string with the format "Month., Year"
-    when grouping by month and year.
-    This function parses the month column to a datetime object.
+    CDC has a few columns from the wonder data that are date-like but will not
+    parse to a friendly format without some cleaning.
+
+    Options
+    - Month
+      - example: "Feb., 2026 (provisional and partial)"
+      - clean: "2026-02-01"
+    - mmwr_week_date
+      - example: "2026 Week 13 ending April 04, 2026 (provisional)"
+      - clean: "2026-04-04"
 
     Parameters
     ----------
     df : pd.DataFrame
         DataFrame object.
     col : str
-        Column name to parse dates.
+        Column name to parse dates such as "Month" or "MMWR Week".
 
     Returns
     -------
@@ -672,9 +682,19 @@ def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
         Series of parsed dates.
 
     """
-    parsed_dates = [date.split(" (")[0].strip() for date in df[col]]
-    parsed_dates = [date.replace(".", "") for date in parsed_dates]
-    parsed_dates = pd.to_datetime(parsed_dates, format="%b, %Y")
+    if col not in df.columns:
+        logger.error(f"Column not found: {col}")
+        return pd.Series([None] * len(df))
+    if col == "Month":
+        parsed_dates = [date.split(" (")[0].strip() for date in df[col]]
+        parsed_dates = [date.replace(".", "") for date in parsed_dates]
+        parsed_dates = pd.to_datetime(parsed_dates, format="%b, %Y")
+    elif col == "mmwr_week_date":
+        parsed_dates = pd.to_datetime(
+            df[col].str.extract(r"ending (\w+ \d{2}, \d{4})", expand=False),
+            format="%B %d, %Y",
+            errors="coerce",
+        )
     parsed_dates = pd.Series(parsed_dates)
 
     return parsed_dates

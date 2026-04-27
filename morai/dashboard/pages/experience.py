@@ -23,7 +23,7 @@ from dash_extensions.enrich import (
     html,
 )
 
-from morai.dashboard.components import dash_formats
+from morai.dashboard.components import common_build, dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters, experience
 from morai.forecast import metrics
@@ -35,6 +35,8 @@ pl.enable_string_cache()
 
 
 dash.register_page(__name__, path="/experience", title="morai - Experience", order=2)
+
+PAGE_ID = "experience"
 
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
@@ -56,7 +58,7 @@ def layout():
             _build_main_content(),
             dcc.Download(id="download-dataframe-csv"),
             dbc.Toast(
-                id="experience-toast",
+                id=f"{PAGE_ID}-toast",
                 header="Error",
                 is_open=False,
                 dismissable=True,
@@ -149,201 +151,24 @@ def _build_main_content():
         [
             # Selectors column (left)
             _build_selectors_column(),
-            # Chart column (middle)
+            # chart column (middle)
             dbc.Col(
-                [
-                    # Filter toggle button
-                    dbc.Button(
-                        [
-                            html.I(className="fas fa-filter me-2"),
-                            "Show Filters",
-                        ],
-                        id="open-offcanvas-button",
-                        className="mb-3",
-                        color="primary",
+                common_build._build_tabbed_content(
+                    tabs=[
+                        common_build.TabSpec(label="Chart", tab_id="chart"),
+                        common_build.TabSpec(
+                            label="Table", tab_id="table", exportable=True
+                        ),
+                        common_build.TabSpec(
+                            label="Rank", tab_id="rank", exportable=True
+                        ),
+                    ],
+                    page_id=PAGE_ID,
+                    filter_panel=common_build.FilterPanel(
+                        children=_build_filter_children()
                     ),
-                    # Tabs and content
-                    dbc.Tabs(
-                        [
-                            dbc.Tab(
-                                children=[],
-                                label="Chart",
-                                tab_id="tab-chart",
-                                label_class_name="fw-bold",
-                                active_label_class_name="text-primary",
-                            ),
-                            dbc.Tab(
-                                children=[],
-                                label="Table",
-                                tab_id="tab-table",
-                                label_class_name="fw-bold",
-                                active_label_class_name="text-primary",
-                            ),
-                            dbc.Tab(
-                                children=[],
-                                label="Rank",
-                                tab_id="tab-rank",
-                                label_class_name="fw-bold",
-                                active_label_class_name="text-primary",
-                            ),
-                        ],
-                        id="tabs",
-                        active_tab="tab-chart",
-                        className="mb-3",
-                    ),
-                    dh._build_export_button("table", "experience"),
-                    dh._build_export_button("rank", "experience"),
-                    html.Div(
-                        [
-                            dcc.Loading(
-                                id="loading-tab-content",
-                                custom_spinner=dmc.Skeleton(
-                                    visible=True, h="100%", w="100%"
-                                ),
-                                children=html.Div(
-                                    id="tab-content",
-                                    className="bg-white rounded-3 shadow-sm p-4 border border-light",
-                                ),
-                            ),
-                            dcc.Loading(
-                                id="loading-chart-secondary",
-                                custom_spinner=dmc.Skeleton(
-                                    visible=True, h="100%", w="100%"
-                                ),
-                                children=html.Div(
-                                    id="chart-secondary",
-                                    className="mt-4 bg-white rounded-3 shadow-sm p-4 border border-light",
-                                ),
-                            ),
-                        ],
-                        className="h-100",
-                    ),
-                    # Offcanvas for filters
-                    dbc.Offcanvas(
-                        [
-                            html.H4(
-                                [
-                                    html.I(className="fas fa-filter me-2"),
-                                    "Data Filters",
-                                ],
-                                className="mb-3",
-                            ),
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader(
-                                        html.H6(
-                                            [
-                                                html.I(
-                                                    className="fas fa-bookmark me-2"
-                                                ),
-                                                "Bookmarks",
-                                            ],
-                                            className="mb-0",
-                                        )
-                                    ),
-                                    dbc.CardBody(
-                                        [
-                                            dbc.Row(
-                                                [
-                                                    dbc.Col(
-                                                        dbc.Input(
-                                                            id="bookmark-name-input",
-                                                            placeholder="Bookmark name...",
-                                                            size="sm",
-                                                        ),
-                                                        width=9,
-                                                    ),
-                                                    dbc.Col(
-                                                        dbc.Button(
-                                                            "Save",
-                                                            id="save-bookmark-button",
-                                                            color="success",
-                                                            size="sm",
-                                                            n_clicks=0,
-                                                            className="w-100",
-                                                        ),
-                                                        width=3,
-                                                    ),
-                                                ],
-                                                className="mb-2 g-1",
-                                            ),
-                                            dcc.Dropdown(
-                                                id="bookmark-dropdown",
-                                                placeholder="Select bookmark...",
-                                                className="mb-2",
-                                            ),
-                                            dbc.Row(
-                                                [
-                                                    dbc.Col(
-                                                        dbc.Button(
-                                                            [
-                                                                html.I(
-                                                                    className="fas fa-upload me-1"
-                                                                ),
-                                                                "Load",
-                                                            ],
-                                                            id="load-bookmark-button",
-                                                            color="primary",
-                                                            size="sm",
-                                                            n_clicks=0,
-                                                            className="w-100",
-                                                        ),
-                                                        width=6,
-                                                    ),
-                                                    dbc.Col(
-                                                        dbc.Button(
-                                                            [
-                                                                html.I(
-                                                                    className="fas fa-trash me-1"
-                                                                ),
-                                                                "Delete",
-                                                            ],
-                                                            id="delete-bookmark-button",
-                                                            color="outline-danger",
-                                                            size="sm",
-                                                            n_clicks=0,
-                                                            className="w-100",
-                                                        ),
-                                                        width=6,
-                                                    ),
-                                                ],
-                                                className="g-1",
-                                            ),
-                                        ],
-                                        className="p-2",
-                                    ),
-                                ],
-                                className="mb-3 shadow-sm",
-                            ),
-                            html.Button(
-                                [
-                                    html.I(className="fas fa-undo me-2"),
-                                    "Reset Filters",
-                                ],
-                                id="reset-filters-button",
-                                n_clicks=0,
-                                className="btn btn-outline-primary w-100 shadow-sm mb-4",
-                            ),
-                            html.Div(
-                                id="chart-filters",
-                                className="overflow-auto custom-scrollbar",
-                                style={
-                                    "max-height": "calc(100vh - 300px)",
-                                    "backgroundColor": "#f0f7f0",
-                                    "padding": "15px",
-                                    "borderRadius": "8px",
-                                    "width": "100%",
-                                },
-                            ),
-                        ],
-                        id="filters-offcanvas",
-                        title="",
-                        placement="end",
-                        scrollable=True,
-                        is_open=False,
-                        className="offcanvas",
-                    ),
-                ],
+                    include_secondary_chart=True,
+                ),
                 xs=12,
                 lg=9,
             ),
@@ -415,6 +240,110 @@ def _build_selectors_column():
         ),
         xs=12,
         lg=3,
+    )
+
+
+def _build_filter_children():
+    """Build the contents of the filter offcanvas panel."""
+    return [
+        html.H4(
+            [html.I(className="fas fa-filter me-2"), "Data Filters"],
+            className="mb-3",
+        ),
+        _build_bookmarks_card(),
+        html.Button(
+            [html.I(className="fas fa-undo me-2"), "Reset Filters"],
+            id="reset-filters-button",
+            n_clicks=0,
+            className="btn btn-outline-primary w-100 shadow-sm mb-4",
+        ),
+        html.Div(
+            id="chart-filters",
+            className="overflow-auto custom-scrollbar",
+            style={
+                "max-height": "calc(100vh - 300px)",
+                "backgroundColor": "#f0f7f0",
+                "padding": "15px",
+                "borderRadius": "8px",
+                "width": "100%",
+            },
+        ),
+    ]
+
+
+def _build_bookmarks_card():
+    """Build the bookmarks card inside the filter panel."""
+    return dbc.Card(
+        [
+            dbc.CardHeader(
+                html.H6(
+                    [html.I(className="fas fa-bookmark me-2"), "Bookmarks"],
+                    className="mb-0",
+                )
+            ),
+            dbc.CardBody(
+                [
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                dbc.Input(
+                                    id="bookmark-name-input",
+                                    placeholder="Bookmark name...",
+                                    size="sm",
+                                ),
+                                width=9,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    "Save",
+                                    id="save-bookmark-button",
+                                    color="success",
+                                    size="sm",
+                                    n_clicks=0,
+                                    className="w-100",
+                                ),
+                                width=3,
+                            ),
+                        ],
+                        className="mb-2 g-1",
+                    ),
+                    dcc.Dropdown(
+                        id="bookmark-dropdown",
+                        placeholder="Select bookmark...",
+                        className="mb-2",
+                    ),
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                dbc.Button(
+                                    [html.I(className="fas fa-upload me-1"), "Load"],
+                                    id="load-bookmark-button",
+                                    color="primary",
+                                    size="sm",
+                                    n_clicks=0,
+                                    className="w-100",
+                                ),
+                                width=6,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    [html.I(className="fas fa-trash me-1"), "Delete"],
+                                    id="delete-bookmark-button",
+                                    color="outline-danger",
+                                    size="sm",
+                                    n_clicks=0,
+                                    className="w-100",
+                                ),
+                                width=6,
+                            ),
+                        ],
+                        className="g-1",
+                    ),
+                ],
+                className="p-2",
+            ),
+        ],
+        className="mb-3 shadow-sm",
     )
 
 
@@ -494,15 +423,15 @@ def load_data(dataset, config, saved_filter_values):
 
 @callback(
     [
-        Output("tab-content", "children"),
-        Output("chart-secondary", "children"),
+        Output(f"{PAGE_ID}-tab-content", "children"),
+        Output(f"{PAGE_ID}-chart-secondary", "children"),
         Output("filtered-card", "children"),
-        Output("experience-toast", "is_open"),
-        Output("experience-toast", "children"),
+        Output(f"{PAGE_ID}-toast", "is_open"),
+        Output(f"{PAGE_ID}-toast", "children"),
     ],
     [
         # tabs
-        Input("tabs", "active_tab"),
+        Input(f"{PAGE_ID}-tabs", "active_tab"),
         # update button
         Input("update-content-button", "n_clicks"),
         # tools
@@ -594,7 +523,7 @@ def update_tab_content(
         tab_content = None
 
         # Early validation for chart/table tabs
-        if (active_tab in ["tab-chart", "tab-table"]) and (
+        if (active_tab in [f"{PAGE_ID}-tab-chart", f"{PAGE_ID}-tab-table"]) and (
             x_axis is None or y_axis is None
         ):
             return (
@@ -606,7 +535,7 @@ def update_tab_content(
             )
 
         # update tab content based on tab and tool
-        if active_tab == "tab-chart":
+        if active_tab == f"{PAGE_ID}-tab-chart":
             if tool == "compare":
                 chart = charters.compare_rates(
                     df=filtered_df,
@@ -699,7 +628,7 @@ def update_tab_content(
                     chart_secondary = dcc.Graph(figure=chart_secondary)
             tab_content = dcc.Graph(figure=chart)
 
-        elif active_tab == "tab-table":
+        elif active_tab == f"{PAGE_ID}-tab-table":
             if tool == "compare":
                 table = charters.compare_rates(
                     df=filtered_df,
@@ -744,7 +673,7 @@ def update_tab_content(
 
             columnDefs = dash_formats.get_column_defs(table)
             grid = dag.AgGrid(
-                id={"type": "data-table", "tab": "table", "page": "experience"},
+                id={"type": "data-table", "tab": "table", "page": PAGE_ID},
                 rowData=table.to_dict("records"),
                 columnDefs=columnDefs,
                 dashGridOptions={
@@ -763,7 +692,7 @@ def update_tab_content(
 
             tab_content = html.Div([grid])
 
-        elif active_tab == "tab-rank":
+        elif active_tab == f"{PAGE_ID}-tab-rank":
             rank_features = (
                 rank_columns if rank_columns else config_dataset["columns"]["features"]
             )
@@ -780,7 +709,7 @@ def update_tab_content(
             columnDefs = dash_formats.get_column_defs(rank)
 
             grid = dag.AgGrid(
-                id={"type": "data-table", "tab": "rank", "page": "experience"},
+                id={"type": "data-table", "tab": "rank", "page": PAGE_ID},
                 rowData=rank.to_dict("records"),
                 columnDefs=columnDefs,
                 dashGridOptions={
@@ -938,9 +867,10 @@ def reset_filters(n_clicks, dataset, filter_dict):
 
 
 @callback(
-    Output("filters-offcanvas", "is_open"),
-    [Input("open-offcanvas-button", "n_clicks")],
-    [State("filters-offcanvas", "is_open")],
+    Output(f"{PAGE_ID}-filters-offcanvas", "is_open"),
+    [Input(f"{PAGE_ID}-open-offcanvas-button", "n_clicks")],
+    [State(f"{PAGE_ID}-filters-offcanvas", "is_open")],
+    prevent_initial_call=True,
 )
 def toggle_filters_offcanvas(n_clicks, is_open):
     """Toggle the filters offcanvas."""
@@ -968,7 +898,7 @@ def toggle_collapse(n_clicks, is_open, children):
         return [False] * len(is_open), children
 
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    button_idx = eval(button_id)["index"]
+    button_idx = ast.literal_eval(button_id)["index"]
 
     # Update the collapse states and button icons
     new_is_open = []
@@ -1009,6 +939,7 @@ def toggle_collapse(n_clicks, is_open, children):
         State({"type": "chart-num-filter", "index": ALL}, "id"),
         State("store-initial-filters", "data"),
     ],
+    prevent_initial_call=True,
 )
 def update_active_filters_card(
     str_filters, num_filters, str_filter_ids, num_filter_ids, filter_dict
@@ -1052,20 +983,18 @@ def update_active_filters_card(
 
 @callback(
     [
-        Output(
-            {"type": "export-button", "tab": "table", "page": "experience"}, "style"
-        ),
-        Output({"type": "export-button", "tab": "rank", "page": "experience"}, "style"),
+        Output({"type": "export-button", "tab": "table", "page": PAGE_ID}, "style"),
+        Output({"type": "export-button", "tab": "rank", "page": PAGE_ID}, "style"),
     ],
-    Input("tabs", "active_tab"),
+    Input(f"{PAGE_ID}-tabs", "active_tab"),
 )
 def toggle_export_button(active_tab):
     """Toggle a hidden export into view."""
     hide = {"display": "none"}
     show = {"display": "inline-block"}
-    if active_tab == "tab-table":
+    if active_tab == f"{PAGE_ID}-tab-table":
         return show, hide
-    elif active_tab == "tab-rank":
+    elif active_tab == f"{PAGE_ID}-tab-rank":
         return hide, show
     return hide, hide
 
@@ -1092,6 +1021,7 @@ def save_filter_state(str_vals, num_vals, str_ids, num_ids):
 @callback(
     Output("bookmark-dropdown", "options"),
     Input("store-bookmarks", "data"),
+    prevent_initial_call=True,
 )
 def update_bookmark_dropdown(bookmarks):
     """Populate the bookmark dropdown from the bookmarks store."""
