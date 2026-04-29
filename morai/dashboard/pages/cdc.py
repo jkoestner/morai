@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
-import dash_mantine_components as dmc
 import pandas as pd
 import plotly.express as px
 from dash_extensions.enrich import (
@@ -39,12 +38,13 @@ thread_lock = threading.Lock()
 
 # initialize variables
 FILTER_MI_PREFIX = "cdc-mi"
+FILTER_COD_PREFIX = "cdc-cod"
 # provides when to use data from 18 dataset as there is overlap in 99 dataset
 # the 99 dataset ends in 2020 and the 18 dataset starts in 2018
 NEW_DATASET_START_YEAR = 2021
 # training for cod trend and population trend
-TRAIN_START_YEAR = 2023
-TRAIN_END_YEAR = 2025
+TRAIN_START_YEAR = 2015
+TRAIN_END_YEAR = 2019
 # grouping for cod analysis
 CATEGORY_COL = "simple_grouping"
 # ibnr adjustment factors for the lag week
@@ -261,7 +261,15 @@ def layout():
                             dbc.Alert(
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
-                                    "Deaths by cause of death over time. Current year is annualized (365 / ",
+                                    "The most recent year available in the data is ",
+                                    html.Span(
+                                        "current year",
+                                        id="cod-most-recent-year",
+                                        className="fw-semibold",
+                                    ),
+                                    ". This is what is used in heatmap and top causes."
+                                    "The partial year deaths are annualized using a "
+                                    "factor of (365 / ",
                                     html.Span(
                                         "days elapsed",
                                         id="cod-days-elapsed-text",
@@ -275,18 +283,26 @@ def layout():
                             dbc.Row(
                                 [
                                     dbc.Col(
-                                        [
-                                            dcc.Loading(
-                                                id="loading-cdc-cod",
-                                                custom_spinner=dmc.Skeleton(
-                                                    visible=True, h="100%"
+                                        common_build._build_tabbed_content(
+                                            tabs=[
+                                                common_build.TabSpec(
+                                                    label="COD time", tab_id="cod-time"
                                                 ),
-                                                children=html.Div(
-                                                    id="cdc-cod",
-                                                    className="bg-white rounded-3 shadow-sm p-3",
+                                                common_build.TabSpec(
+                                                    label="COD Heatmap",
+                                                    tab_id="cod-heatmap",
                                                 ),
-                                            ),
-                                        ],
+                                                common_build.TabSpec(
+                                                    label="COD Top Causes - Names",
+                                                    tab_id="cod-top-causes-names",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="COD Top Causes - Deaths",
+                                                    tab_id="cod-top-causes-deaths",
+                                                ),
+                                            ],
+                                            prefix=FILTER_COD_PREFIX,
+                                        ),
                                         width=10,
                                     ),
                                     dbc.Col(
@@ -306,7 +322,7 @@ def layout():
                                                 ),
                                                 dbc.CardBody(
                                                     html.Div(
-                                                        id="cdc-cod-filters",
+                                                        id=f"{FILTER_COD_PREFIX}-filters",
                                                     ),
                                                 ),
                                             ],
@@ -316,86 +332,6 @@ def layout():
                                     ),
                                 ],
                                 className="mb-4",
-                            ),
-                            dbc.Alert(
-                                [
-                                    html.I(className="fas fa-info-circle me-2"),
-                                    "Treemap breakdown of deaths by category for year ",
-                                    html.Span(
-                                        "—",
-                                        id="cod-tree-year-text",
-                                        className="fw-semibold",
-                                    ),
-                                    ".",
-                                ],
-                                color="info",
-                                className="py-2 mb-3 small",
-                            ),
-                            dbc.Row(
-                                dcc.Loading(
-                                    id="loading-cdc-cod-heatmap",
-                                    custom_spinner=dmc.Skeleton(visible=True, h="100%"),
-                                    children=html.Div(
-                                        id="cdc-cod-heatmap",
-                                        className="bg-white rounded-3 shadow-sm p-3",
-                                    ),
-                                ),
-                                className="mb-4",
-                            ),
-                            dbc.Alert(
-                                [
-                                    html.I(className="fas fa-info-circle me-2"),
-                                    "Top causes of death by age group for year ",
-                                    html.Span(
-                                        "—",
-                                        id="cod-table-year-text",
-                                        className="fw-semibold",
-                                    ),
-                                    ".",
-                                ],
-                                color="info",
-                                className="py-2 mb-3 small",
-                            ),
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        dcc.Loading(
-                                            id="loading-cdc-top-causes",
-                                            custom_spinner=dmc.Skeleton(
-                                                visible=True, h="100%"
-                                            ),
-                                            children=html.Div(
-                                                [
-                                                    dbc.Tabs(
-                                                        [
-                                                            dbc.Tab(
-                                                                html.Div(
-                                                                    id="cdc-top-cause-names",
-                                                                    className="bg-white rounded-3 shadow-sm p-3",
-                                                                ),
-                                                                label="Names",
-                                                                tab_id="tab-names",
-                                                            ),
-                                                            dbc.Tab(
-                                                                html.Div(
-                                                                    id="cdc-top-cause-deaths",
-                                                                    className="bg-white rounded-3 shadow-sm p-3",
-                                                                ),
-                                                                label="Deaths",
-                                                                tab_id="tab-deaths",
-                                                            ),
-                                                        ],
-                                                        id="cdc-top-causes-tabs",
-                                                        active_tab="tab-names",
-                                                    ),
-                                                ],
-                                                className="bg-white rounded-3 shadow-sm p-3",
-                                            ),
-                                        ),
-                                        width=12,
-                                    ),
-                                ],
-                                className="g-3 mb-3",
                             ),
                         ],
                         title=[
@@ -771,23 +707,26 @@ def update_cdc_data_async(n_clicks):
     [
         Output("cod-active-filters-card", "children"),
         Output("cdc-cod-filters", "children"),
-        Output("cdc-cod", "children"),
-        Output("cdc-cod-heatmap", "children"),
-        Output("cdc-top-cause-names", "children"),
-        Output("cdc-top-cause-deaths", "children"),
+        Output(f"{FILTER_COD_PREFIX}-tab-content", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
         Output("cod-days-elapsed-text", "children"),
-        Output("cod-tree-year-text", "children"),
-        Output("cod-table-year-text", "children"),
+        Output("cod-most-recent-year", "children"),
     ],
-    Input("button-cod", "n_clicks"),
     [
-        State({"type": "filter-str", "prefix": "cdc_cod", "index": ALL}, "value"),
-        State({"type": "filter-num", "prefix": "cdc_cod", "index": ALL}, "value"),
+        Input(f"{FILTER_COD_PREFIX}-tabs", "active_tab"),
+        Input("button-cod", "n_clicks"),
+    ],
+    [
+        State(
+            {"type": "filter-str", "prefix": FILTER_COD_PREFIX, "index": ALL}, "value"
+        ),
+        State(
+            {"type": "filter-num", "prefix": FILTER_COD_PREFIX, "index": ALL}, "value"
+        ),
     ],
 )
-def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
+def display_cdc_cod(active_tab, n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
     """Create cdc cod."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
@@ -842,36 +781,78 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
 
     most_recent_year = cod_all["year"].max()
 
-    # create the charts
-    cdc_cod_chart = charters.chart(
-        df=cod_all,
-        x_axis="year",
-        y_axis="deaths",
-        color=CATEGORY_COL,
-        type="area",
-        category_orders=category_orders,
-    )
-
-    cdc_cod_heatmap = px.treemap(
-        cod_all[
-            (cod_all[CATEGORY_COL] != "total") & (cod_all["year"] == most_recent_year)
-        ],
-        path=[px.Constant("all"), CATEGORY_COL, "icd_sub_chapter"],
-        values="deaths",
-        # skip first color to match the first chart
-        color_discrete_sequence=px.colors.qualitative.Plotly[1:],
-    )
-
-    cdc_top_cause_deaths, cdc_top_cause_names = cdc.get_top_deaths_by_age_group(
-        df=cod_all, year=most_recent_year
-    )
+    # create tab content
+    if active_tab == f"{FILTER_COD_PREFIX}-tab-cod-time":
+        cdc_cod_chart = charters.chart(
+            df=cod_all,
+            x_axis="year",
+            y_axis="deaths",
+            color=CATEGORY_COL,
+            type="area",
+            category_orders=category_orders,
+        )
+        tab_content = html.Div([dcc.Graph(figure=cdc_cod_chart)])
+    elif active_tab == f"{FILTER_COD_PREFIX}-tab-cod-heatmap":
+        cdc_cod_heatmap = px.treemap(
+            cod_all[
+                (cod_all[CATEGORY_COL] != "total")
+                & (cod_all["year"] == most_recent_year)
+            ],
+            path=[px.Constant("all"), CATEGORY_COL, "icd_sub_chapter"],
+            values="deaths",
+            # skip first color to match the first chart
+            color_discrete_sequence=px.colors.qualitative.Plotly[1:],
+        )
+        tab_content = html.Div([dcc.Graph(figure=cdc_cod_heatmap)])
+    elif active_tab == f"{FILTER_COD_PREFIX}-tab-cod-top-causes-names":
+        cdc_top_cause_deaths, cdc_top_cause_names = cdc.get_top_deaths_by_age_group(
+            df=cod_all, year=most_recent_year
+        )
+        columnDefs = dash_formats.get_column_defs(cdc_top_cause_names)
+        grid = dag.AgGrid(
+            id={
+                "type": "data-table",
+                "tab": "cod-top-causes-names",
+                "page": FILTER_COD_PREFIX,
+            },
+            rowData=cdc_top_cause_names.to_dict("records"),
+            columnDefs=columnDefs,
+            dashGridOptions={
+                "defaultColDef": {
+                    "width": 110,
+                },
+            },
+        )
+        tab_content = html.Div([grid])
+    elif active_tab == f"{FILTER_COD_PREFIX}-tab-cod-top-causes-deaths":
+        cdc_top_cause_deaths, cdc_top_cause_names = cdc.get_top_deaths_by_age_group(
+            df=cod_all, year=most_recent_year
+        )
+        columnDefs = dash_formats.get_column_defs(cdc_top_cause_deaths)
+        grid = dag.AgGrid(
+            id={
+                "type": "data-table",
+                "tab": "cod-top-causes-deaths",
+                "page": FILTER_COD_PREFIX,
+            },
+            rowData=cdc_top_cause_deaths.to_dict("records"),
+            columnDefs=columnDefs,
+            dashGridOptions={
+                "defaultColDef": {
+                    "width": 110,
+                },
+            },
+        )
+        tab_content = html.Div([grid])
+    else:
+        tab_content = dash.no_update
 
     # create the filters
     cdc_cod_filters = dash.no_update
     if not cdc_cod_num_filters:
         cdc_cod_filters = dh.generate_filters(
             df=cod_all,
-            prefix="cdc_cod",
+            prefix=FILTER_COD_PREFIX,
             config=None,
             exclude_cols=[
                 "deaths",
@@ -917,30 +898,10 @@ def display_cdc_cod(n_clicks, cdc_cod_str_filters, cdc_cod_num_filters):
     return (
         active_filters_card,
         cdc_cod_filters,
-        dcc.Graph(figure=cdc_cod_chart),
-        dcc.Graph(figure=cdc_cod_heatmap),
-        dag.AgGrid(
-            rowData=cdc_top_cause_names.to_dict("records"),
-            columnDefs=dash_formats.get_column_defs(cdc_top_cause_names),
-            dashGridOptions={
-                "defaultColDef": {
-                    "width": 110,
-                },
-            },
-        ),
-        dag.AgGrid(
-            rowData=cdc_top_cause_deaths.to_dict("records"),
-            columnDefs=dash_formats.get_column_defs(cdc_top_cause_deaths),
-            dashGridOptions={
-                "defaultColDef": {
-                    "width": 110,
-                },
-            },
-        ),
+        tab_content,
         False,
         "",
         days_elapsed,
-        most_recent_year,
         most_recent_year,
     )
 

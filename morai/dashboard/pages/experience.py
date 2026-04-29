@@ -622,7 +622,7 @@ def update_tab_content(
                         barmode=barmode,
                     )
                     chart_secondary = dcc.Graph(figure=chart_secondary)
-            tab_content = html.Div([dcc.Graph(figure=chart)], key="chart-content")
+            tab_content = html.Div([dcc.Graph(figure=chart)])
 
         elif active_tab == f"{FILTER_PREFIX}-tab-table":
             if tool == "compare":
@@ -687,7 +687,7 @@ def update_tab_content(
             )
 
             export_button = common_build._build_export_button("table", FILTER_PREFIX)
-            tab_content = html.Div([export_button, grid], key="table-content")
+            tab_content = html.Div([export_button, grid])
 
         elif active_tab == f"{FILTER_PREFIX}-tab-rank":
             rank_features = (
@@ -737,9 +737,7 @@ def update_tab_content(
             )
 
             export_button = common_build._build_export_button("rank", FILTER_PREFIX)
-            tab_content = html.Div(
-                [rank_description, export_button, grid], key="rank-content"
-            )
+            tab_content = html.Div([rank_description, export_button, grid])
 
         return tab_content, chart_secondary, filtered_card, False, ""
 
