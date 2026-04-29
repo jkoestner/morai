@@ -36,7 +36,7 @@ pl.enable_string_cache()
 
 dash.register_page(__name__, path="/experience", title="morai - Experience", order=2)
 
-PAGE_ID = "experience"
+FILTER_PREFIX = "experience"
 
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
@@ -58,7 +58,7 @@ def layout():
             _build_main_content(),
             dcc.Download(id="download-dataframe-csv"),
             dbc.Toast(
-                id=f"{PAGE_ID}-toast",
+                id="experience-toast",
                 header="Error",
                 is_open=False,
                 dismissable=True,
@@ -156,14 +156,10 @@ def _build_main_content():
                 common_build._build_tabbed_content(
                     tabs=[
                         common_build.TabSpec(label="Chart", tab_id="chart"),
-                        common_build.TabSpec(
-                            label="Table", tab_id="table", exportable=True
-                        ),
-                        common_build.TabSpec(
-                            label="Rank", tab_id="rank", exportable=True
-                        ),
+                        common_build.TabSpec(label="Table", tab_id="table"),
+                        common_build.TabSpec(label="Rank", tab_id="rank"),
                     ],
-                    page_id=PAGE_ID,
+                    prefix=FILTER_PREFIX,
                     filter_panel=common_build.FilterPanel(
                         children=_build_filter_children()
                     ),
@@ -253,12 +249,12 @@ def _build_filter_children():
         _build_bookmarks_card(),
         html.Button(
             [html.I(className="fas fa-undo me-2"), "Reset Filters"],
-            id="reset-filters-button",
+            id={"type": "filter-reset-button", "prefix": FILTER_PREFIX},
             n_clicks=0,
             className="btn btn-outline-primary w-100 shadow-sm mb-4",
         ),
         html.Div(
-            id="chart-filters",
+            id=f"{FILTER_PREFIX}-filters",
             className="overflow-auto custom-scrollbar",
             style={
                 "max-height": "calc(100vh - 300px)",
@@ -358,7 +354,7 @@ def _build_bookmarks_card():
     [
         Output("store-initial-filters", "data"),
         Output("chart-selectors", "children"),
-        Output("chart-filters", "children"),
+        Output(f"{FILTER_PREFIX}-filters", "children"),
         Output("card", "children"),
     ],
     [Input("store-dataset", "data")],
@@ -372,7 +368,7 @@ def load_data(dataset, config, saved_filter_values):
     logger.debug("generate selectors and filters")
     filter_dict = dh.generate_filters(
         df=dataset,
-        prefix="chart",
+        prefix=FILTER_PREFIX,
         config=config,
         initial_values=saved_filter_values,
     )
@@ -423,23 +419,23 @@ def load_data(dataset, config, saved_filter_values):
 
 @callback(
     [
-        Output(f"{PAGE_ID}-tab-content", "children"),
-        Output(f"{PAGE_ID}-chart-secondary", "children"),
+        Output(f"{FILTER_PREFIX}-tab-content", "children"),
+        Output(f"{FILTER_PREFIX}-chart-secondary", "children"),
         Output("filtered-card", "children"),
-        Output(f"{PAGE_ID}-toast", "is_open"),
-        Output(f"{PAGE_ID}-toast", "children"),
+        Output("experience-toast", "is_open"),
+        Output("experience-toast", "children"),
     ],
     [
         # tabs
-        Input(f"{PAGE_ID}-tabs", "active_tab"),
+        Input(f"{FILTER_PREFIX}-tabs", "active_tab"),
         # update button
         Input("update-content-button", "n_clicks"),
         # tools
         State("tool-selector", "value"),
         # selectors
         State({"type": "chart-selector", "index": ALL}, "value"),
-        State({"type": "chart-str-filter", "index": ALL}, "value"),
-        State({"type": "chart-num-filter", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
         # stores
         State("store-dataset", "data"),
         State("store-initial-filters", "data"),
@@ -523,9 +519,9 @@ def update_tab_content(
         tab_content = None
 
         # Early validation for chart/table tabs
-        if (active_tab in [f"{PAGE_ID}-tab-chart", f"{PAGE_ID}-tab-table"]) and (
-            x_axis is None or y_axis is None
-        ):
+        if (
+            active_tab in [f"{FILTER_PREFIX}-tab-chart", f"{FILTER_PREFIX}-tab-table"]
+        ) and (x_axis is None or y_axis is None):
             return (
                 "Select X-Axis and Y-Axis to view content",
                 None,
@@ -535,7 +531,7 @@ def update_tab_content(
             )
 
         # update tab content based on tab and tool
-        if active_tab == f"{PAGE_ID}-tab-chart":
+        if active_tab == f"{FILTER_PREFIX}-tab-chart":
             if tool == "compare":
                 chart = charters.compare_rates(
                     df=filtered_df,
@@ -626,9 +622,9 @@ def update_tab_content(
                         barmode=barmode,
                     )
                     chart_secondary = dcc.Graph(figure=chart_secondary)
-            tab_content = dcc.Graph(figure=chart)
+            tab_content = html.Div([dcc.Graph(figure=chart)], key="chart-content")
 
-        elif active_tab == f"{PAGE_ID}-tab-table":
+        elif active_tab == f"{FILTER_PREFIX}-tab-table":
             if tool == "compare":
                 table = charters.compare_rates(
                     df=filtered_df,
@@ -673,7 +669,7 @@ def update_tab_content(
 
             columnDefs = dash_formats.get_column_defs(table)
             grid = dag.AgGrid(
-                id={"type": "data-table", "tab": "table", "page": PAGE_ID},
+                id={"type": "data-table", "tab": "table", "page": FILTER_PREFIX},
                 rowData=table.to_dict("records"),
                 columnDefs=columnDefs,
                 dashGridOptions={
@@ -690,9 +686,10 @@ def update_tab_content(
                 columnSize="sizeToFit",
             )
 
-            tab_content = html.Div([grid])
+            export_button = common_build._build_export_button("table", FILTER_PREFIX)
+            tab_content = html.Div([export_button, grid], key="table-content")
 
-        elif active_tab == f"{PAGE_ID}-tab-rank":
+        elif active_tab == f"{FILTER_PREFIX}-tab-rank":
             rank_features = (
                 rank_columns if rank_columns else config_dataset["columns"]["features"]
             )
@@ -709,7 +706,7 @@ def update_tab_content(
             columnDefs = dash_formats.get_column_defs(rank)
 
             grid = dag.AgGrid(
-                id={"type": "data-table", "tab": "rank", "page": PAGE_ID},
+                id={"type": "data-table", "tab": "rank", "page": FILTER_PREFIX},
                 rowData=rank.to_dict("records"),
                 columnDefs=columnDefs,
                 dashGridOptions={
@@ -739,7 +736,10 @@ def update_tab_content(
                 style={"fontSize": "0.85em", "color": "gray", "marginBottom": "6px"},
             )
 
-            tab_content = html.Div([rank_description, grid])
+            export_button = common_build._build_export_button("rank", FILTER_PREFIX)
+            tab_content = html.Div(
+                [rank_description, export_button, grid], key="rank-content"
+            )
 
         return tab_content, chart_secondary, filtered_card, False, ""
 
@@ -844,99 +844,14 @@ def update_tool_description(tool):
 
 
 @callback(
-    [
-        Output({"type": "chart-str-filter", "index": ALL}, "value"),
-        Output({"type": "chart-num-filter", "index": ALL}, "value"),
-    ],
-    [Input("reset-filters-button", "n_clicks")],
-    [State("store-dataset", "data"), State("store-initial-filters", "data")],
-    prevent_initial_call=True,
-)
-def reset_filters(n_clicks, dataset, filter_dict):
-    """Reset all filters to default values."""
-    logger.debug("resetting filters")
-    str_reset_values = [[]] * len(filter_dict["str_cols"])
-    num_reset_values = [
-        [
-            dataset.select(pl.col(col).min()).collect().item(),
-            dataset.select(pl.col(col).max()).collect().item(),
-        ]
-        for col in filter_dict["num_cols"]
-    ]
-    return str_reset_values, num_reset_values
-
-
-@callback(
-    Output(f"{PAGE_ID}-filters-offcanvas", "is_open"),
-    [Input(f"{PAGE_ID}-open-offcanvas-button", "n_clicks")],
-    [State(f"{PAGE_ID}-filters-offcanvas", "is_open")],
-    prevent_initial_call=True,
-)
-def toggle_filters_offcanvas(n_clicks, is_open):
-    """Toggle the filters offcanvas."""
-    if n_clicks:
-        return not is_open
-    return is_open
-
-
-@callback(
-    Output({"type": "chart-collapse", "index": ALL}, "is_open"),
-    Output({"type": "chart-collapse-button", "index": ALL}, "children"),
-    Input({"type": "chart-collapse-button", "index": ALL}, "n_clicks"),
-    State({"type": "chart-collapse", "index": ALL}, "is_open"),
-    State({"type": "chart-collapse-button", "index": ALL}, "children"),
-    prevent_initial_call=True,
-)
-def toggle_collapse(n_clicks, is_open, children):
-    """Toggle collapse state of filter checklists."""
-    if not n_clicks or not any(n_clicks):
-        raise dash.exceptions.PreventUpdate
-
-    # Find which button was clicked
-    ctx = callback_context
-    if not ctx.triggered:
-        return [False] * len(is_open), children
-
-    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    button_idx = ast.literal_eval(button_id)["index"]
-
-    # Update the collapse states and button icons
-    new_is_open = []
-    new_children = []
-
-    for _, (col, is_open_state, child) in enumerate(
-        zip(
-            [x["id"]["index"] for x in ctx.inputs_list[0]],
-            is_open,
-            children,
-            strict=False,
-        )
-    ):
-        # Update collapse state
-        new_state = not is_open_state if col == button_idx else is_open_state
-        new_is_open.append(new_state)
-
-        # Update button content
-        label = child[0]["props"]["children"]  # Get the column name
-        new_children.append(
-            [
-                html.Span(label, style={"flex-grow": 1}),
-                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
-            ]
-        )
-
-    return new_is_open, new_children
-
-
-@callback(
     Output("active-filters-card", "children"),
     [
-        Input({"type": "chart-str-filter", "index": ALL}, "value"),
-        Input({"type": "chart-num-filter", "index": ALL}, "value"),
+        Input({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+        Input({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
     ],
     [
-        State({"type": "chart-str-filter", "index": ALL}, "id"),
-        State({"type": "chart-num-filter", "index": ALL}, "id"),
+        State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+        State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
         State("store-initial-filters", "data"),
     ],
     prevent_initial_call=True,
@@ -982,29 +897,11 @@ def update_active_filters_card(
 
 
 @callback(
-    [
-        Output({"type": "export-button", "tab": "table", "page": PAGE_ID}, "style"),
-        Output({"type": "export-button", "tab": "rank", "page": PAGE_ID}, "style"),
-    ],
-    Input(f"{PAGE_ID}-tabs", "active_tab"),
-)
-def toggle_export_button(active_tab):
-    """Toggle a hidden export into view."""
-    hide = {"display": "none"}
-    show = {"display": "inline-block"}
-    if active_tab == f"{PAGE_ID}-tab-table":
-        return show, hide
-    elif active_tab == f"{PAGE_ID}-tab-rank":
-        return hide, show
-    return hide, hide
-
-
-@callback(
     Output("store-filter-values", "data"),
-    Input({"type": "chart-str-filter", "index": ALL}, "value"),
-    Input({"type": "chart-num-filter", "index": ALL}, "value"),
-    State({"type": "chart-str-filter", "index": ALL}, "id"),
-    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    Input({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    Input({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
     prevent_initial_call=True,
 )
 def save_filter_state(str_vals, num_vals, str_ids, num_ids):
@@ -1016,6 +913,25 @@ def save_filter_state(str_vals, num_vals, str_ids, num_ids):
         id_["index"]: val for id_, val in zip(num_ids, num_vals, strict=False)
     }
     return {"str_filters": str_filters, "num_filters": num_filters}
+
+
+@callback(
+    Output({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    Output({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    Input({"type": "filter-reset-button", "prefix": FILTER_PREFIX}, "n_clicks"),
+    State("store-initial-filters", "data"),
+    prevent_initial_call=True,
+)
+def reset_filters(n_clicks, filter_dict):
+    """Clear the filters."""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    str_reset = [[]] * len(filter_dict["str_cols"])
+    num_reset = [
+        [filter_dict["min_max"][f"{col}_min"], filter_dict["min_max"][f"{col}_max"]]
+        for col in filter_dict["num_cols"]
+    ]
+    return str_reset, num_reset
 
 
 @callback(
@@ -1035,10 +951,10 @@ def update_bookmark_dropdown(bookmarks):
     Output("bookmark-name-input", "value"),
     Input("save-bookmark-button", "n_clicks"),
     State("bookmark-name-input", "value"),
-    State({"type": "chart-str-filter", "index": ALL}, "value"),
-    State({"type": "chart-num-filter", "index": ALL}, "value"),
-    State({"type": "chart-str-filter", "index": ALL}, "id"),
-    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
     State("store-bookmarks", "data"),
     prevent_initial_call=True,
 )
@@ -1058,14 +974,22 @@ def save_bookmark(n_clicks, name, str_vals, num_vals, str_ids, num_ids, bookmark
 
 
 @callback(
-    Output({"type": "chart-str-filter", "index": ALL}, "value", allow_duplicate=True),
-    Output({"type": "chart-num-filter", "index": ALL}, "value", allow_duplicate=True),
+    Output(
+        {"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL},
+        "value",
+        allow_duplicate=True,
+    ),
+    Output(
+        {"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL},
+        "value",
+        allow_duplicate=True,
+    ),
     Input("load-bookmark-button", "n_clicks"),
     State("bookmark-dropdown", "value"),
     State("store-bookmarks", "data"),
-    State({"type": "chart-str-filter", "index": ALL}, "id"),
-    State({"type": "chart-num-filter", "index": ALL}, "id"),
-    State({"type": "chart-num-filter", "index": ALL}, "value"),
+    State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
     prevent_initial_call=True,
 )
 def load_bookmark(n_clicks, selected, bookmarks, str_ids, num_ids, current_num_vals):

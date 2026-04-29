@@ -735,10 +735,10 @@ def initialize_tables(
         State("store-table-2-select", "data"),
         State("table-1-mi-years", "value"),
         State("table-2-mi-years", "value"),
-        State({"type": "table-1-str-filter", "index": ALL}, "value"),
-        State({"type": "table-1-num-filter", "index": ALL}, "value"),
-        State({"type": "table-2-str-filter", "index": ALL}, "value"),
-        State({"type": "table-2-num-filter", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "table-1", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "table-1", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "table-2", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "table-2", "index": ALL}, "value"),
     ],
     prevent_initial_call=True,
 )
@@ -769,11 +769,11 @@ def filter_tables_callback(
     # get filters from the callback context for description
     states_info = dh._inputs_flatten_list(callback_context.states_list)
     filters_table_1 = dh._inputs_parse_type(
-        states_info, "table-1-num-filter"
-    ) + dh._inputs_parse_type(states_info, "table-1-str-filter")
+        states_info, "filter-num", prefix="table-1"
+    ) + dh._inputs_parse_type(states_info, "filter-str", prefix="table-1")
     filters_table_2 = dh._inputs_parse_type(
-        states_info, "table-2-num-filter"
-    ) + dh._inputs_parse_type(states_info, "table-2-str-filter")
+        states_info, "filter-num", prefix="table-2"
+    ) + dh._inputs_parse_type(states_info, "filter-str", prefix="table-2")
 
     # filter the datasets
     filtered_table_1, filtered_table_2 = filter_tables(
@@ -986,10 +986,10 @@ def update_graphs_from_slider(issue_age_value, compare_df):
         State("table-2-id", "value"),
         State("table-1-mi-years", "value"),
         State("table-2-mi-years", "value"),
-        State({"type": "table-1-str-filter", "index": ALL}, "value"),
-        State({"type": "table-1-num-filter", "index": ALL}, "value"),
-        State({"type": "table-2-str-filter", "index": ALL}, "value"),
-        State({"type": "table-2-num-filter", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "table-1", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "table-1", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "table-2", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "table-2", "index": ALL}, "value"),
     ],
     prevent_initial_call=True,
 )
@@ -1186,11 +1186,11 @@ def filter_tables(table_1, table_2, mults_1, mults_2, filter_list):
     # callback context
     inputs_info = dh._inputs_flatten_list(filter_list)
     filters_table_1 = dh._inputs_parse_type(
-        inputs_info, "table-1-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
+        inputs_info, "filter-num", prefix="table-1"
+    ) + dh._inputs_parse_type(inputs_info, "filter-str", prefix="table-1")
     filters_table_2 = dh._inputs_parse_type(
-        inputs_info, "table-2-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
+        inputs_info, "filter-num", prefix="table-2"
+    ) + dh._inputs_parse_type(inputs_info, "filter-str", prefix="table-2")
 
     # filter the datasets
     filtered_table_1 = dh.filter_data(

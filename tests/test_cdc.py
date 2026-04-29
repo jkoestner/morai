@@ -57,8 +57,8 @@ def test_get_cdc_data_xml(mock_post, tmp_path):
         df = cdc.get_cdc_data_xml(xml_filename="cdc_d176.xml", parse_date_col="Month")
 
     assert isinstance(df, pd.DataFrame)
-    assert df.shape == (93, 6)
-    assert df.iloc[-1]["month"] == pd.Timestamp("2025-09-01")
+    assert df.shape == (93, 7)
+    assert df.iloc[-1]["month"] == 9
     assert df.iloc[-1]["year"] == 2025
 
 

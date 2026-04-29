@@ -577,8 +577,8 @@ def clicked_cell_target_dictionary(cell, model_data, config):
         State("store-model-results", "data"),
         State("store-dataset", "data"),
         State({"type": "pdp-selector", "index": ALL}, "value"),
-        State({"type": "pdp-str-filter", "index": ALL}, "value"),
-        State({"type": "pdp-num-filter", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "pdp", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "pdp", "index": ALL}, "value"),
     ],
 )
 def display_pdp(
@@ -678,8 +678,8 @@ def toggle_pdp_filters_offcanvas(n_clicks, is_open):
 
 @callback(
     [
-        Output({"type": "pdp-str-filter", "index": ALL}, "value"),
-        Output({"type": "pdp-num-filter", "index": ALL}, "value"),
+        Output({"type": "filter-str", "prefix": "pdp", "index": ALL}, "value"),
+        Output({"type": "filter-num", "prefix": "pdp", "index": ALL}, "value"),
     ],
     [Input("reset-pdp-filters-button", "n_clicks")],
     [State("store-dataset", "data"), State("store-config", "data")],

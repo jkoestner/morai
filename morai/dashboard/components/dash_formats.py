@@ -1,11 +1,13 @@
 """Components - dash formats."""
 
+import pandas as pd
+
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
 
 
-def get_column_defs(table):
+def get_column_defs(table: pd.DataFrame) -> list:
     """
     Get the column definitions.
 
@@ -88,7 +90,7 @@ def get_column_defs(table):
     return column_defs
 
 
-def remove_column_defs(column_defs, col_name):
+def remove_column_defs(column_defs: list, col_name: str) -> list:
     """
     Remove a column from the column definitions.
 
@@ -111,7 +113,7 @@ def remove_column_defs(column_defs, col_name):
     return column_defs
 
 
-def group_column_defs(column_defs):
+def group_column_defs(column_defs: list) -> list:
     """
     Create column groups for the column definitions.
 
@@ -129,7 +131,7 @@ def group_column_defs(column_defs):
         The column definitions
 
     """
-    groups = {}
+    groups: dict = {}
 
     # parse the column definitions to group them by prefix
     for col_def in column_defs:

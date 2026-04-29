@@ -1,5 +1,6 @@
 """Common build structures used in dashboard components."""
 
+import ast
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -25,18 +26,15 @@ class TabSpec:
     tab_id : str
         Identifier suffix for the tab (e.g. "chart", "table"). The full
         component id is namespaced by page in build_tabbed_content.
-    exportable : bool
-        Whether to render an export button for this tab's content.
 
     """
 
     label: str
     tab_id: str
-    exportable: bool = False
 
-    def full_id(self, page_id: str) -> str:
+    def full_id(self, prefix: str) -> str:
         """Get the full component id for this tab, namespaced by page."""
-        return f"{page_id}-tab-{self.tab_id}"
+        return f"{prefix}-tab-{self.tab_id}"
 
 
 @dataclass
@@ -64,7 +62,7 @@ class FilterPanel:
 
 def _build_tabbed_content(
     tabs: list,
-    page_id: str,
+    prefix: str,
     active_tab: str | None = None,
     filter_panel: FilterPanel | None = None,
     include_secondary_chart: bool = False,
@@ -74,17 +72,18 @@ def _build_tabbed_content(
 
     Notes
     -----
-    - each tab will have an id of the form "{page_id}-tab-{tab_id}"
-    - the containing Tabs component will have id "{page_id}-tabs"
-    - the offcanvas filter button will have id "{page_id}-open-offcanvas-button"
+    - the containing Tabs component will have id "{prefix}-tabs"
+    - the tab content container will have id "{prefix}-tab-content"
+    - each tab will have an id of the form "{prefix}-tab-{tab_id}"
+    - the offcanvas filter button will have id "{prefix}-open-offcanvas-button"
 
     Parameters
     ----------
     tabs : list of TabSpec
         Tab specifications in display order.
-    page_id : str
-        Page namespace, used to prefix component ids and as the export
-        filename stem (e.g. "experience").
+    prefix : str
+        prefix to use for the ids of all components
+        (tabs, content container, filter button)
     active_tab : str, optional
         tab_id of the initially active tab. Defaults to the first tab.
     filter_panel : FilterPanel, optional
@@ -99,20 +98,15 @@ def _build_tabbed_content(
         dbc.Tab(
             children=[],
             label=t.label,
-            tab_id=f"{page_id}-tab-{t.tab_id}",
+            tab_id=f"{prefix}-tab-{t.tab_id}",
             label_class_name="fw-bold",
             active_label_class_name="text-primary",
         )
         for t in tabs
     ]
 
-    # add export if needed
-    export_buttons = [
-        _build_export_button(t.tab_id, page_id) for t in tabs if t.exportable
-    ]
-
     # set active tab (default to first if not specified)
-    default_active = active_tab or tabs[0].full_id(page_id)
+    default_active = active_tab or tabs[0].full_id(prefix)
 
     # add filter button if needed, then tabs, then exports
     content = []
@@ -120,28 +114,28 @@ def _build_tabbed_content(
         content.append(
             dbc.Button(
                 [html.I(className="fas fa-filter me-2"), filter_panel.button_label],
-                id=f"{page_id}-open-offcanvas-button",
+                id={"type": "open-offcanvas-button", "prefix": prefix},
                 className="mb-3",
                 color="primary",
+                style={"width": "auto"},
             )
         )
     content.append(
         dbc.Tabs(
             tab_components,
-            id=f"{page_id}-tabs",
+            id=f"{prefix}-tabs",
             active_tab=default_active,
             className="mb-3",
         )
     )
-    content.extend(export_buttons)
 
     # add loaders and optional secondary chart
     loaders = [
         dcc.Loading(
-            id=f"{page_id}-loading-tab-content",
+            id=f"{prefix}-loading-tab-content",
             custom_spinner=dmc.Skeleton(visible=True, h="100%", w="100%"),
             children=html.Div(
-                id=f"{page_id}-tab-content",
+                id=f"{prefix}-tab-content",
                 className="bg-white rounded-3 shadow-sm p-4 border border-light",
             ),
         ),
@@ -149,10 +143,10 @@ def _build_tabbed_content(
     if include_secondary_chart:
         loaders.append(
             dcc.Loading(
-                id=f"{page_id}-loading-chart-secondary",
+                id=f"{prefix}-loading-chart-secondary",
                 custom_spinner=dmc.Skeleton(visible=True, h="100%", w="100%"),
                 children=html.Div(
-                    id=f"{page_id}-chart-secondary",
+                    id=f"{prefix}-chart-secondary",
                     className=(
                         "mt-4 bg-white rounded-3 shadow-sm p-4 border border-light"
                     ),
@@ -166,7 +160,7 @@ def _build_tabbed_content(
         content.append(
             dbc.Offcanvas(
                 filter_panel.children,
-                id=f"{page_id}-filters-offcanvas",
+                id={"type": "filters-offcanvas", "prefix": prefix},
                 title=filter_panel.title,
                 placement="end",
                 scrollable=True,
@@ -199,11 +193,11 @@ def _build_export_button(tab: str, page: str) -> html.Button:
         [html.I(className="fas fa-download me-2"), "Export to CSV"],
         id={"type": "export-button", "tab": tab, "page": page},
         className="btn btn-primary mt-2 mb-2",
-        style={"display": "none"},
+        style={"display": "inline-block"},
     )
 
 
-def register_export_callback(app) -> None:  # noqa: ANN001
+def register_export_callback(app) -> None:
     """
     Register a universal callback for exporting table data to CSV.
 
@@ -269,7 +263,7 @@ def register_export_callback(app) -> None:  # noqa: ANN001
             return dash.no_update
 
         triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        button_id = eval(triggered_id)
+        button_id = ast.literal_eval(triggered_id)
         tab = button_id["tab"]
         page = button_id["page"]
 
@@ -288,3 +282,105 @@ def register_export_callback(app) -> None:  # noqa: ANN001
                 return dcc.send_data_frame(df.to_csv, filename, index=False)
 
         return dash.no_update
+
+
+def register_filter_callbacks(app) -> None:
+    """
+    Register universal filter behavior callbacks.
+
+    This function should be called once during app initialization to register:
+    - Filter offcanvas toggle (for any page with the filter button)
+    - Filter checklist collapse/expand
+    - Filter reset
+
+    For these callbacks to work, components must use pattern-matching IDs:
+
+    Offcanvas toggle:
+    - Button: id="{prefix}-open-offcanvas-button"
+    - Offcanvas: id="{prefix}-filters-offcanvas"
+
+    Collapse:
+    - Collapse button:
+      {"type": "filter-collapse-button", "prefix": <prefix>, "index": <col>}
+    - Collapse container:
+      {"type": "filter-collapse", "prefix": <prefix>, "index": <col>}
+
+    Reset:
+    - Reset button: {"type": "filter-reset-button", "prefix": <prefix>}
+    - String filters: {"type": "filter-str", "prefix": <prefix>, "index": <col>}
+    - Numeric filters: {"type": "filter-num", "prefix": <prefix>, "index": <col>}
+    - Initial values store: id="{prefix}-store-initial-filters" with shape:
+      {"str_cols": [...], "num_cols": [...], "min_max": {"col_min": x, "col_max": y}}
+    """
+    import dash  # noqa: PLC0415
+    from dash_extensions.enrich import (  # noqa: PLC0415
+        ALL,
+        MATCH,
+        Input,
+        Output,
+        State,
+        callback,
+        callback_context,
+    )
+
+    # offcanvas toggle
+    @callback(
+        Output({"type": "filters-offcanvas", "prefix": MATCH}, "is_open"),
+        Input({"type": "open-offcanvas-button", "prefix": MATCH}, "n_clicks"),
+        State({"type": "filters-offcanvas", "prefix": MATCH}, "is_open"),
+        prevent_initial_call=True,
+    )
+    def toggle_filters_offcanvas(n_clicks, is_open):
+        """Toggle the filters offcanvas."""
+        if n_clicks:
+            return not is_open
+        return is_open
+
+    # collapse checklists
+    @callback(
+        Output({"type": "filter-collapse", "prefix": MATCH, "index": ALL}, "is_open"),
+        Output(
+            {"type": "filter-collapse-button", "prefix": MATCH, "index": ALL},
+            "children",
+        ),
+        Input(
+            {"type": "filter-collapse-button", "prefix": MATCH, "index": ALL},
+            "n_clicks",
+        ),
+        State({"type": "filter-collapse", "prefix": MATCH, "index": ALL}, "is_open"),
+        State(
+            {"type": "filter-collapse-button", "prefix": MATCH, "index": ALL},
+            "children",
+        ),
+        prevent_initial_call=True,
+    )
+    def toggle_collapse(n_clicks, is_open, children):
+        """Toggle collapse state of filter checklists."""
+        if not n_clicks or not any(n_clicks):
+            raise dash.exceptions.PreventUpdate
+
+        ctx = callback_context
+        if not ctx.triggered:
+            return [False] * len(is_open), children
+
+        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        button_idx = ast.literal_eval(button_id)["index"]
+
+        new_is_open = []
+        new_children = []
+        for col, is_open_state, child in zip(
+            [x["id"]["index"] for x in ctx.inputs_list[0]],
+            is_open,
+            children,
+            strict=False,
+        ):
+            new_state = not is_open_state if col == button_idx else is_open_state
+            new_is_open.append(new_state)
+            label = child[0]["props"]["children"]
+            new_children.append(
+                [
+                    html.Span(label, style={"flex-grow": 1}),
+                    html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
+                ]
+            )
+        return new_is_open, new_children

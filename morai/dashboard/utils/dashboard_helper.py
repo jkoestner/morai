@@ -226,8 +226,6 @@ def generate_filters(
     filters = []
     str_cols = []
     num_cols = []
-    prefix_str_filter = f"{prefix}-str-filter"
-    prefix_num_filter = f"{prefix}-num-filter"
     duckdb_source = None
 
     # get column types
@@ -362,13 +360,21 @@ def generate_filters(
                             html.Span(col, style={"flex-grow": 1}),
                             html.I(className="fas fa-chevron-down"),
                         ],
-                        id={"type": f"{prefix}-collapse-button", "index": col},
+                        id={
+                            "type": "filter-collapse-button",
+                            "prefix": prefix,
+                            "index": col,
+                        },
                         className="mb-2 w-100 text-start d-flex align-items-center",
                         color="light",
                     ),
                     dbc.Collapse(
                         dcc.Checklist(
-                            id={"type": prefix_str_filter, "index": col},
+                            id={
+                                "type": "filter-str",
+                                "prefix": prefix,
+                                "index": col,
+                            },
                             options=options,
                             value=(
                                 initial_values.get("str_filters", {}).get(col, [])
@@ -378,7 +384,11 @@ def generate_filters(
                             className="ms-2",
                             labelStyle={"display": "block"},
                         ),
-                        id={"type": f"{prefix}-collapse", "index": col},
+                        id={
+                            "type": "filter-collapse",
+                            "prefix": prefix,
+                            "index": col,
+                        },
                         is_open=False,
                     ),
                 ],
@@ -397,13 +407,21 @@ def generate_filters(
                             html.Span(col, style={"flex-grow": 1}),
                             html.I(className="fas fa-chevron-down"),
                         ],
-                        id={"type": f"{prefix}-collapse-button", "index": col},
+                        id={
+                            "type": "filter-collapse-button",
+                            "prefix": prefix,
+                            "index": col,
+                        },
                         className="mb-2 w-100 text-start d-flex align-items-center",
                         color="light",
                     ),
                     dbc.Collapse(
                         dcc.RangeSlider(
-                            id={"type": prefix_num_filter, "index": col},
+                            id={
+                                "type": "filter-num",
+                                "prefix": prefix,
+                                "index": col,
+                            },
                             min=min_val,
                             max=max_val,
                             step=1,
@@ -417,7 +435,11 @@ def generate_filters(
                             ),
                             tooltip={"always_visible": True, "placement": "bottom"},
                         ),
-                        id={"type": f"{prefix}-collapse", "index": col},
+                        id={
+                            "type": "filter-collapse",
+                            "prefix": prefix,
+                            "index": col,
+                        },
                         is_open=False,
                     ),
                 ],
@@ -446,19 +468,31 @@ def generate_filters(
                             html.Span(category, style={"flex-grow": 1}),
                             html.I(className="fas fa-chevron-down"),
                         ],
-                        id={"type": f"{prefix}-collapse-button", "index": category},
+                        id={
+                            "type": "filter-collapse-button",
+                            "prefix": prefix,
+                            "index": category,
+                        },
                         className="mb-2 w-100 text-start d-flex align-items-center",
                         color="light",
                     ),
                     dbc.Collapse(
                         dcc.RadioItems(
-                            id={"type": prefix_str_filter, "index": category},
+                            id={
+                                "type": "filter-str",
+                                "prefix": prefix,
+                                "index": category,
+                            },
                             options=options,
                             value=default_value,
                             className="ms-2",
                             labelStyle={"display": "block"},
                         ),
-                        id={"type": f"{prefix}-collapse", "index": category},
+                        id={
+                            "type": "filter-collapse",
+                            "prefix": prefix,
+                            "index": category,
+                        },
                         is_open=False,
                     ),
                 ],
@@ -1322,7 +1356,7 @@ def _inputs_parse_id(input_list: list[Any], id_value: str) -> Any:
     return None
 
 
-def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
+def _inputs_parse_type(input_list: list, type_value: str, prefix: str) -> list:
     """
     Parse inputs for type value.
 
@@ -1334,6 +1368,8 @@ def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
         List of inputs.
     type_value : str
         type to parse.
+    prefix : str
+        prefix of the id to parse.
 
     Returns
     -------
@@ -1346,6 +1382,9 @@ def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
         input_id = input.get("id")
         # id is a dict
         if isinstance(input_id, dict):
-            if input_id.get("type") == type_value:
-                type_list.append(input)
+            if input_id.get("type") != type_value:
+                continue
+            if prefix is not None and input_id.get("prefix") != prefix:
+                continue
+            type_list.append(input)
     return type_list

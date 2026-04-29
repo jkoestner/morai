@@ -149,6 +149,7 @@ app.layout = dmc.MantineProvider(
 )
 
 common_build.register_export_callback(app)
+common_build.register_filter_callbacks(app)
 
 
 # Navbar toggle callback
