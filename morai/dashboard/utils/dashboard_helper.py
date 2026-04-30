@@ -573,9 +573,7 @@ def get_active_filters(
     return active_filters_list
 
 
-def toggle_collapse(
-    callback_context: Any, is_open: list[bool], children: list[dict]
-) -> tuple[list[Any], list[Any]]:
+def toggle_collapse(callback_context: Any, is_open: list, children: list) -> tuple:
     """
     Toggle collapse state of filter checklists.
 
@@ -583,14 +581,14 @@ def toggle_collapse(
     ----------
     callback_context : dash.callback_context
         The callback context containing states information
-    is_open : List[bool]
+    is_open : List
         List of current collapse states
-    children : List[dict]
+    children : List
         List of current button children
 
     Returns
     -------
-    tuple[List[bool], List[List[dict]]]
+    tuple
         Updated collapse states and button children
 
     """

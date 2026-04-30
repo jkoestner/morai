@@ -59,7 +59,7 @@ AGE_GROUP_ORDER = [
     "65-74 years",
     "75-84 years",
     "85+ years",
-    "total",
+    "All ages",
 ]
 
 

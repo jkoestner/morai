@@ -39,6 +39,7 @@ thread_lock = threading.Lock()
 # initialize variables
 FILTER_MI_PREFIX = "cdc-mi"
 FILTER_COD_PREFIX = "cdc-cod"
+FILTER_COD_TRENDS_PREFIX = "cdc-cod-trends"
 # provides when to use data from 18 dataset as there is overlap in 99 dataset
 # the 99 dataset ends in 2020 and the 18 dataset starts in 2018
 NEW_DATASET_START_YEAR = 2021
@@ -360,35 +361,114 @@ def layout():
                             dbc.Alert(
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
-                                    f"Excess deaths vs. a linear regression baseline trained on {TRAIN_START_YEAR}-{TRAIN_END_YEAR}. "
+                                    "Standardized mortality rate compared to a linear regression baseline trained on "
+                                    f"{TRAIN_START_YEAR}-{TRAIN_END_YEAR}. "
                                     "Current year annualized (365 / ",
                                     html.Span(
                                         "days elapsed",
                                         id="cod-trend-days-elapsed-text",
                                         className="fw-semibold",
                                     ),
-                                    "). Population differences are not accounted for.",
+                                    ").",
+                                    html.Br(),
+                                    "The cause of death excess won't match the population excess as the cause of death "
+                                    "uses standardized deaths while the population uses crude deaths. As the population gets"
+                                    "older the population excess metric will be a better indicator of excess mortality trends.",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
                             ),
                             dbc.Row(
-                                common_build._build_tabbed_content(
-                                    tabs=[
-                                        common_build.TabSpec(
-                                            label="Trends", tab_id="trends"
+                                [
+                                    dbc.Col(
+                                        common_build._build_tabbed_content(
+                                            tabs=[
+                                                common_build.TabSpec(
+                                                    label="Trends", tab_id="trends"
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Actuals",
+                                                    tab_id="actuals",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Actual - Predicted",
+                                                    tab_id="table-diff",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Actual / Predicted",
+                                                    tab_id="table-pct",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Data",
+                                                    tab_id="data",
+                                                ),
+                                            ],
+                                            prefix=FILTER_COD_TRENDS_PREFIX,
                                         ),
-                                        common_build.TabSpec(
-                                            label="Table Amount",
-                                            tab_id="table-amount",
+                                        width=10,
+                                    ),
+                                    dbc.Col(
+                                        dbc.Card(
+                                            [
+                                                dbc.CardHeader(
+                                                    html.H5(
+                                                        [
+                                                            html.I(
+                                                                className="fas fa-filter me-2"
+                                                            ),
+                                                            "Filters",
+                                                        ],
+                                                        className="mb-0",
+                                                    ),
+                                                    className="bg-light",
+                                                ),
+                                                dbc.CardBody(
+                                                    html.Div(
+                                                        [
+                                                            html.Label(
+                                                                "Death Cause",
+                                                                className="fw-bold",
+                                                            ),
+                                                            dcc.Dropdown(
+                                                                id={
+                                                                    "type": "filter-str",
+                                                                    "prefix": FILTER_COD_TRENDS_PREFIX,
+                                                                    "index": "simple_grouping",
+                                                                },
+                                                                options=[
+                                                                    {
+                                                                        "label": "total",
+                                                                        "value": "total",
+                                                                    }
+                                                                ],
+                                                                value="total",
+                                                                clearable=False,
+                                                                className="ms-2",
+                                                            ),
+                                                            html.Label(
+                                                                "Age Group",
+                                                                className="fw-bold",
+                                                            ),
+                                                            dcc.Dropdown(
+                                                                id={
+                                                                    "type": "filter-str",
+                                                                    "prefix": FILTER_COD_TRENDS_PREFIX,
+                                                                    "index": "age_groups",
+                                                                },
+                                                                options=[],
+                                                                multi=True,
+                                                                clearable=True,
+                                                                className="ms-2",
+                                                            ),
+                                                        ],
+                                                    ),
+                                                ),
+                                            ],
+                                            className="shadow-sm h-100",
                                         ),
-                                        common_build.TabSpec(
-                                            label="Table %",
-                                            tab_id="table-pct",
-                                        ),
-                                    ],
-                                    prefix="cdc-cod-trends",
-                                ),
+                                        width=2,
+                                    ),
+                                ],
                             ),
                         ],
                         title=[
@@ -424,7 +504,9 @@ def layout():
                                         id="pop-trend-days-elapsed-text",
                                         className="fw-semibold",
                                     ),
-                                    f"). Note: population stats have a ~2-year lag; {TRAIN_START_YEAR}-{TRAIN_END_YEAR} trend is extrapolated to fill the gap.",
+                                    "). ",
+                                    html.Br(),
+                                    f"Note: population stats have a ~2-year lag; {TRAIN_START_YEAR}-{TRAIN_END_YEAR} trend is extrapolated to fill the gap.",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
@@ -516,8 +598,10 @@ def layout():
                             dbc.Alert(
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
-                                    f"Total US deaths per week. The deaths also have an adjustment which accounts "
-                                    f"for the lag in reporting. The lag adjustments are {list(IBNR_FACTORS.values())}",
+                                    "Total US deaths per week. The deaths also have an adjustment which accounts "
+                                    "for the lag in reporting. ",
+                                    html.Br(),
+                                    f"The lag adjustments are {list(IBNR_FACTORS.values())}",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
@@ -563,64 +647,59 @@ def layout():
                             dbc.Alert(
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
-                                    "Age-adjusted mortality rates (2000 standard) and year-over-year improvement. "
-                                    "Crude adjusted rate = deaths / population weighted by 2000 age distribution. "
-                                    "Rolling average is a 10-year window.",
+                                    "Mortality improvement calculated using the crude adjusted rate, which accounts for changes in age distribution over time. ",
+                                    html.Br(),
+                                    "Crude adjusted rate = weighted sum (deaths / population) weighted by 2000 population age distribution. (per 100,000 people) ",
+                                    html.Br(),
+                                    "whl = whittaker-henderson-lowrie method for smoothing (order = 3, lamda=400)",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
                             ),
                             dbc.Row(
-                                common_build._build_tabbed_content(
-                                    tabs=[
-                                        common_build.TabSpec(
-                                            label="Chart", tab_id="chart"
+                                [
+                                    dbc.Col(
+                                        common_build._build_tabbed_content(
+                                            tabs=[
+                                                common_build.TabSpec(
+                                                    label="Chart", tab_id="chart"
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Table",
+                                                    tab_id="table",
+                                                ),
+                                            ],
+                                            prefix=FILTER_MI_PREFIX,
                                         ),
-                                        common_build.TabSpec(
-                                            label="Table",
-                                            tab_id="table",
-                                        ),
-                                    ],
-                                    prefix=FILTER_MI_PREFIX,
-                                    filter_panel=common_build.FilterPanel(
-                                        children=[
-                                            html.H4(
-                                                [
-                                                    html.I(
-                                                        className="fas fa-filter me-2"
-                                                    ),
-                                                    "Data Filters",
-                                                ],
-                                                className="mb-3",
-                                            ),
-                                            html.Button(
-                                                [
-                                                    html.I(
-                                                        className="fas fa-undo me-2"
-                                                    ),
-                                                    "Reset Filters",
-                                                ],
-                                                id={
-                                                    "type": "filter-reset-button",
-                                                    "prefix": FILTER_MI_PREFIX,
-                                                },
-                                                n_clicks=0,
-                                                className="btn btn-outline-primary w-100 shadow-sm mb-4",
-                                            ),
-                                            html.Div(
-                                                id=f"{FILTER_MI_PREFIX}-filters",
-                                                className="overflow-auto custom-scrollbar",
-                                                style={
-                                                    "max-height": "calc(100vh - 300px)",
-                                                    "backgroundColor": "#f0f7f0",
-                                                    "padding": "15px",
-                                                    "borderRadius": "8px",
-                                                    "width": "100%",
-                                                },
-                                            ),
-                                        ]
+                                        width=10,
                                     ),
-                                ),
+                                    dbc.Col(
+                                        dbc.Card(
+                                            [
+                                                dbc.CardHeader(
+                                                    html.H5(
+                                                        [
+                                                            html.I(
+                                                                className="fas fa-filter me-2"
+                                                            ),
+                                                            "Filters",
+                                                        ],
+                                                        className="mb-0",
+                                                    ),
+                                                    className="bg-light",
+                                                ),
+                                                dbc.CardBody(
+                                                    html.Div(
+                                                        id=f"{FILTER_MI_PREFIX}-filters",
+                                                    ),
+                                                ),
+                                            ],
+                                            className="shadow-sm h-100",
+                                        ),
+                                        width=2,
+                                    ),
+                                ],
+                                className="mb-4",
                             ),
                         ],
                         title=[
@@ -862,6 +941,7 @@ def display_cdc_cod(active_tab, n_clicks, cdc_cod_str_filters, cdc_cod_num_filte
                 "icd_sub_chapter",
                 "crude_95_confidence_interval",
                 "m33",
+                "data_through",
             ],
         )["filters"]
 
@@ -907,38 +987,50 @@ def display_cdc_cod(active_tab, n_clicks, cdc_cod_str_filters, cdc_cod_num_filte
 
 
 @callback(
-    Output({"type": "cdc_cod-collapse", "index": ALL}, "is_open"),
-    Output({"type": "cdc_cod-collapse-button", "index": ALL}, "children"),
-    Input({"type": "cdc_cod-collapse-button", "index": ALL}, "n_clicks"),
-    State({"type": "cdc_cod-collapse", "index": ALL}, "is_open"),
-    State({"type": "cdc_cod-collapse-button", "index": ALL}, "children"),
-    prevent_initial_call=True,
-)
-def toggle_cdc_cod_collapse(n_clicks, is_open, children):
-    """Toggle collapse state of filter checklists."""
-    if not n_clicks or not any(n_clicks):
-        raise dash.exceptions.PreventUpdate
-
-    return dh.toggle_collapse(
-        callback_context=callback_context,
-        is_open=is_open,
-        children=children,
-    )
-
-
-@callback(
     [
-        Output("cdc-cod-trends-tab-content", "children"),
+        Output(f"{FILTER_COD_TRENDS_PREFIX}-tab-content", "children"),
+        Output(
+            {
+                "type": "filter-str",
+                "prefix": FILTER_COD_TRENDS_PREFIX,
+                "index": "simple_grouping",
+            },
+            "options",
+        ),
+        Output(
+            {
+                "type": "filter-str",
+                "prefix": FILTER_COD_TRENDS_PREFIX,
+                "index": "age_groups",
+            },
+            "options",
+        ),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
         Output("cod-trend-days-elapsed-text", "children"),
     ],
     [
         Input("button-cod-trends", "n_clicks"),
-        Input("cdc-cod-trends-tabs", "active_tab"),
+        Input(f"{FILTER_COD_TRENDS_PREFIX}-tabs", "active_tab"),
+        Input(
+            {
+                "type": "filter-str",
+                "prefix": FILTER_COD_TRENDS_PREFIX,
+                "index": "simple_grouping",
+            },
+            "value",
+        ),
     ],
+    State(
+        {
+            "type": "filter-str",
+            "prefix": FILTER_COD_TRENDS_PREFIX,
+            "index": "age_groups",
+        },
+        "value",
+    ),
 )
-def display_cdc_cod_trends(n_clicks, active_tab):
+def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
     """Create cdc cod trends."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
@@ -955,15 +1047,43 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     # get the data
     mcd99_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_cod")
     mcd18_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_cod")
+    age_group_options = [
+        {"label": str(v), "value": v} for v in mcd18_cod["age_groups"].dropna().unique()
+    ]
 
     # filter and concat
     mcd18_cod = mcd18_cod[mcd18_cod["year"] >= NEW_DATASET_START_YEAR]
     cod_all = pd.concat([mcd99_cod, mcd18_cod], ignore_index=True)
+    include_age_groups = age_group_value if age_group_value else cdc.AGE_GROUP_ORDER
+    cod_all = cod_all[cod_all["age_groups"].isin(include_age_groups)]
+
+    # map category_col and add every combo of [year, age_groups, category_col]
     cod_all = cdc.map_reference(
         df=cod_all,
         col=CATEGORY_COL,
         on_dict={"icd_sub_chapter": "wonder_sub_chapter"},
     )
+    cod_all = (
+        cod_all.groupby(["year", "age_groups", CATEGORY_COL])
+        .agg({"deaths": "sum", "population": "first"})
+        .reset_index()
+    )
+    idx = pd.MultiIndex.from_product(
+        [
+            cod_all["year"].unique(),
+            cod_all[CATEGORY_COL].unique(),
+            cod_all["age_groups"].unique(),
+        ],
+        names=["year", CATEGORY_COL, "age_groups"],
+    )
+    cod_all = (
+        cod_all.set_index(["year", CATEGORY_COL, "age_groups"])
+        .reindex(idx)
+        .reset_index()
+    )
+    cod_all["population"] = cod_all.groupby(["year", "age_groups"])[
+        "population"
+    ].transform("first")
 
     # normalize the partial deaths
     cod_all["deaths"] = cod_all["deaths"].astype(float)
@@ -975,25 +1095,47 @@ def display_cdc_cod_trends(n_clicks, active_tab):
     cod_all.loc[mask, "deaths"] *= factor_parial_year
 
     # create totals column
-    totals = cod_all.groupby("year").sum(numeric_only=True).reset_index()
+    totals = (
+        cod_all.groupby(["year", "age_groups"])
+        .agg({"deaths": "sum", "population": "first"})
+        .reset_index()
+    )
     totals[CATEGORY_COL] = "total"
     cod_all = pd.concat([cod_all, totals], ignore_index=True)
+    cod_all["age_groups"] = pd.Categorical(
+        cod_all["age_groups"], categories=cdc.AGE_GROUP_ORDER, ordered=True
+    )
     category_orders = charters.get_category_orders(
         df=cod_all, category=CATEGORY_COL, measure="deaths"
+    )
+
+    # calculate crude_adj
+    cod_all = cdc.map_reference(
+        df=cod_all,
+        col="population_%",
+        on_dict={"age_groups": "age_bucket"},
+        sheet_name="age_std_2000",
+    )
+    total_weight = cod_all.groupby("age_groups")["population_%"].first().sum()
+    cod_all["population_%"] = cod_all["population_%"] / total_weight
+    cod_all["crude_adj"] = (
+        cod_all["deaths"] / cod_all["population"] * cod_all["population_%"] * 100000
     )
 
     # train the data based on year and the category using linear regression
     train_df = cod_all[
         (cod_all["year"] >= TRAIN_START_YEAR) & (cod_all["year"] <= TRAIN_END_YEAR)
     ]
-    train_df = train_df.groupby(["year", CATEGORY_COL])["deaths"].sum().reset_index()
+    train_df = (
+        train_df.groupby(["year", CATEGORY_COL])[["crude_adj"]].sum().reset_index()
+    )
 
     # create the models
     models = {}
     for cod in train_df[CATEGORY_COL].unique():
         cod_subset = train_df[train_df[CATEGORY_COL] == cod]
         X = (cod_subset["year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
-        y = cod_subset["deaths"].values
+        y = cod_subset["crude_adj"].values
         model = LinearRegression().fit(X, y)
         models[cod] = {
             "model": model,
@@ -1002,48 +1144,55 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         }
 
     # make the predictions
-    test_df = cod_all[(cod_all["year"] >= (TRAIN_END_YEAR + 1))]
-    test_df = test_df.groupby(["year", CATEGORY_COL])["deaths"].sum().reset_index()
+    test_df = cod_all[(cod_all["year"] >= TRAIN_START_YEAR)]
+    test_df = (
+        test_df.groupby(["year", CATEGORY_COL])[["crude_adj", "deaths", "population"]]
+        .sum()
+        .reset_index()
+    )
 
     for cod, model in models.items():
         mask = test_df[CATEGORY_COL] == cod
-        if mask.sum() > 0:
-            X = (test_df.loc[mask, "year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
-            test_df.loc[mask, "pred"] = model["model"].predict(X)
+        X = (test_df.loc[mask, "year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
+        test_df.loc[mask, "predictions"] = model["model"].predict(X)
 
-    test_df["diff_abs"] = test_df["deaths"] - test_df["pred"]
-    test_df["diff_pct"] = (test_df["deaths"] - test_df["pred"]) / test_df["pred"]
-    test_df["year"] = test_df["year"].astype(str)
+    test_df["diff_pct"] = (test_df["crude_adj"] - test_df["predictions"]) / test_df[
+        "predictions"
+    ]
+    test_df["diff_amt"] = (
+        (test_df["population"] * test_df["crude_adj"])
+        - (test_df["population"] * test_df["predictions"])
+    ) / 100000
+    test_df["deaths_pred"] = test_df["deaths"] - test_df["diff_amt"]
+    test_df["year"] = test_df["year"].astype(str)  # needed for column pivot
 
     # chart
-    if active_tab == "cdc-cod-trends-tab-trends":
-        cdc_cod_trends_chart = charters.chart(
-            df=test_df,
+    if active_tab == f"{FILTER_COD_TRENDS_PREFIX}-tab-trends":
+        cdc_cod_trends_chart = charters.compare_rates(
+            df=test_df[test_df[CATEGORY_COL] == option_value],
             x_axis="year",
-            y_axis="diff_abs",
-            color=CATEGORY_COL,
-            type="area",
-            category_orders=category_orders,
+            rates=["crude_adj", "predictions"],
             display=True,
         )
         tab_content = html.Div([dcc.Graph(figure=cdc_cod_trends_chart)])
     # table amount
-    elif active_tab == "cdc-cod-trends-tab-table-amount":
+    elif active_tab == f"{FILTER_COD_TRENDS_PREFIX}-tab-actuals":
         cdc_cod_trends_chart = charters.chart(
             df=test_df,
             x_axis="year",
-            y_axis="diff_abs",
+            y_axis="deaths",
             color=CATEGORY_COL,
             type="area",
             category_orders=category_orders,
             display=False,
         )
         pivot = cdc_cod_trends_chart.pivot(
-            index=CATEGORY_COL, columns="year", values="diff_abs"
+            index=CATEGORY_COL, columns="year", values="deaths"
         )
         pivot.index = pd.Categorical(
             pivot.index, categories=category_orders[CATEGORY_COL], ordered=True
         )
+        pivot = pivot[sorted(pivot.columns, reverse=True)]
         pivot = pivot.sort_index().reset_index()
         columnDefs = dash_formats.get_column_defs(pivot)
         grid = dag.AgGrid(
@@ -1051,8 +1200,40 @@ def display_cdc_cod_trends(n_clicks, active_tab):
             columnDefs=columnDefs,
         )
         tab_content = html.Div([grid])
+    elif active_tab == f"{FILTER_COD_TRENDS_PREFIX}-tab-table-diff":
+        cdc_cod_trends_chart = charters.chart(
+            df=test_df,
+            x_axis="year",
+            y_axis="diff_amt",
+            color=CATEGORY_COL,
+            type="area",
+            category_orders=category_orders,
+            display=False,
+        )
+        pivot = cdc_cod_trends_chart.pivot(
+            index=CATEGORY_COL, columns="year", values="diff_amt"
+        )
+        pivot.index = pd.Categorical(
+            pivot.index, categories=category_orders[CATEGORY_COL], ordered=True
+        )
+        pivot = pivot[sorted(pivot.columns, reverse=True)]
+        pivot = pivot.sort_index().reset_index()
+        columnDefs = dash_formats.get_column_defs(pivot)
+        grid = dag.AgGrid(
+            id={
+                "type": "data-table",
+                "tab": "diff_amt",
+                "page": FILTER_COD_TRENDS_PREFIX,
+            },
+            rowData=pivot.to_dict("records"),
+            columnDefs=columnDefs,
+        )
+        export_button = common_build._build_export_button(
+            "data", FILTER_COD_TRENDS_PREFIX
+        )
+        tab_content = html.Div([export_button, grid])
     # table pct
-    elif active_tab == "cdc-cod-trends-tab-table-pct":
+    elif active_tab == f"{FILTER_COD_TRENDS_PREFIX}-tab-table-pct":
         cdc_cod_trends_chart = charters.chart(
             df=test_df,
             x_axis="year",
@@ -1068,6 +1249,7 @@ def display_cdc_cod_trends(n_clicks, active_tab):
         pivot.index = pd.Categorical(
             pivot.index, categories=category_orders[CATEGORY_COL], ordered=True
         )
+        pivot = pivot[sorted(pivot.columns, reverse=True)]
         pivot = pivot.sort_index().reset_index()
         pivot.columns = [
             col if col == "index" else f"{col}_pct" for col in pivot.columns
@@ -1078,10 +1260,26 @@ def display_cdc_cod_trends(n_clicks, active_tab):
             columnDefs=columnDefs,
         )
         tab_content = html.Div([grid])
+    elif active_tab == f"{FILTER_COD_TRENDS_PREFIX}-tab-data":
+        columnDefs = dash_formats.get_column_defs(test_df)
+        grid = dag.AgGrid(
+            id={"type": "data-table", "tab": "data", "page": FILTER_COD_TRENDS_PREFIX},
+            rowData=test_df.to_dict("records"),
+            columnDefs=columnDefs,
+        )
+        export_button = common_build._build_export_button(
+            "data", FILTER_COD_TRENDS_PREFIX
+        )
+        tab_content = html.Div([export_button, grid])
     else:
         tab_content = dash.no_update
 
-    return tab_content, False, "", days_elapsed
+    category_options = [
+        {"label": str(v), "value": v}
+        for v in sorted(test_df[CATEGORY_COL].dropna().unique())
+    ]
+
+    return tab_content, category_options, age_group_options, False, "", days_elapsed
 
 
 @callback(
@@ -1218,29 +1416,30 @@ def display_cdc_pop_trends(n_clicks, active_tab):
     )
     excess_grouped["deaths_lc"] = excess_grouped["population"] * excess_grouped["qx_lc"]
 
+    # result
+    result = (
+        excess_grouped.groupby(["year"], observed=True)
+        .sum(numeric_only=True)
+        .reset_index()
+    )
+    result["excess_lc"] = result["deaths"] / result["deaths_lc"]
+    result["crude_rt"] = result["deaths"] / result["population"] * 100000
+    result["crude_rt_lc"] = result["deaths_lc"] / result["population"] * 100000
+
     # chart
     if active_tab == "cdc-pop-trends-tab-excess-chart":
         chart = charters.compare_rates(
-            excess_grouped,
+            result,
             x_axis="year",
-            rates=["qx_raw", "qx_lc"],
-            weights=["population"],
+            rates=["crude_rt", "crude_rt_lc"],
         )
         tab_content = html.Div([dcc.Graph(figure=chart)])
     # table
     elif active_tab == "cdc-pop-trends-tab-excess-table":
-        table = (
-            excess_grouped.groupby(["year"], observed=True)
-            .sum(numeric_only=True)
-            .reset_index()
-        )
-        table["excess_lc_pct"] = table["deaths"] / table["deaths_lc"]
-        table["qx_raw"] = table["deaths"] / table["population"]
-        table["qx_lc"] = table["deaths_lc"] / table["population"]
-        columnDefs = dash_formats.get_column_defs(table)
+        columnDefs = dash_formats.get_column_defs(result)
         grid = dag.AgGrid(
             id={"type": "data-table", "tab": "excess-table", "page": "cdc-pop-trends"},
-            rowData=table.to_dict("records"),
+            rowData=result.to_dict("records"),
             columnDefs=columnDefs,
         )
         export_button = common_build._build_export_button(
@@ -1385,7 +1584,7 @@ def display_cdc_weekly(n_clicks, active_tab):
     current_year_adj["deaths"] = current_year_adj["deaths"] / current_year_adj[
         "recent_week"
     ].map(IBNR_FACTORS).fillna(1.0)
-    current_year_adj = current_year_adj[current_year_adj["recent_week"] >= 3]
+    current_year_adj = current_year_adj[current_year_adj["recent_week"] >= 7]
     current_year_adj["mmwr_year"] = f"{current_year}_adj"
     mcd18_weekly = pd.concat([mcd18_weekly, current_year_adj], ignore_index=True)
 
@@ -1539,31 +1738,13 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
                 "added_at",
                 "crude_95_confidence_interval",
                 "m33",
+                "data_through",
             ],
         )["filters"]
     else:
         cdc_mi_filters = dash.no_update
 
     return tab_content, cdc_mi_filters, False, ""
-
-
-@callback(
-    Output({"type": "filter-str", "prefix": FILTER_MI_PREFIX, "index": ALL}, "value"),
-    Output({"type": "filter-num", "prefix": FILTER_MI_PREFIX, "index": ALL}, "value"),
-    Input({"type": "filter-reset-button", "prefix": FILTER_MI_PREFIX}, "n_clicks"),
-    State("store-initial-filters", "data"),
-    prevent_initial_call=True,
-)
-def reset_mi_filters(n_clicks, filter_dict):
-    """Clear the filters."""
-    if not n_clicks:
-        raise dash.exceptions.PreventUpdate
-    str_reset = [[]] * len(filter_dict["str_cols"])
-    num_reset = [
-        [filter_dict["min_max"][f"{col}_min"], filter_dict["min_max"][f"{col}_max"]]
-        for col in filter_dict["num_cols"]
-    ]
-    return str_reset, num_reset
 
 
 #   _____                 _   _
