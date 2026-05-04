@@ -221,9 +221,9 @@ def get_cdc_data_sql(db_filepath: str | Path, table_name: str) -> pd.DataFrame:
     return cdc_df
 
 
-def get_last_updated(table_name: str | None = None) -> str:
+def get_last_updated(table_name: str | None = None) -> dict:
     """
-    Get the last updated date of a table.
+    Get the last updated meta of a table.
 
     Parameters
     ----------
@@ -232,19 +232,46 @@ def get_last_updated(table_name: str | None = None) -> str:
 
     Returns
     -------
-    last_updated : str
-        The last updated date of the table.
+    last_update_meta : dict
+        A dictionary containing:
+        - "last_updated": The maximum "added_at" date from the table.
+        - "data_through": The maximum "data_through" date from the table.
+        - "days_elapsed": The number of days elapsed in the year
 
     """
     if table_name is None:
         table_name = "mcd18_cod"
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
-    tables = sql.get_tables(db_filepath=db_filepath)
-    if table_name not in tables:
-        return ""
-    query = f"SELECT MAX(added_at) as last_updated FROM {table_name}"
-    result = sql.read_sql(db_filepath, query)
-    return result["last_updated"].iloc[0] or ""
+
+    # query the table
+    query = (
+        f"SELECT MAX(added_at) as last_updated, MAX(data_through) as "
+        f"data_through FROM {table_name}"
+    )
+    try:
+        result = sql.read_sql(db_filepath, query)
+    except Exception:
+        logger.error(
+            f"Error querying table `{table_name}` for last updated date: {db_filepath}"
+        )
+        return {
+            "last_updated": None,
+            "data_through": None,
+            "days_elapsed": None,
+        }
+    last_updated = result["last_updated"].iloc[0]
+    data_through = result["data_through"].iloc[0]
+    start_of_year = pd.Timestamp(f"{data_through.year}-01-01")
+    days_elapsed = (data_through - start_of_year).days + 1
+
+    # create the dict
+    result = {
+        "last_updated": last_updated,
+        "data_through": data_through,
+        "days_elapsed": days_elapsed,
+    }
+
+    return result
 
 
 @lru_cache(maxsize=10)

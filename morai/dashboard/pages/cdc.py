@@ -69,7 +69,7 @@ IBNR_FACTORS = {
 
 def layout():
     """CDC layout."""
-    last_updated = cdc.get_last_updated()
+    last_updated_meta = cdc.get_last_updated()
     return html.Div(
         [
             dcc.Store(id="store-cdc-results", storage_type="session"),
@@ -180,6 +180,10 @@ def layout():
                                                                     html.Li(
                                                                         "'Delay' deaths → ~6 months (mainly external causes)"
                                                                     ),
+                                                                    html.Li(
+                                                                        f"The partial {last_updated_meta['data_through'].year} data is annualized using a factor of (365 / "
+                                                                        f"{last_updated_meta['days_elapsed']}). "
+                                                                    ),
                                                                 ]
                                                             ),
                                                         ]
@@ -210,13 +214,30 @@ def layout():
                                             html.I(
                                                 className="fas fa-clock me-1 text-muted"
                                             ),
+                                            html.Label(
+                                                "Last Updated: ",
+                                            ),
                                             html.Span(
-                                                last_updated,
+                                                pd.Timestamp(
+                                                    last_updated_meta["last_updated"]
+                                                ).date(),
                                                 id="last-updated-text",
-                                                className="text-muted",
+                                            ),
+                                            html.Br(),
+                                            html.I(
+                                                className="fas fa-clock me-1 text-muted"
+                                            ),
+                                            html.Label(
+                                                "Data Through: ",
+                                            ),
+                                            html.Span(
+                                                last_updated_meta[
+                                                    "data_through"
+                                                ].date(),
+                                                id="data-through-text",
                                             ),
                                         ],
-                                        className="text-center small",
+                                        className="text-center small text-muted",
                                     ),
                                 ],
                                 xs=12,
@@ -262,21 +283,7 @@ def layout():
                             dbc.Alert(
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
-                                    "The most recent year available in the data is ",
-                                    html.Span(
-                                        "current year",
-                                        id="cod-most-recent-year",
-                                        className="fw-semibold",
-                                    ),
-                                    ". This is what is used in heatmap and top causes."
-                                    "The partial year deaths are annualized using a "
-                                    "factor of (365 / ",
-                                    html.Span(
-                                        "days elapsed",
-                                        id="cod-days-elapsed-text",
-                                        className="fw-semibold",
-                                    ),
-                                    ").",
+                                    "The heatmap and top causes use the most recent year of data.",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
@@ -362,18 +369,11 @@ def layout():
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
                                     "Standardized mortality rate compared to a linear regression baseline trained on "
-                                    f"{TRAIN_START_YEAR}-{TRAIN_END_YEAR}. "
-                                    "Current year annualized (365 / ",
-                                    html.Span(
-                                        "days elapsed",
-                                        id="cod-trend-days-elapsed-text",
-                                        className="fw-semibold",
-                                    ),
-                                    ").",
+                                    f"{TRAIN_START_YEAR}-{TRAIN_END_YEAR}. ",
                                     html.Br(),
-                                    "The cause of death excess won't match the population excess as the cause of death "
-                                    "uses standardized deaths while the population uses crude deaths. As the population gets"
-                                    "older the population excess metric will be a better indicator of excess mortality trends.",
+                                    "The 'cause of death excess' won't match the 'population excess' as the 'cause of death' "
+                                    "uses standardized deaths while the 'population' uses crude deaths. As the population gets "
+                                    "older the 'population excess' metric will be a better indicator of excess mortality trends.",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
@@ -497,14 +497,7 @@ def layout():
                             dbc.Alert(
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
-                                    f"Lee-Carter population model trained on {TRAIN_START_YEAR}-{TRAIN_END_YEAR}, extrapolated through the current year. "
-                                    "Current year annualized (365 / ",
-                                    html.Span(
-                                        "days elapsed",
-                                        id="pop-trend-days-elapsed-text",
-                                        className="fw-semibold",
-                                    ),
-                                    "). ",
+                                    f"Lee-Carter population model trained on {TRAIN_START_YEAR}-{TRAIN_END_YEAR}, extrapolated through the current year. ",
                                     html.Br(),
                                     f"Note: population stats have a ~2-year lag; {TRAIN_START_YEAR}-{TRAIN_END_YEAR} trend is extrapolated to fill the gap.",
                                 ],
@@ -561,10 +554,10 @@ def layout():
                                 common_build._build_tabbed_content(
                                     tabs=[
                                         common_build.TabSpec(
-                                            label="Chart", tab_id="chart"
+                                            label="Monthly Chart", tab_id="chart"
                                         ),
                                         common_build.TabSpec(
-                                            label="Table",
+                                            label="Monthly Table",
                                             tab_id="table",
                                         ),
                                     ],
@@ -610,11 +603,15 @@ def layout():
                                 common_build._build_tabbed_content(
                                     tabs=[
                                         common_build.TabSpec(
-                                            label="Chart", tab_id="chart"
+                                            label="Weekly Chart", tab_id="chart"
                                         ),
                                         common_build.TabSpec(
-                                            label="Table",
+                                            label="Weekly Table",
                                             tab_id="table",
+                                        ),
+                                        common_build.TabSpec(
+                                            label="Flu Chart",
+                                            tab_id="flu-chart",
                                         ),
                                     ],
                                     prefix="cdc-weekly",
@@ -742,12 +739,12 @@ def update_cdc_data_async(n_clicks):
 
     def background_task():
         try:
-            last_updated = pd.to_datetime(cdc.get_last_updated())
+            last_updated = pd.to_datetime(cdc.get_last_updated()["last_updated"])
             days_since_update = (pd.Timestamp.now() - last_updated).days
             if days_since_update < 5:
                 return "recent", None
             refresh_cdc_data()
-            new_last_updated = cdc.get_last_updated()
+            new_last_updated = cdc.get_last_updated()["last_updated"]
             with thread_lock:
                 return "success", new_last_updated
         except Exception as e:
@@ -789,8 +786,6 @@ def update_cdc_data_async(n_clicks):
         Output(f"{FILTER_COD_PREFIX}-tab-content", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
-        Output("cod-days-elapsed-text", "children"),
-        Output("cod-most-recent-year", "children"),
     ],
     [
         Input(f"{FILTER_COD_PREFIX}-tabs", "active_tab"),
@@ -816,17 +811,19 @@ def display_cdc_cod(active_tab, n_clicks, cdc_cod_str_filters, cdc_cod_num_filte
     if not db_filepath.exists():
         logger.error("Database does not exist.")
         return dash.no_update, dash.no_update, True, "Database does not exist"
-    tables = sql.get_tables(db_filepath=db_filepath)
     states_info = dh._inputs_flatten_list(callback_context.states_list)
 
-    # check if table does not exist in database
-    if "mcd99_cod" not in tables or "mcd18_cod" not in tables:
-        logger.error("Table `mcd99_cod` or `mcd18_cod` does not exist in database.")
-        return dash.no_update, dash.no_update, True, "Table does not exist in database"
-
     # get the data
-    mcd99_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_cod")
-    mcd18_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_cod")
+    try:
+        mcd99_cod = cdc.get_cdc_data_sql(
+            db_filepath=db_filepath, table_name="mcd99_cod"
+        )
+        mcd18_cod = cdc.get_cdc_data_sql(
+            db_filepath=db_filepath, table_name="mcd18_cod"
+        )
+    except Exception as e:
+        logger.error(f"Failed to load table: {e}")
+        return dash.no_update, dash.no_update, True, f"Failed to load data: {e}"
 
     # filter and concat
     mcd18_cod = mcd18_cod[mcd18_cod["year"] >= NEW_DATASET_START_YEAR]
@@ -981,8 +978,6 @@ def display_cdc_cod(active_tab, n_clicks, cdc_cod_str_filters, cdc_cod_num_filte
         tab_content,
         False,
         "",
-        days_elapsed,
-        most_recent_year,
     )
 
 
@@ -1007,7 +1002,6 @@ def display_cdc_cod(active_tab, n_clicks, cdc_cod_str_filters, cdc_cod_num_filte
         ),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
-        Output("cod-trend-days-elapsed-text", "children"),
     ],
     [
         Input("button-cod-trends", "n_clicks"),
@@ -1037,16 +1031,26 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
-    tables = sql.get_tables(db_filepath=db_filepath)
-
-    # check if table does not exist in database
-    if "mcd99_cod" not in tables or "mcd18_cod" not in tables:
-        logger.error("Table `mcd99_cod` or `mcd18_cod` does not exist in database.")
-        return dash.no_update, dash.no_update, True, "Table does not exist in database"
 
     # get the data
-    mcd99_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_cod")
-    mcd18_cod = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_cod")
+    try:
+        mcd99_cod = cdc.get_cdc_data_sql(
+            db_filepath=db_filepath, table_name="mcd99_cod"
+        )
+        mcd18_cod = cdc.get_cdc_data_sql(
+            db_filepath=db_filepath, table_name="mcd18_cod"
+        )
+    except Exception as e:
+        logger.error(f"Failed to load table: {e}")
+        return (
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+            True,
+            f"Failed to load data: {e}",
+        )
+
+    # get the data
     age_group_options = [
         {"label": str(v), "value": v} for v in mcd18_cod["age_groups"].dropna().unique()
     ]
@@ -1279,7 +1283,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
         for v in sorted(test_df[CATEGORY_COL].dropna().unique())
     ]
 
-    return tab_content, category_options, age_group_options, False, "", days_elapsed
+    return tab_content, category_options, age_group_options, False, ""
 
 
 @callback(
@@ -1287,7 +1291,6 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
         Output("cdc-pop-trends-tab-content", "children"),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
-        Output("pop-trend-days-elapsed-text", "children"),
     ],
     [
         Input("button-pop-trends", "n_clicks"),
@@ -1301,16 +1304,14 @@ def display_cdc_pop_trends(n_clicks, active_tab):
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
-    tables = sql.get_tables(db_filepath=db_filepath)
-
-    # check if table does not exist in database
-    if "mcd99_mi" not in tables or "mcd18_mi" not in tables:
-        logger.error("Table `mcd99_mi` or `mcd18_mi` does not exist in database.")
-        return dash.no_update, True, "Table does not exist in database"
 
     # get the data
-    mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
-    mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
+    try:
+        mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
+        mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
+    except Exception as e:
+        logger.error(f"Failed to load table: {e}")
+        return dash.no_update, True, f"Failed to load data: {e}"
 
     # filter and concat
     mcd18_mi = mcd18_mi[mcd18_mi["year"] >= NEW_DATASET_START_YEAR]
@@ -1449,7 +1450,7 @@ def display_cdc_pop_trends(n_clicks, active_tab):
     else:
         tab_content = dash.no_update
 
-    return tab_content, False, "", days_elapsed
+    return tab_content, False, ""
 
 
 @callback(
@@ -1470,22 +1471,17 @@ def display_cdc_monthly(n_clicks, active_tab):
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
-    tables = sql.get_tables(db_filepath=db_filepath)
-
-    # check if table does not exist in database
-    if "mcd18_monthly" not in tables:
-        logger.error("Table `mcd18_monthly` does not exist in database.")
-        return (
-            dash.no_update,
-            dash.no_update,
-            True,
-            "Table `mcd18_monthly` does not exist in database.",
-        )
 
     # get the data
-    mcd18_monthly = cdc.get_cdc_data_sql(
-        db_filepath=db_filepath, table_name="mcd18_monthly"
-    )
+    try:
+        mcd18_monthly = cdc.get_cdc_data_sql(
+            db_filepath=db_filepath, table_name="mcd18_monthly"
+        )
+    except Exception as e:
+        logger.error(f"Failed to load table: {e}")
+        return dash.no_update, True, f"Failed to load data: {e}"
+
+    # filter
     last_updated = mcd18_monthly["added_at"].max()
     mcd18_monthly = mcd18_monthly[mcd18_monthly["added_at"] == last_updated]
 
@@ -1554,22 +1550,17 @@ def display_cdc_weekly(n_clicks, active_tab):
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
-    tables = sql.get_tables(db_filepath=db_filepath)
-
-    # check if table does not exist in database
-    if "mcd18_weekly" not in tables:
-        logger.error("Table `mcd18_weekly` does not exist in database.")
-        return (
-            dash.no_update,
-            dash.no_update,
-            True,
-            "Table `mcd18_weekly` does not exist in database.",
-        )
 
     # get the data
-    mcd18_weekly = cdc.get_cdc_data_sql(
-        db_filepath=db_filepath, table_name="mcd18_weekly"
-    )
+    try:
+        mcd18_weekly = cdc.get_cdc_data_sql(
+            db_filepath=db_filepath, table_name="mcd18_weekly"
+        )
+    except Exception as e:
+        logger.error(f"Failed to load table: {e}")
+        return dash.no_update, True, f"Failed to load data: {e}"
+
+    # filter
     last_updated = mcd18_weekly["added_at"].max()
     mcd18_weekly = mcd18_weekly[mcd18_weekly["added_at"] == last_updated]
     mcd18_weekly.dropna(subset=["mmwr_week"], inplace=True)
@@ -1611,6 +1602,23 @@ def display_cdc_weekly(n_clicks, active_tab):
             if trace.name == f"{current_year}_adj":
                 trace.line.dash = "dash"
         tab_content = html.Div([dcc.Graph(figure=cdc_weekly_chart)])
+
+    elif active_tab == "cdc-weekly-tab-flu-chart":
+        try:
+            mcd18_weekly_influenza = cdc.get_cdc_data_sql(
+                db_filepath=db_filepath, table_name="mcd18_weekly_influenza"
+            )
+        except Exception as e:
+            logger.error(f"Failed to load table: {e}")
+            return dash.no_update, True, f"Failed to load data: {e}"
+
+        cdc_flu_chart = charters.chart(
+            df=mcd18_weekly_influenza,
+            x_axis="mmwr_week_date",
+            y_axis="deaths",
+            type="line",
+        )
+        tab_content = html.Div([dcc.Graph(figure=cdc_flu_chart)])
 
     # table
     elif active_tab == "cdc-weekly-tab-table":
@@ -1664,23 +1672,17 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
-    tables = sql.get_tables(db_filepath=db_filepath)
     states_info = dh._inputs_flatten_list(callback_context.states_list)
 
-    # check if table does not exist in database
-    if "mcd18_mi" not in tables:
-        logger.error("Table `mcd18_mi` does not exist in database.")
-        return (
-            dash.no_update,
-            dash.no_update,
-            True,
-            "Table `mcd18_mi` does not exist in database",
-        )
-
     # get the data
-    mcd79_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd79_mi")
-    mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
-    mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
+    try:
+        mcd79_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd79_mi")
+        mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
+        mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
+    except Exception as e:
+        logger.error(f"Failed to load table: {e}")
+        return dash.no_update, dash.no_update, True, f"Failed to load data: {e}"
+
     mcd18_mi = mcd18_mi[mcd18_mi["year"] >= NEW_DATASET_START_YEAR]
     mi = pd.concat([mcd79_mi, mcd99_mi, mcd18_mi], axis=0, ignore_index=True)
 

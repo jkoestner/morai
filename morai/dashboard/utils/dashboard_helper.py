@@ -433,7 +433,7 @@ def generate_filters(
                                 if initial_values
                                 else [min_val, max_val]
                             ),
-                            tooltip={"always_visible": True, "placement": "bottom"},
+                            tooltip={"placement": "top"},
                         ),
                         id={
                             "type": "filter-collapse",
