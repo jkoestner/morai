@@ -23,8 +23,8 @@ def test_limited_fluctuation():
         sd=1,
         u=1,
     )
-    assert partial.iloc[0]["credibility_lf"] == approx(0.3040, abs=1e-4)
-    assert full.iloc[0]["credibility_lf"] == approx(1.00, abs=1e-2)
+    assert partial[0] == approx(0.3040, abs=1e-4)
+    assert full[0] == approx(1.00, abs=1e-2)
 
 
 def test_asymptotic():
@@ -33,7 +33,7 @@ def test_asymptotic():
         df=pd.DataFrame([{"lapses": 100}]), measure="lapses", k=270
     )
     test_partial = 100 / (100 + 270)
-    assert partial.iloc[0]["credibility_as"] == test_partial
+    assert partial[0] == test_partial
 
 
 def test_vm20_buhlmann():
@@ -41,7 +41,7 @@ def test_vm20_buhlmann():
     partial = credibility.vm20_buhlmann(
         df=cred_df, amount_col="amount", rate_col="rate", exposure_col="exposure"
     )
-    assert partial.iloc[0]["credibility_vm20"] == approx(0.1682, abs=1e-4)
+    assert partial[0] == approx(0.1682, abs=1e-4)
 
 
 def test_vm20_buhlmann_approx():
@@ -56,7 +56,7 @@ def test_vm20_buhlmann_approx():
         df=cred_df, a_col="a", b_col="b", c_col="c"
     )
 
-    assert partial.iloc[0]["credibility_vm20_approx"] == approx(0.1682, abs=1e-4)
+    assert partial[0] == approx(0.1682, abs=1e-4)
 
 
 def test_buhlmann():
@@ -65,4 +65,4 @@ def test_buhlmann():
         df=pd.DataFrame([{"lapses": 100}]), measure="lapses", k=270
     )
     test_partial = 100 / (100 + 270)
-    assert partial.iloc[0]["credibility_bu"] == test_partial
+    assert partial[0] == test_partial

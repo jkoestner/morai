@@ -317,9 +317,11 @@ def calc_exposures(
     - annual: before gets proportional days, after gets a full year (Balducci)
     - distributed: before gets proportional days, after gets proportional days (UDD)
     - exact: both before and after get exact days to decrement (constant force)
-      - mx ≈ ux
-      - qx = 1 - exp(-ux)
-      - ux = -log(1-ux)
+      - A central rate (mx) can be used to approximate initial rate (qx) using
+      the average force of mortality (ux).
+        - mx ≈ ux
+        - qx = 1 - exp(-ux)
+        - ux = -log(1-qx)
 
     Expects the DataFrame to already have these columns:
     - termination_date, termination_reason, issue_date

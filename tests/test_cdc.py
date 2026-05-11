@@ -86,7 +86,7 @@ def test_get_cdc_data_sql():
     """Tests getting cdc data from sql."""
     df = cdc.get_cdc_data_sql(db_filepath=test_sql_path, table_name="mcd18_monthly")
     assert isinstance(df, pd.DataFrame)
-    assert df.shape == (92, 7)
+    assert df.shape == (100, 6)
 
 
 def test_get_last_updated():
@@ -96,8 +96,8 @@ def test_get_last_updated():
     Patched the files path to the tests path.
     """
     with patch("morai.utils.helpers.FILES_PATH", helpers.TESTS_PATH):
-        last_updated = cdc.get_last_updated(table_name="mcd18_monthly")
-    assert last_updated == "2025-10-14 23:13:03"
+        last_updated_meta = cdc.get_last_updated(table_name="mcd18_monthly")
+    assert last_updated_meta["last_updated"] == "2026-05-03 23:36:09"
 
 
 def test_get_cdc_reference():

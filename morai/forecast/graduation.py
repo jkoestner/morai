@@ -79,21 +79,21 @@ def whl(
         Smoothing parameter for horizontal differences.
     weights : pd.Series
         Weights associated with the raw data (same shape as raw_data)
-    horizontal_expo : float
+    horizontal_expo : float, optional (default is 0)
         Exponential rate parameter for horizontal differences.
-    vertical_order : int
+    vertical_order : int, optional (default is 0)
         Order of differencing in the vertical direction (0 for 1D data).
-    vertical_lambda : float
+    vertical_lambda : float, optional (default is 0)
         Smoothing parameter for vertical differences (0 for 1D data).
-    vertical_expo : float
+    vertical_expo : float, optional (default is 0)
         Exponential rate parameter for vertical differences.
-    normalize_weights : bool
+    normalize_weights : bool, optional (default is True)
         Whether to normalize weights to sum to the number of data points.
-    standard_rates : pd.Series, optional
+    standard_rates : pd.Series, optional (default is None)
         Standard rates to blend with the raw rates.
-    standard_weights : pd.Series, optional
+    standard_weights : pd.Series, optional (default is None)
         Weights for the standard rates.
-    blending_factor : float
+    blending_factor : float (0 to 1), optional (default is 0)
         Blending factor for the standard rates. The higher the factor, the more
         the standard rates are used.
 
@@ -103,8 +103,8 @@ def whl(
         Array of smoothed rates
 
     """
-    from scipy.sparse import csr_matrix, diags
-    from scipy.sparse.linalg import spsolve
+    from scipy.sparse import csr_matrix, diags  # noqa: PLC0415
+    from scipy.sparse.linalg import spsolve  # noqa: PLC0415
 
     rates = np.array(rates, dtype=float)
     if weights is None:
@@ -126,6 +126,20 @@ def whl(
         weights = weights.flatten()
     else:
         raise ValueError("raw_data must be a 1D or 2D array.")
+
+    # validations
+    if horizontal_order < 1:
+        raise ValueError("horizontal_order must be >= 1")
+    if horizontal_lambda < 0:
+        raise ValueError("horizontal_lambda must be non-negative")
+    if not 0 <= blending_factor <= 1:
+        raise ValueError("blending_factor must be in [0, 1]")
+    if rates.ndim == 1 and (vertical_order > 0 or vertical_lambda > 0):
+        logger.warning("vertical parameters ignored for 1D input")
+    if rates.ndim == 2 and vertical_order > 0 and rows <= vertical_order:
+        raise ValueError(f"need rows > vertical_order, got rows={rows}")
+    if cols <= horizontal_order and rates.ndim == 2:
+        raise ValueError(f"need cols > horizontal_order, got cols={cols}")
 
     # normalize weights to number of data points
     if normalize_weights:

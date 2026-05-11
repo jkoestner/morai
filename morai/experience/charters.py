@@ -1107,9 +1107,9 @@ def pdp(
     if secondary:
         logger.info(f"Adding secondary to chart: [{secondary}]")
 
-        for index, line_color_value in enumerate(secondary_df[line_color].unique()):
+        for index, line_color_value in enumerate(pdp_df[line_color].unique()):
             color_index = index % num_colors
-            df_subset = secondary_df[secondary_df[line_color] == line_color_value]
+            df_subset = pdp_df[pdp_df[line_color] == line_color_value]
             fig.add_trace(
                 go.Bar(
                     x=df_subset[x_axis],

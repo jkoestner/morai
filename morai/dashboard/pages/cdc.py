@@ -44,7 +44,7 @@ FILTER_COD_TRENDS_PREFIX = "cdc-cod-trends"
 # the 99 dataset ends in 2020 and the 18 dataset starts in 2018
 NEW_DATASET_START_YEAR = 2021
 # training for cod trend and population trend
-TRAIN_START_YEAR = 2015
+TRAIN_START_YEAR = 2010
 TRAIN_END_YEAR = 2019
 # grouping for cod analysis
 CATEGORY_COL = "simple_grouping"
@@ -65,6 +65,11 @@ IBNR_FACTORS = {
     12: 0.99,
     13: 0.99,
 }
+PARTIAL_WEEKS_TO_EXCLUDE = 7
+IBNR_AFTER = {k: v for k, v in IBNR_FACTORS.items() if k >= PARTIAL_WEEKS_TO_EXCLUDE}
+IBNR_BEFORE = {k: v for k, v in IBNR_FACTORS.items() if k < PARTIAL_WEEKS_TO_EXCLUDE}
+# mi
+ROLLING_MI_YEARS = 10
 
 
 def layout():
@@ -154,7 +159,7 @@ def layout():
                                                     html.Li(
                                                         [
                                                             html.A(
-                                                                "2018-present",
+                                                                "2018-present (ICD-10)",
                                                                 href="https://wonder.cdc.gov/mcd-icd10-provisional.html",
                                                                 target="_blank",
                                                             ),
@@ -374,6 +379,60 @@ def layout():
                                     "The 'cause of death excess' won't match the 'population excess' as the 'cause of death' "
                                     "uses standardized deaths while the 'population' uses crude deaths. As the population gets "
                                     "older the 'population excess' metric will be a better indicator of excess mortality trends.",
+                                    # lightbulb observations
+                                    html.I(
+                                        className="fas fa-lightbulb ms-2 text-warning",
+                                        id="cod-trends-obs-trigger",
+                                        style={"cursor": "pointer"},
+                                    ),
+                                    dbc.Popover(
+                                        [
+                                            dbc.PopoverHeader(
+                                                [
+                                                    html.I(
+                                                        className="fas fa-lightbulb me-2 text-warning"
+                                                    ),
+                                                    "Observations (through 2025)",
+                                                ]
+                                            ),
+                                            dbc.PopoverBody(
+                                                html.Ul(
+                                                    [
+                                                        html.Li(
+                                                            [
+                                                                html.Span(
+                                                                    "↓ ",
+                                                                    className="text-success fw-bold",
+                                                                ),
+                                                                html.Strong(
+                                                                    "Improving: "
+                                                                ),
+                                                                "respiratory, nervous, external",
+                                                            ],
+                                                            className="small",
+                                                        ),
+                                                        html.Li(
+                                                            [
+                                                                html.Span(
+                                                                    "↑ ",
+                                                                    className="text-danger fw-bold",
+                                                                ),
+                                                                html.Strong(
+                                                                    "Deteriorating: "
+                                                                ),
+                                                                "neoplasms, circulatory",
+                                                            ],
+                                                            className="small mb-0",
+                                                        ),
+                                                    ],
+                                                    className="mb-0 ps-3",
+                                                ),
+                                            ),
+                                        ],
+                                        target="cod-trends-obs-trigger",
+                                        trigger="hover focus click",
+                                        placement="bottom",
+                                    ),
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
@@ -592,9 +651,11 @@ def layout():
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
                                     "Total US deaths per week. The deaths also have an adjustment which accounts "
-                                    "for the lag in reporting. ",
+                                    "for the lag in reporting.",
                                     html.Br(),
-                                    f"The lag adjustments are {list(IBNR_FACTORS.values())}",
+                                    f"Lag adjustments for weeks {PARTIAL_WEEKS_TO_EXCLUDE + 1}-13 are {IBNR_AFTER}.",
+                                    html.Br(),
+                                    f"Excluding weeks 1-{PARTIAL_WEEKS_TO_EXCLUDE} due to incomplete factors, which are {IBNR_BEFORE}.",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
@@ -659,11 +720,16 @@ def layout():
                                         common_build._build_tabbed_content(
                                             tabs=[
                                                 common_build.TabSpec(
-                                                    label="Chart", tab_id="chart"
+                                                    label="Year-Chart",
+                                                    tab_id="mi-year-chart",
                                                 ),
                                                 common_build.TabSpec(
-                                                    label="Table",
-                                                    tab_id="table",
+                                                    label="Year-Table",
+                                                    tab_id="mi-year-table",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Age-Chart",
+                                                    tab_id="mi-age-chart",
                                                 ),
                                             ],
                                             prefix=FILTER_MI_PREFIX,
@@ -1233,7 +1299,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
             columnDefs=columnDefs,
         )
         export_button = common_build._build_export_button(
-            "data", FILTER_COD_TRENDS_PREFIX
+            "diff_amt", FILTER_COD_TRENDS_PREFIX
         )
         tab_content = html.Div([export_button, grid])
     # table pct
@@ -1575,7 +1641,9 @@ def display_cdc_weekly(n_clicks, active_tab):
     current_year_adj["deaths"] = current_year_adj["deaths"] / current_year_adj[
         "recent_week"
     ].map(IBNR_FACTORS).fillna(1.0)
-    current_year_adj = current_year_adj[current_year_adj["recent_week"] >= 7]
+    current_year_adj = current_year_adj[
+        current_year_adj["recent_week"] >= PARTIAL_WEEKS_TO_EXCLUDE
+    ]
     current_year_adj["mmwr_year"] = f"{current_year}_adj"
     mcd18_weekly = pd.concat([mcd18_weekly, current_year_adj], ignore_index=True)
 
@@ -1612,16 +1680,32 @@ def display_cdc_weekly(n_clicks, active_tab):
             logger.error(f"Failed to load table: {e}")
             return dash.no_update, True, f"Failed to load data: {e}"
 
-        cdc_flu_chart = charters.chart(
+        # calculate average (excluding recent weeks)
+        max_date = mcd18_weekly_influenza["mmwr_week_date"].max()
+        cutoff = max_date - pd.Timedelta(weeks=PARTIAL_WEEKS_TO_EXCLUDE)
+        weekly_avg = (
+            mcd18_weekly_influenza[mcd18_weekly_influenza["mmwr_week_date"] <= cutoff]
+            .groupby("mmwr_week")["deaths"]
+            .mean()
+        )
+        mcd18_weekly_influenza["avg"] = mcd18_weekly_influenza["mmwr_week"].map(
+            weekly_avg
+        )
+        mcd18_weekly_influenza.loc[
+            mcd18_weekly_influenza["mmwr_week_date"] > cutoff, "avg"
+        ] = None
+        cdc_flu_chart = charters.compare_rates(
             df=mcd18_weekly_influenza,
             x_axis="mmwr_week_date",
-            y_axis="deaths",
-            type="line",
+            rates=["deaths", "avg"],
         )
         tab_content = html.Div([dcc.Graph(figure=cdc_flu_chart)])
 
     # table
     elif active_tab == "cdc-weekly-tab-table":
+        mcd18_weekly = mcd18_weekly.sort_values(
+            ["mmwr_week_date", "mmwr_year"], ascending=False
+        )
         columnDefs = dash_formats.get_column_defs(mcd18_weekly)
         grid = dag.AgGrid(
             id={"type": "data-table", "tab": "table", "page": "cdc-weekly"},
@@ -1699,22 +1783,28 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
     mi["age_groups"] = pd.Categorical(
         mi["age_groups"], categories=cdc.AGE_GROUP_ORDER, ordered=True
     )
+    mi["era"] = pd.cut(
+        mi["year"],
+        bins=[0, 2019, 2024, float("inf")],
+        labels=["1979-2019", "2020-2024", "2025+"],
+    )
 
     # filter the data
     filtered_mi = dh.filter_data(df=mi, callback_context=states_info)
-    rolling = 10
-    mi_df = cdc.calc_mi(df=filtered_mi, rolling=rolling)
+    mi_df = cdc.calc_mi(df=filtered_mi, rolling=ROLLING_MI_YEARS)
 
     # chart
-    if active_tab == f"{FILTER_MI_PREFIX}-tab-chart":
+    if active_tab == f"{FILTER_MI_PREFIX}-tab-mi-year-chart":
+        mi_df = mi_df[mi_df["age_groups"] == "All ages"]
         cdc_mi_chart = charters.compare_rates(
             df=mi_df,
             x_axis="year",
-            rates=["1_year_mi", f"{rolling}_year_mi", "whl_3"],
+            rates=["1_year_mi_pct", f"{ROLLING_MI_YEARS}_year_mi_pct", "whl_3_pct"],
         )
         tab_content = html.Div([dcc.Graph(figure=cdc_mi_chart)])
     # table
-    elif active_tab == f"{FILTER_MI_PREFIX}-tab-table":
+    elif active_tab == f"{FILTER_MI_PREFIX}-tab-mi-year-table":
+        mi_df = mi_df[mi_df["age_groups"] == "All ages"]
         columnDefs = dash_formats.get_column_defs(mi_df)
         grid = dag.AgGrid(
             id={"type": "data-table", "tab": "table", "page": "cdc-mi"},
@@ -1724,6 +1814,20 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
         )
         export_button = common_build._build_export_button("table", FILTER_MI_PREFIX)
         tab_content = html.Div([export_button, grid])
+    elif active_tab == f"{FILTER_MI_PREFIX}-tab-mi-age-chart":
+        age_cats = mi_df["age_groups"].cat.remove_unused_categories()
+        mi_df["age_groups_order"] = age_cats.map(
+            {
+                cat: f"{i + 1:02d}: {cat}"
+                for i, cat in enumerate(age_cats.cat.categories)
+            }
+        ).fillna(mi_df["age_groups"].astype(str))
+        cdc_mi_chart = charters.compare_rates(
+            df=mi_df[mi_df["year"] == mi_df["year"].max()],
+            x_axis="age_groups_order",
+            rates=["1_year_mi_pct", f"{ROLLING_MI_YEARS}_year_mi_pct", "whl_3_pct"],
+        )
+        tab_content = html.Div([dcc.Graph(figure=cdc_mi_chart)])
     else:
         tab_content = dash.no_update
 

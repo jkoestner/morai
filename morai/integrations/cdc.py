@@ -392,29 +392,64 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
         "calculating mortality improvement by using a `2000 age adjusted` crude "
         "mortality rate"
     )
-    # group and calculate crude 2000 adjusted mortality rate
-    mi_df = (
+
+    # groupby year and age_groups and calculate crude 2000 adjusted mortality rate
+    mi_grouped = (
         df.groupby(["year", "age_groups"])[["deaths", "population"]].sum().reset_index()
     )
-    mi_df = map_reference(
-        df=mi_df,
+    mi_grouped = map_reference(
+        df=mi_grouped,
         col="population_%",
         on_dict={"age_groups": "age_bucket"},
         sheet_name="age_std_2000",
     )
-    mi_df["crude_adj"] = (
-        mi_df["deaths"] / mi_df["population"] * 100000 * mi_df["population_%"]
+    total_weight = mi_grouped.groupby("age_groups")["population_%"].first().sum()
+    mi_grouped["population_%"] = mi_grouped["population_%"] / total_weight
+    mi_grouped["crude_adj"] = (
+        mi_grouped["deaths"]
+        / mi_grouped["population"]
+        * 100000
+        * mi_grouped["population_%"]
     )
 
-    # calculate mortality improvement
-    mi_df = mi_df.groupby(["year"])[["crude_adj", "deaths"]].sum().reset_index()
-    mi_df["1_year_mi"] = 1 - (mi_df["crude_adj"] / mi_df["crude_adj"].shift(1))
-    mi_df[f"{rolling}_year_mi"] = mi_df["1_year_mi"].rolling(window=rolling).mean()
+    # calculate mortality improvement for each age_group
+    mi_df_list = []
+    for age_group in [*mi_grouped["age_groups"].unique(), "All ages"]:
+        # filter and groupby
+        if age_group == "All ages":
+            mi_df_age = mi_grouped.copy()
+        else:
+            mi_df_age = mi_grouped[mi_grouped["age_groups"] == age_group]
 
-    # calculate whittaker-henderson-lowrie (whl)
-    mi_df = mi_df[mi_df["1_year_mi"].notna()]
-    mi_df["whl_3"] = graduation.whl(
-        rates=mi_df["1_year_mi"], horizontal_order=3, horizontal_lambda=400
+        mi_df_age = (
+            mi_df_age.groupby(["year"])[["crude_adj", "deaths", "population"]]
+            .sum()
+            .reset_index()
+        )
+        mi_df_age["age_groups"] = age_group
+
+        # 1-year MI
+        mi_df_age["1_year_mi_pct"] = 1 - (
+            mi_df_age["crude_adj"] / mi_df_age["crude_adj"].shift(1)
+        )
+
+        # rolling average MI
+        mi_df_age[f"{rolling}_year_mi_pct"] = (
+            mi_df_age["1_year_mi_pct"].rolling(window=rolling).mean()
+        )
+
+        # whittaker-henderson-lowrie (whl)
+        mi_df_age = mi_df_age[mi_df_age["1_year_mi_pct"].notna()]
+        mi_df_age["whl_3_pct"] = graduation.whl(
+            rates=mi_df_age["1_year_mi_pct"], horizontal_order=3, horizontal_lambda=400
+        )
+
+        mi_df_list.append(mi_df_age)
+    mi_df = pd.concat(mi_df_list, ignore_index=True)
+
+    # re-apply categorical ordering
+    mi_df["age_groups"] = pd.Categorical(
+        mi_df["age_groups"], categories=AGE_GROUP_ORDER, ordered=True
     )
 
     return mi_df
