@@ -196,7 +196,7 @@ def asymptotic(
 
 
 def vm20_buhlmann(
-    df: pd.DataFrame,
+    seriatim_df: pd.DataFrame,
     amount_col: str,
     rate_col: str,
     exposure_col: str | None = None,
@@ -240,7 +240,7 @@ def vm20_buhlmann(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    seriatim_df : pd.DataFrame
         DataFrame with the data.
     amount_col : str
         Column name of the 'amount' field.
@@ -267,20 +267,20 @@ def vm20_buhlmann(
         required.append(exposure_col)
     if groupby_cols:
         required.extend(groupby_cols)
-    missing_cols = [col for col in required if col not in df.columns]
+    missing_cols = [col for col in required if col not in seriatim_df.columns]
     if missing_cols:
         raise ValueError(
             f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
         )
 
     # parameters
-    amount = df[amount_col]
-    rate = df[rate_col]
+    amount = seriatim_df[amount_col]
+    rate = seriatim_df[rate_col]
     if exposure_col is None:
         logger.warning("Exposure column was not provided; assuming exposure = 1.")
         exposure = 1
     else:
-        exposure = df[exposure_col]
+        exposure = seriatim_df[exposure_col]
 
     # calculate the vm20 parameters
     a = amount * exposure * rate
@@ -289,14 +289,14 @@ def vm20_buhlmann(
 
     # group by and sum the vm20 parameters
     if groupby_cols:
-        group_keys = [df[col] for col in groupby_cols]
+        group_keys = [seriatim_df[col] for col in groupby_cols]
         a_sum = a.groupby(group_keys, observed=True).transform("sum")
         b_sum = b.groupby(group_keys, observed=True).transform("sum")
         c_sum = c.groupby(group_keys, observed=True).transform("sum")
     else:
-        a_sum = pd.Series(a.sum(), index=df.index)
-        b_sum = pd.Series(b.sum(), index=df.index)
-        c_sum = pd.Series(c.sum(), index=df.index)
+        a_sum = pd.Series(a.sum(), index=seriatim_df.index)
+        b_sum = pd.Series(b.sum(), index=seriatim_df.index)
+        c_sum = pd.Series(c.sum(), index=seriatim_df.index)
 
     # calculate the credibility
     credibility_vm20 = a_sum / (
