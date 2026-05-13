@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?><request-parameters>
 	<parameter>
 		<name>B_1</name>
-		<value>D176.V5</value>
+		<value>D176.V100-level1</value>
 	</parameter>
 	<parameter>
 		<name>B_2</name>
-		<value>D176.V7</value>
+		<value>D176.V100-level2</value>
 	</parameter>
 	<parameter>
 		<name>B_3</name>
-		<value>D176.V1-level1</value>
+		<value>*None*</value>
 	</parameter>
 	<parameter>
 		<name>B_4</name>
@@ -37,7 +37,7 @@
 	</parameter>
 	<parameter>
 		<name>F_D176.V2</name>
-		<value>*All*</value>
+		<value>J09-J18</value>
 	</parameter>
 	<parameter>
 		<name>F_D176.V25</name>
@@ -84,7 +84,7 @@
 	</parameter>
 	<parameter>
 		<name>I_D176.V2</name>
-		<value>*All* (All Causes of Death)
+		<value>J09-J18 (Influenza and pneumonia)
 </value>
 	</parameter>
 	<parameter>
@@ -128,10 +128,6 @@
 	<parameter>
 		<name>M_1</name>
 		<value>D176.M1</value>
-	</parameter>
-	<parameter>
-		<name>M_2</name>
-		<value>D176.M2</value>
 	</parameter>
 	<parameter>
 		<name>O_MMWR</name>
@@ -207,7 +203,7 @@
 	</parameter>
 	<parameter>
 		<name>O_dates</name>
-		<value>YEAR</value>
+		<value>MMWR</value>
 	</parameter>
 	<parameter>
 		<name>O_death_location</name>
@@ -216,6 +212,10 @@
 	<parameter>
 		<name>O_death_urban</name>
 		<value>D176.V89</value>
+	</parameter>
+	<parameter>
+		<name>O_export-format</name>
+		<value>xls</value>
 	</parameter>
 	<parameter>
 		<name>O_javascript</name>
@@ -334,6 +334,10 @@
 		<value>*All*</value>
 	</parameter>
 	<parameter>
+		<name>V_D176.V18</name>
+		<value>*All*</value>
+	</parameter>
+	<parameter>
 		<name>V_D176.V19</name>
 		<value>*All*</value>
 	</parameter>
@@ -426,6 +430,10 @@
 		<value>*All*</value>
 	</parameter>
 	<parameter>
+		<name>V_D176.V82</name>
+		<value>*All*</value>
+	</parameter>
+	<parameter>
 		<name>V_D176.V89</name>
 		<value>*All*</value>
 	</parameter>
@@ -447,7 +455,7 @@
 	</parameter>
 	<parameter>
 		<name>dataset_vintage</name>
-		<value>June 29, 2024 as of July 07, 2024</value>
+		<value>April 18, 2026 as of  April 26, 2026</value>
 	</parameter>
 	<parameter>
 		<name>finder-stage-D176.V1</name>

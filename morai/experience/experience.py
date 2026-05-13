@@ -901,6 +901,9 @@ def summarize_study(
         )
 
     # summarize data
+    logger.info(f"creating summarized study")
+    logger.info(f"summing: `{', '.join(required_cols)}`")
+    logger.info(f"calculating ratios: `{', '.join(ratios)}`")
     summary_df = (
         study_df.groupby(groupby_cols, observed=True, sort=False)
         .agg(dict.fromkeys(required_cols, "sum"))

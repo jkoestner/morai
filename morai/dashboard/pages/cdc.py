@@ -37,6 +37,7 @@ executor = ThreadPoolExecutor(max_workers=2)
 thread_lock = threading.Lock()
 
 # initialize variables
+DAYS_SINCE_LAST_UPDATE = 5
 FILTER_MI_PREFIX = "cdc-mi"
 FILTER_COD_PREFIX = "cdc-cod"
 FILTER_COD_TRENDS_PREFIX = "cdc-cod-trends"
@@ -807,7 +808,7 @@ def update_cdc_data_async(n_clicks):
         try:
             last_updated = pd.to_datetime(cdc.get_last_updated()["last_updated"])
             days_since_update = (pd.Timestamp.now() - last_updated).days
-            if days_since_update < 5:
+            if days_since_update < DAYS_SINCE_LAST_UPDATE:
                 return "recent", None
             refresh_cdc_data()
             new_last_updated = cdc.get_last_updated()["last_updated"]
@@ -1904,6 +1905,17 @@ def refresh_cdc_data() -> None:
             df=mcd18_weekly,
             db_filepath=db_filepath,
             table_name="mcd18_weekly",
+            if_exists="replace",
+        )
+        time.sleep(15)
+
+        df = cdc.get_cdc_data_xml(
+            xml_filename="mcd18_weekly_influenza.xml", parse_date_col="mmwr_week_date"
+        )
+        sql.export_to_sql(
+            df=df,
+            db_filepath=db_filepath,
+            table_name="mcd18_weekly_influenza",
             if_exists="replace",
         )
     except Exception as e:

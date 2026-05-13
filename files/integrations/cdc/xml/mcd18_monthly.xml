@@ -130,14 +130,6 @@
 		<value>D176.M1</value>
 	</parameter>
 	<parameter>
-		<name>M_2</name>
-		<value>D176.M2</value>
-	</parameter>
-	<parameter>
-		<name>M_3</name>
-		<value>D176.M3</value>
-	</parameter>
-	<parameter>
 		<name>O_MMWR</name>
 		<value>false</value>
 	</parameter>
