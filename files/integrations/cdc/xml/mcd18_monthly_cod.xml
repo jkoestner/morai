@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?><request-parameters>
 	<parameter>
 		<name>B_1</name>
-		<value>D176.V5</value>
+		<value>D176.V1-level1</value>
 	</parameter>
 	<parameter>
 		<name>B_2</name>
-		<value>D176.V7</value>
+		<value>D176.V1-level2</value>
 	</parameter>
 	<parameter>
 		<name>B_3</name>
-		<value>D176.V1-level1</value>
+		<value>D176.V2-level1</value>
 	</parameter>
 	<parameter>
 		<name>B_4</name>
@@ -37,7 +37,27 @@
 	</parameter>
 	<parameter>
 		<name>F_D176.V2</name>
-		<value>*All*</value>
+		<value>A00-B99</value>
+		<value>C00-D48</value>
+		<value>D50-D89</value>
+		<value>E00-E88</value>
+		<value>F01-F99</value>
+		<value>G00-G98</value>
+		<value>H00-H57</value>
+		<value>H60-H93</value>
+		<value>I00-I99</value>
+		<value>J09-J18</value>
+		<value>K00-K92</value>
+		<value>L00-L98</value>
+		<value>M00-M99</value>
+		<value>N00-N98</value>
+		<value>O00-O99</value>
+		<value>P00-P96</value>
+		<value>Q00-Q99</value>
+		<value>R00-R99</value>
+		<value>U00-U99</value>
+		<value>V01-Y89</value>
+		<value>999--999</value>
 	</parameter>
 	<parameter>
 		<name>F_D176.V25</name>
@@ -84,7 +104,27 @@
 	</parameter>
 	<parameter>
 		<name>I_D176.V2</name>
-		<value>*All* (All Causes of Death)
+		<value>A00-B99 (Certain infectious and parasitic diseases)
+C00-D48 (Neoplasms)
+D50-D89 (Diseases of the blood and blood-forming organs and certain disorders involving the immune mechanism)
+E00-E88 (Endocrine, nutritional and metabolic diseases)
+F01-F99 (Mental and behavioural disorders)
+G00-G98 (Diseases of the nervous system)
+H00-H57 (Diseases of the eye and adnexa)
+H60-H93 (Diseases of the ear and mastoid process)
+I00-I99 (Diseases of the circulatory system)
+J09-J18 (Influenza and pneumonia)
+K00-K92 (Diseases of the digestive system)
+L00-L98 (Diseases of the skin and subcutaneous tissue)
+M00-M99 (Diseases of the musculoskeletal system and connective tissue)
+N00-N98 (Diseases of the genitourinary system)
+O00-O99 (Pregnancy, childbirth and the puerperium)
+P00-P96 (Certain conditions originating in the perinatal period)
+Q00-Q99 (Congenital malformations, deformations and chromosomal abnormalities)
+R00-R99 (Symptoms, signs and abnormal clinical and laboratory findings, not elsewhere classified)
+U00-U99 (Codes for special purposes)
+V01-Y89 (External causes of morbidity and mortality)
+999--999 (Data not shown due to 6 month lag to account for delays in death certificate completion for certain causes of death.)
 </value>
 	</parameter>
 	<parameter>
@@ -128,14 +168,6 @@
 	<parameter>
 		<name>M_1</name>
 		<value>D176.M1</value>
-	</parameter>
-	<parameter>
-		<name>M_2</name>
-		<value>D176.M2</value>
-	</parameter>
-	<parameter>
-		<name>M_3</name>
-		<value>D176.M3</value>
 	</parameter>
 	<parameter>
 		<name>O_MMWR</name>
@@ -220,6 +252,10 @@
 	<parameter>
 		<name>O_death_urban</name>
 		<value>D176.V89</value>
+	</parameter>
+	<parameter>
+		<name>O_export-format</name>
+		<value>xls</value>
 	</parameter>
 	<parameter>
 		<name>O_javascript</name>
@@ -338,6 +374,10 @@
 		<value>*All*</value>
 	</parameter>
 	<parameter>
+		<name>V_D176.V18</name>
+		<value>*All*</value>
+	</parameter>
+	<parameter>
 		<name>V_D176.V19</name>
 		<value>*All*</value>
 	</parameter>
@@ -430,6 +470,10 @@
 		<value>*All*</value>
 	</parameter>
 	<parameter>
+		<name>V_D176.V82</name>
+		<value>*All*</value>
+	</parameter>
+	<parameter>
 		<name>V_D176.V89</name>
 		<value>*All*</value>
 	</parameter>
@@ -451,7 +495,7 @@
 	</parameter>
 	<parameter>
 		<name>dataset_vintage</name>
-		<value>June 29, 2024 as of July 07, 2024</value>
+		<value>May 9, 2026 as of  May 17, 2026</value>
 	</parameter>
 	<parameter>
 		<name>finder-stage-D176.V1</name>

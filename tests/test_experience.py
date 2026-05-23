@@ -328,7 +328,7 @@ def test_exposure_policy() -> None:
             (test_df["id"] == 1)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 70 / 366
     ), "Expected exposure to be using 366 days for policy year as in leap year."
 
@@ -346,7 +346,7 @@ def test_exposure_annual_calendar() -> None:
         get_exposures=True,
         get_actuals=False,
     )
-    test_df = test_df[test_df["exposure"] != 0]
+    test_df = test_df[test_df["exposure_cnt"] != 0]
 
     # not in study period
     # issued after study period
@@ -369,7 +369,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 4)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be 365 for inforce policy in total"
     assert (
@@ -377,7 +377,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 4)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 5)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), "Expected exposure to be 365 for inforce policy in total"
     # issued during study period
@@ -391,7 +391,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 5)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 70 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -408,7 +408,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 6)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -425,7 +425,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 7)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -438,7 +438,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 8)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 3)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert test_df[
@@ -455,7 +455,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 9)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 10)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 99 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert (
@@ -463,7 +463,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 9)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 1 / 365
     ), (
         "Expected exposure to be up until termination for decrement not under study, "
@@ -475,7 +475,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 7)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 197 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert (
@@ -483,7 +483,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 8)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 100 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     # in the future
@@ -492,7 +492,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 6)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 197 / 365
     ), "Expected exposure to be same as inforce policy"
     assert (
@@ -500,7 +500,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 7)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 168 / 365
     ), "Expected exposure to be same as inforce policy"
 
@@ -511,7 +511,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 11)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 9)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 130 / 365
     ), "Expected exposure to be up until anniversary for decrement under study"
     assert test_df[
@@ -528,7 +528,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 12)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 10)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 65 / 365
     ), "Expected exposure to be up until anniversary for decrement under study"
     assert (
@@ -536,7 +536,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 12)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 365 / 365
     ), (
         "Expected exposure to be up until anniversary for decrement under study, "
@@ -549,7 +549,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be up until termination for decrement under study"
     assert (
@@ -557,7 +557,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 5)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 365 / 365
     ), (
         "Expected exposure to be up until termination for decrement under study, "
@@ -570,7 +570,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 3)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be same as inforce policy"
     assert (
@@ -578,7 +578,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), "Expected exposure to be same as inforce policy"
 
@@ -589,7 +589,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 14)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 66 / 366
     ), (
         "Expected exposure to be up until min(termination, anniversary, eos) for "
@@ -600,7 +600,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 14)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 12)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 25 / 366
     ), (
         "Expected exposure to be up until min(termination, eos) for "
@@ -612,7 +612,7 @@ def test_exposure_annual_calendar() -> None:
             (test_df["id"] == 15)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 331 / 366
     ), "Expected exposure to be up until anniversary for decrement under study"
     assert test_df[
@@ -636,7 +636,7 @@ def test_exposure_annual_calendar() -> None:
         get_actuals=False,
     )
 
-    assert frequency_df[frequency_df["exposure"] < 0].empty, (
+    assert frequency_df[frequency_df["exposure_cnt"] < 0].empty, (
         "There should be no negative exposures"
     )
 
@@ -645,7 +645,7 @@ def test_exposure_annual_calendar() -> None:
             (frequency_df["id"] == 12)
             & (frequency_df["bos_date"] == "3/1/2023")
             & (frequency_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 365 / 365
     ), "Expected exposure to be from bos to anniversary"
 
@@ -654,7 +654,7 @@ def test_exposure_annual_calendar() -> None:
             (frequency_df["id"] == 12)
             & (frequency_df["bos_date"] == "4/1/2023")
             & (frequency_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 0 / 365
     ), "Expected exposure to be from bos to anniversary"
 
@@ -663,7 +663,7 @@ def test_exposure_annual_calendar() -> None:
             (frequency_df["id"] == 11)
             & (frequency_df["bos_date"] == "1/1/2023")
             & (frequency_df["policy_dur"] == 9)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 31 / 365
     ), "Expected exposure to be from bos to eos"
 
@@ -681,7 +681,7 @@ def test_exposure_distributed_calendar() -> None:
         get_exposures=True,
         get_actuals=False,
     )
-    test_df = test_df[test_df["exposure"] != 0]
+    test_df = test_df[test_df["exposure_cnt"] != 0]
 
     # not in study period
     # issued after study period
@@ -700,7 +700,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 4)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be 365 for inforce policy in total"
     assert (
@@ -708,7 +708,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 4)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 5)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), "Expected exposure to be 365 for inforce policy in total"
     # issued during study period
@@ -722,7 +722,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 5)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 70 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -739,7 +739,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 6)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -756,7 +756,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 7)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -769,7 +769,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 8)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 3)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert test_df[
@@ -786,7 +786,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 9)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 10)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 99 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert (
@@ -794,7 +794,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 9)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 1 / 365
     ), (
         "Expected exposure to be up until termination for decrement not under study, "
@@ -806,7 +806,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 7)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 197 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert (
@@ -814,7 +814,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 8)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 100 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     # in the future
@@ -823,7 +823,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 6)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 197 / 365
     ), "Expected exposure to be same as inforce policy"
     assert (
@@ -831,7 +831,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 7)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 168 / 365
     ), "Expected exposure to be same as inforce policy"
 
@@ -842,7 +842,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 11)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 9)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 130 / 365
     ), "Expected exposure to be up until anniversary for decrement under study"
     assert test_df[
@@ -859,7 +859,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 12)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 10)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 65 / 365
     ), "Expected exposure to be up until anniversary for decrement under study"
     assert (
@@ -867,7 +867,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 12)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 300 / 365
     ), (
         "Expected exposure to be up until anniversary for decrement under study, "
@@ -880,7 +880,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be up until termination for decrement under study"
     assert (
@@ -888,7 +888,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 5)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), (
         "Expected exposure to be up until termination for decrement under study, "
@@ -901,7 +901,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 3)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be same as inforce policy"
     assert (
@@ -909,7 +909,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), "Expected exposure to be same as inforce policy"
     # terminated before study period
@@ -918,7 +918,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 2)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 328 / 365
     ), "Expected exposure to be up until anniversary for decrement under study"
     assert test_df[
@@ -938,7 +938,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 14)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 66 / 366
     ), (
         "Expected exposure to be up until min(termination, anniversary, eos) for "
@@ -949,7 +949,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 14)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 12)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 25 / 366
     ), (
         "Expected exposure to be up until min(termination, eos) for "
@@ -961,7 +961,7 @@ def test_exposure_distributed_calendar() -> None:
             (test_df["id"] == 15)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 91 / 366
     ), "Expected exposure to be up until anniversary for decrement under study"
     assert test_df[
@@ -985,7 +985,7 @@ def test_exposure_distributed_calendar() -> None:
         get_actuals=False,
     )
 
-    assert frequency_df[frequency_df["exposure"] < 0].empty, (
+    assert frequency_df[frequency_df["exposure_cnt"] < 0].empty, (
         "There should be no negative exposures"
     )
 
@@ -994,7 +994,7 @@ def test_exposure_distributed_calendar() -> None:
             (frequency_df["id"] == 12)
             & (frequency_df["bos_date"] == "3/1/2023")
             & (frequency_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 25 / 365
     ), "Expected exposure to be from bos to anniversary"
 
@@ -1003,7 +1003,7 @@ def test_exposure_distributed_calendar() -> None:
             (frequency_df["id"] == 12)
             & (frequency_df["bos_date"] == "4/1/2023")
             & (frequency_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 30 / 365
     ), "Expected exposure to be from bos to anniversary"
 
@@ -1012,7 +1012,7 @@ def test_exposure_distributed_calendar() -> None:
             (frequency_df["id"] == 11)
             & (frequency_df["bos_date"] == "1/1/2023")
             & (frequency_df["policy_dur"] == 9)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 31 / 365
     ), "Expected exposure to be from bos to eos"
 
@@ -1030,7 +1030,7 @@ def test_exposure_exact_calendar() -> None:
         get_exposures=True,
         get_actuals=False,
     )
-    test_df = test_df[test_df["exposure"] != 0]
+    test_df = test_df[test_df["exposure_cnt"] != 0]
 
     # not in study period
     # issued after study period
@@ -1053,7 +1053,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 4)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be 365 for inforce policy in total"
     assert (
@@ -1061,7 +1061,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 4)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 5)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), "Expected exposure to be 365 for inforce policy in total"
     # issued during study period
@@ -1075,7 +1075,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 5)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 70 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -1092,7 +1092,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 6)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -1109,7 +1109,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 7)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 1)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), (
         "Expected exposure to be up until eos for inforce policy issued during "
@@ -1122,7 +1122,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 8)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 3)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert test_df[
@@ -1139,7 +1139,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 9)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 10)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 99 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert (
@@ -1147,7 +1147,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 9)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 1 / 365
     ), (
         "Expected exposure to be up until termination for decrement not under study, "
@@ -1159,7 +1159,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 7)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 197 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     assert (
@@ -1167,7 +1167,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 8)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 100 / 365
     ), "Expected exposure to be up until termination for decrement not under study"
     # in the future
@@ -1176,7 +1176,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 6)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 197 / 365
     ), "Expected exposure to be same as inforce policy"
     assert (
@@ -1184,7 +1184,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 10)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 7)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 168 / 365
     ), "Expected exposure to be same as inforce policy"
 
@@ -1195,7 +1195,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 11)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 9)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 33 / 365
     ), "Expected exposure to be up until date of decrement for decrement under study"
     assert test_df[
@@ -1212,7 +1212,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 12)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 10)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 65 / 365
     ), "Expected exposure to be up until date of decrement for decrement under study"
     assert (
@@ -1220,7 +1220,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 12)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 1 / 365
     ), (
         "Expected exposure to be up until date of decrement for decrement under study, "
@@ -1233,7 +1233,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be up until termination for decrement under study"
     assert (
@@ -1241,7 +1241,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2023")
             & (test_df["policy_dur"] == 5)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 33 / 365
     ), "Expected exposure to be up until termination for decrement under study."
     # in the future
@@ -1250,7 +1250,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 3)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 329 / 365
     ), "Expected exposure to be same as inforce policy"
     assert (
@@ -1258,7 +1258,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 13)
             & (test_df["bos_date"] == "1/1/2022")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 36 / 365
     ), "Expected exposure to be same as inforce policy"
 
@@ -1269,7 +1269,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 14)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 66 / 366
     ), (
         "Expected exposure to be up until min(termination, anniversary, eos) for "
@@ -1280,7 +1280,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 14)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 12)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 25 / 366
     ), (
         "Expected exposure to be up until min(termination, eos) for "
@@ -1292,7 +1292,7 @@ def test_exposure_exact_calendar() -> None:
             (test_df["id"] == 15)
             & (test_df["bos_date"] == "1/1/2024")
             & (test_df["policy_dur"] == 4)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 67 / 366
     ), "Expected exposure to be up until decrement for decrement under study"
     assert test_df[
@@ -1316,7 +1316,7 @@ def test_exposure_exact_calendar() -> None:
         get_actuals=False,
     )
 
-    assert frequency_df[frequency_df["exposure"] < 0].empty, (
+    assert frequency_df[frequency_df["exposure_cnt"] < 0].empty, (
         "There should be no negative exposures"
     )
 
@@ -1325,7 +1325,7 @@ def test_exposure_exact_calendar() -> None:
             (frequency_df["id"] == 12)
             & (frequency_df["bos_date"] == "3/1/2023")
             & (frequency_df["policy_dur"] == 11)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 1 / 365
     ), "Expected exposure to be from bos to anniversary"
 
@@ -1334,6 +1334,6 @@ def test_exposure_exact_calendar() -> None:
             (frequency_df["id"] == 11)
             & (frequency_df["bos_date"] == "1/1/2023")
             & (frequency_df["policy_dur"] == 9)
-        ]["exposure"].iloc[0]
+        ]["exposure_cnt"].iloc[0]
         == 31 / 365
     ), "Expected exposure to be from bos to eos"

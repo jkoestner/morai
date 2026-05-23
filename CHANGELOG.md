@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.5](https://github.com/jkoestner/morai/tree/v0.3.5)
+
+[Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.4...v0.3.5)
+
+**Enhancements**
+- cdc analytic enhancements (weekly, flu, cod refinements)
+- create experience study calcs (variance, credibility, ci, summarize data)
+
+**Documentation**
+- update tests
+
 ## [0.3.4](https://github.com/jkoestner/morai/tree/v0.3.4)
 
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.3...v0.3.4)

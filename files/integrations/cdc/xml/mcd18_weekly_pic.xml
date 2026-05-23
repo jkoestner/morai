@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?><request-parameters>
 	<parameter>
 		<name>B_1</name>
-		<value>D176.V5</value>
+		<value>D176.V100-level1</value>
 	</parameter>
 	<parameter>
 		<name>B_2</name>
-		<value>D176.V7</value>
+		<value>D176.V100-level2</value>
 	</parameter>
 	<parameter>
 		<name>B_3</name>
-		<value>D176.V1-level1</value>
+		<value>D176.V2-level1</value>
 	</parameter>
 	<parameter>
 		<name>B_4</name>
@@ -37,7 +37,9 @@
 	</parameter>
 	<parameter>
 		<name>F_D176.V2</name>
-		<value>*All*</value>
+		<value>A00-B99</value>
+		<value>J09-J18</value>
+		<value>U00-U99</value>
 	</parameter>
 	<parameter>
 		<name>F_D176.V25</name>
@@ -84,7 +86,9 @@
 	</parameter>
 	<parameter>
 		<name>I_D176.V2</name>
-		<value>*All* (All Causes of Death)
+		<value>A00-B99 (Certain infectious and parasitic diseases)
+J09-J18 (Influenza and pneumonia)
+U00-U99 (Codes for special purposes)
 </value>
 	</parameter>
 	<parameter>
@@ -128,14 +132,6 @@
 	<parameter>
 		<name>M_1</name>
 		<value>D176.M1</value>
-	</parameter>
-	<parameter>
-		<name>M_2</name>
-		<value>D176.M2</value>
-	</parameter>
-	<parameter>
-		<name>M_3</name>
-		<value>D176.M3</value>
 	</parameter>
 	<parameter>
 		<name>O_MMWR</name>
@@ -211,7 +207,7 @@
 	</parameter>
 	<parameter>
 		<name>O_dates</name>
-		<value>YEAR</value>
+		<value>MMWR</value>
 	</parameter>
 	<parameter>
 		<name>O_death_location</name>
@@ -220,6 +216,10 @@
 	<parameter>
 		<name>O_death_urban</name>
 		<value>D176.V89</value>
+	</parameter>
+	<parameter>
+		<name>O_export-format</name>
+		<value>xls</value>
 	</parameter>
 	<parameter>
 		<name>O_javascript</name>
@@ -338,6 +338,10 @@
 		<value>*All*</value>
 	</parameter>
 	<parameter>
+		<name>V_D176.V18</name>
+		<value>*All*</value>
+	</parameter>
+	<parameter>
 		<name>V_D176.V19</name>
 		<value>*All*</value>
 	</parameter>
@@ -430,6 +434,10 @@
 		<value>*All*</value>
 	</parameter>
 	<parameter>
+		<name>V_D176.V82</name>
+		<value>*All*</value>
+	</parameter>
+	<parameter>
 		<name>V_D176.V89</name>
 		<value>*All*</value>
 	</parameter>
@@ -451,7 +459,7 @@
 	</parameter>
 	<parameter>
 		<name>dataset_vintage</name>
-		<value>June 29, 2024 as of July 07, 2024</value>
+		<value>May 9, 2026 as of  May 17, 2026</value>
 	</parameter>
 	<parameter>
 		<name>finder-stage-D176.V1</name>

@@ -7,8 +7,10 @@ from concurrent.futures import ThreadPoolExecutor
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from dash_extensions.enrich import (
     ALL,
     Input,
@@ -41,6 +43,7 @@ DAYS_SINCE_LAST_UPDATE = 5
 FILTER_MI_PREFIX = "cdc-mi"
 FILTER_COD_PREFIX = "cdc-cod"
 FILTER_COD_TRENDS_PREFIX = "cdc-cod-trends"
+FILTER_MONTHLY_PREFIX = "cdc-monthly"
 # provides when to use data from 18 dataset as there is overlap in 99 dataset
 # the 99 dataset ends in 2020 and the 18 dataset starts in 2018
 NEW_DATASET_START_YEAR = 2021
@@ -67,8 +70,6 @@ IBNR_FACTORS = {
     13: 0.99,
 }
 PARTIAL_WEEKS_TO_EXCLUDE = 7
-IBNR_AFTER = {k: v for k, v in IBNR_FACTORS.items() if k >= PARTIAL_WEEKS_TO_EXCLUDE}
-IBNR_BEFORE = {k: v for k, v in IBNR_FACTORS.items() if k < PARTIAL_WEEKS_TO_EXCLUDE}
 # mi
 ROLLING_MI_YEARS = 10
 
@@ -76,6 +77,17 @@ ROLLING_MI_YEARS = 10
 def layout():
     """CDC layout."""
     last_updated_meta = cdc.get_last_updated()
+    recent_week = last_updated_meta["recent_week"]
+    ibnr_factors_included = {
+        recent_week - k: v
+        for k, v in IBNR_FACTORS.items()
+        if k >= PARTIAL_WEEKS_TO_EXCLUDE
+    }
+    ibnr_factors_excluded = {
+        recent_week - k: v
+        for k, v in IBNR_FACTORS.items()
+        if k < PARTIAL_WEEKS_TO_EXCLUDE
+    }
     return html.Div(
         [
             dcc.Store(id="store-cdc-results", storage_type="session"),
@@ -486,7 +498,7 @@ def layout():
                                                     html.Div(
                                                         [
                                                             html.Label(
-                                                                "Death Cause",
+                                                                "Simple Grouping",
                                                                 className="fw-bold",
                                                             ),
                                                             dcc.Dropdown(
@@ -606,23 +618,97 @@ def layout():
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
                                     "Total US deaths per month.",
+                                    html.Br(),
+                                    "The COD chart defaults to using PIC (pneumonia, infections, covid) which shows the "
+                                    "seasonal pattern. PIC may have an indirect effect on other COD such "
+                                    "as circulatory",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
                             ),
                             dbc.Row(
-                                common_build._build_tabbed_content(
-                                    tabs=[
-                                        common_build.TabSpec(
-                                            label="Monthly Chart", tab_id="chart"
+                                [
+                                    dbc.Col(
+                                        common_build._build_tabbed_content(
+                                            tabs=[
+                                                common_build.TabSpec(
+                                                    label="All-causes Chart",
+                                                    tab_id="chart",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="All-causes Table",
+                                                    tab_id="table",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="COD Chart",
+                                                    tab_id="pic-chart",
+                                                ),
+                                            ],
+                                            prefix=FILTER_MONTHLY_PREFIX,
                                         ),
-                                        common_build.TabSpec(
-                                            label="Monthly Table",
-                                            tab_id="table",
+                                        width=10,
+                                    ),
+                                    dbc.Col(
+                                        dbc.Card(
+                                            [
+                                                dbc.CardHeader(
+                                                    html.H5(
+                                                        [
+                                                            html.I(
+                                                                className="fas fa-filter me-2"
+                                                            ),
+                                                            "Filters",
+                                                        ],
+                                                        className="mb-0",
+                                                    ),
+                                                    className="bg-light",
+                                                ),
+                                                dbc.CardBody(
+                                                    html.Div(
+                                                        [
+                                                            html.Label(
+                                                                "Simple Chapter",
+                                                                className="fw-bold",
+                                                            ),
+                                                            dcc.Dropdown(
+                                                                id={
+                                                                    "type": "filter-str",
+                                                                    "prefix": FILTER_MONTHLY_PREFIX,
+                                                                    "index": "simple_chapter",
+                                                                },
+                                                                # default options
+                                                                options=[
+                                                                    {
+                                                                        "label": "infectious",
+                                                                        "value": "infectious",
+                                                                    },
+                                                                    {
+                                                                        "label": "respiratory",
+                                                                        "value": "respiratory",
+                                                                    },
+                                                                    {
+                                                                        "label": "special",
+                                                                        "value": "special",
+                                                                    },
+                                                                ],
+                                                                value=[
+                                                                    "infectious",
+                                                                    "respiratory",
+                                                                    "special",
+                                                                ],
+                                                                multi=True,
+                                                                clearable=True,
+                                                                className="ms-2",
+                                                            ),
+                                                        ],
+                                                    ),
+                                                ),
+                                            ],
+                                            className="shadow-sm h-100",
                                         ),
-                                    ],
-                                    prefix="cdc-monthly",
-                                ),
+                                        width=2,
+                                    ),
+                                ],
                             ),
                         ],
                         title=[
@@ -654,9 +740,9 @@ def layout():
                                     "Total US deaths per week. The deaths also have an adjustment which accounts "
                                     "for the lag in reporting.",
                                     html.Br(),
-                                    f"Lag adjustments for weeks {PARTIAL_WEEKS_TO_EXCLUDE + 1}-13 are {IBNR_AFTER}.",
+                                    f"Excluding recent weeks due to incomplete factors, which are {ibnr_factors_excluded}.",
                                     html.Br(),
-                                    f"Excluding weeks 1-{PARTIAL_WEEKS_TO_EXCLUDE} due to incomplete factors, which are {IBNR_BEFORE}.",
+                                    f"Lag adjustments for recent weeks are {ibnr_factors_included}.",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
@@ -665,15 +751,19 @@ def layout():
                                 common_build._build_tabbed_content(
                                     tabs=[
                                         common_build.TabSpec(
-                                            label="Weekly Chart", tab_id="chart"
+                                            label="All-causes Chart", tab_id="chart"
                                         ),
                                         common_build.TabSpec(
-                                            label="Weekly Table",
+                                            label="All-causes Table",
                                             tab_id="table",
                                         ),
                                         common_build.TabSpec(
                                             label="Flu Chart",
                                             tab_id="flu-chart",
+                                        ),
+                                        common_build.TabSpec(
+                                            label="Flu Table",
+                                            tab_id="flu-table",
                                         ),
                                     ],
                                     prefix="cdc-weekly",
@@ -1117,7 +1207,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
             f"Failed to load data: {e}",
         )
 
-    # get the data
+    # get options
     age_group_options = [
         {"label": str(v), "value": v} for v in mcd18_cod["age_groups"].dropna().unique()
     ]
@@ -1522,22 +1612,39 @@ def display_cdc_pop_trends(n_clicks, active_tab):
 
 @callback(
     [
-        Output("cdc-monthly-tab-content", "children"),
+        Output(f"{FILTER_MONTHLY_PREFIX}-tab-content", "children"),
+        Output(
+            {
+                "type": "filter-str",
+                "prefix": FILTER_MONTHLY_PREFIX,
+                "index": "simple_chapter",
+            },
+            "options",
+        ),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
     ],
     [
         Input("button-monthly", "n_clicks"),
-        Input("cdc-monthly-tabs", "active_tab"),
+        Input(f"{FILTER_MONTHLY_PREFIX}-tabs", "active_tab"),
     ],
+    State(
+        {
+            "type": "filter-str",
+            "prefix": FILTER_MONTHLY_PREFIX,
+            "index": "simple_chapter",
+        },
+        "value",
+    ),
 )
-def display_cdc_monthly(n_clicks, active_tab):
+def display_cdc_monthly(n_clicks, active_tab, chapter_values):
     """Create cdc monthly."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+    simple_chapter_options = dash.no_update
 
     # get the data
     try:
@@ -1546,7 +1653,7 @@ def display_cdc_monthly(n_clicks, active_tab):
         )
     except Exception as e:
         logger.error(f"Failed to load table: {e}")
-        return dash.no_update, True, f"Failed to load data: {e}"
+        return dash.no_update, dash.no_update, True, f"Failed to load data: {e}"
 
     # filter
     last_updated = mcd18_monthly["added_at"].max()
@@ -1563,7 +1670,7 @@ def display_cdc_monthly(n_clicks, active_tab):
     color_discrete_map[current_year] = "crimson"
 
     # chart
-    if active_tab == "cdc-monthly-tab-chart":
+    if active_tab == f"{FILTER_MONTHLY_PREFIX}-tab-chart":
         cdc_monthly_chart = charters.chart(
             df=mcd18_monthly,
             x_axis="month",
@@ -1575,10 +1682,10 @@ def display_cdc_monthly(n_clicks, active_tab):
         tab_content = html.Div([dcc.Graph(figure=cdc_monthly_chart)])
 
     # table
-    elif active_tab == "cdc-monthly-tab-table":
+    elif active_tab == f"{FILTER_MONTHLY_PREFIX}-tab-table":
         columnDefs = dash_formats.get_column_defs(mcd18_monthly)
         grid = dag.AgGrid(
-            id={"type": "data-table", "tab": "table", "page": "cdc-monthly"},
+            id={"type": "data-table", "tab": "table", "page": FILTER_MONTHLY_PREFIX},
             rowData=mcd18_monthly.to_dict("records"),
             columnDefs=columnDefs,
             dashGridOptions={
@@ -1591,12 +1698,95 @@ def display_cdc_monthly(n_clicks, active_tab):
             className="ag-theme-alpine",
             columnSize="sizeToFit",
         )
-        export_button = common_build._build_export_button("table", "cdc-monthly")
+        export_button = common_build._build_export_button(
+            "table", FILTER_MONTHLY_PREFIX
+        )
         tab_content = html.Div([export_button, grid])
+
+    # pic chart
+    elif active_tab == f"{FILTER_MONTHLY_PREFIX}-tab-pic-chart":
+        # get the data
+        try:
+            mcd18_monthly_cod = cdc.get_cdc_data_sql(
+                db_filepath=db_filepath, table_name="mcd18_monthly_cod"
+            )
+            mcd99_monthly_cod = cdc.get_cdc_data_sql(
+                db_filepath=db_filepath, table_name="mcd99_monthly_cod"
+            )
+            mcd18_monthly_cod = mcd18_monthly_cod[mcd18_monthly_cod["year"] >= 2021]
+            mcd99_monthly_cod = mcd99_monthly_cod[mcd99_monthly_cod["year"] >= 2010]
+            monthly_cod = pd.concat(
+                [mcd18_monthly_cod, mcd99_monthly_cod], ignore_index=True
+            )
+        except Exception as e:
+            logger.error(f"Failed to load table: {e}")
+            return dash.no_update, dash.no_update, True, f"Failed to load data: {e}"
+
+        # format data
+        monthly_cod = cdc.map_reference(
+            df=monthly_cod,
+            col="simple_chapter",
+            on_dict={"icd_chapter": "wonder_chapter"},
+        )
+
+        # get options
+        simple_chapter_options = [
+            {"label": str(v), "value": v}
+            for v in sorted(monthly_cod["simple_chapter"].dropna().unique())
+        ]
+
+        # filter
+        monthly_cod_filtered = monthly_cod[
+            monthly_cod["simple_chapter"].isin(chapter_values)
+        ].copy()
+
+        # zero out the pandemic (2020-2022)
+        mask_excluded = monthly_cod_filtered["year"].between(2020, 2022)
+        monthly_cod_filtered.loc[mask_excluded, "deaths"] = np.nan
+
+        # compute monthly_avg using 2019 and prior
+        max_date = monthly_cod_filtered["reported_date"].max()
+        cutoff = max_date - pd.DateOffset(months=2)
+        monthly_avg = (
+            monthly_cod_filtered[monthly_cod_filtered["year"] <= 2019]
+            .groupby(["reported_date", "month"])["deaths"]
+            .sum()
+            .groupby(level="month")
+            .mean()
+        )
+
+        # map the average
+        monthly_cod_filtered["avg"] = monthly_cod_filtered["month"].map(monthly_avg)
+        monthly_cod_filtered.loc[
+            monthly_cod_filtered["reported_date"] > cutoff, "avg"
+        ] = np.nan
+        monthly_cod_filtered.loc[mask_excluded, "avg"] = np.nan
+
+        # create chart
+        cdc_monthly_cod_chart = charters.chart(
+            df=monthly_cod_filtered,
+            x_axis="reported_date",
+            y_axis="deaths",
+            color="simple_chapter",
+            type="area",
+        )
+
+        # add average
+        cdc_monthly_cod_chart.add_trace(
+            go.Scatter(
+                x=monthly_cod_filtered["reported_date"],
+                y=monthly_cod_filtered["avg"],
+                mode="lines",
+                name="monthly avg",
+                line={"color": "black", "width": 2},
+            )
+        )
+
+        tab_content = html.Div([dcc.Graph(figure=cdc_monthly_cod_chart)])
     else:
         tab_content = dash.no_update
 
-    return tab_content, False, ""
+    return tab_content, simple_chapter_options, False, ""
 
 
 @callback(
@@ -1657,7 +1847,7 @@ def display_cdc_weekly(n_clicks, active_tab):
     color_discrete_map[current_year] = "crimson"
     color_discrete_map[f"{current_year}_adj"] = "crimson"
 
-    # chart
+    # cdc weekly
     if active_tab == "cdc-weekly-tab-chart":
         cdc_weekly_chart = charters.chart(
             df=mcd18_weekly,
@@ -1671,38 +1861,6 @@ def display_cdc_weekly(n_clicks, active_tab):
             if trace.name == f"{current_year}_adj":
                 trace.line.dash = "dash"
         tab_content = html.Div([dcc.Graph(figure=cdc_weekly_chart)])
-
-    elif active_tab == "cdc-weekly-tab-flu-chart":
-        try:
-            mcd18_weekly_influenza = cdc.get_cdc_data_sql(
-                db_filepath=db_filepath, table_name="mcd18_weekly_influenza"
-            )
-        except Exception as e:
-            logger.error(f"Failed to load table: {e}")
-            return dash.no_update, True, f"Failed to load data: {e}"
-
-        # calculate average (excluding recent weeks)
-        max_date = mcd18_weekly_influenza["mmwr_week_date"].max()
-        cutoff = max_date - pd.Timedelta(weeks=PARTIAL_WEEKS_TO_EXCLUDE)
-        weekly_avg = (
-            mcd18_weekly_influenza[mcd18_weekly_influenza["mmwr_week_date"] <= cutoff]
-            .groupby("mmwr_week")["deaths"]
-            .mean()
-        )
-        mcd18_weekly_influenza["avg"] = mcd18_weekly_influenza["mmwr_week"].map(
-            weekly_avg
-        )
-        mcd18_weekly_influenza.loc[
-            mcd18_weekly_influenza["mmwr_week_date"] > cutoff, "avg"
-        ] = None
-        cdc_flu_chart = charters.compare_rates(
-            df=mcd18_weekly_influenza,
-            x_axis="mmwr_week_date",
-            rates=["deaths", "avg"],
-        )
-        tab_content = html.Div([dcc.Graph(figure=cdc_flu_chart)])
-
-    # table
     elif active_tab == "cdc-weekly-tab-table":
         mcd18_weekly = mcd18_weekly.sort_values(
             ["mmwr_week_date", "mmwr_year"], ascending=False
@@ -1724,6 +1882,59 @@ def display_cdc_weekly(n_clicks, active_tab):
         )
         export_button = common_build._build_export_button("table", "cdc-weekly")
         tab_content = html.Div([export_button, grid])
+
+    # cdc weekly influenza
+    elif active_tab in {"cdc-weekly-tab-flu-chart", "cdc-weekly-tab-flu-table"}:
+        try:
+            mcd18_weekly_pic = cdc.get_cdc_data_sql(
+                db_filepath=db_filepath, table_name="mcd18_weekly_pic"
+            )
+        except Exception as e:
+            logger.error(f"Failed to load table: {e}")
+            return dash.no_update, True, f"Failed to load data: {e}"
+
+        # calculate average (excluding recent weeks)
+        mcd18_weekly_pic = mcd18_weekly_pic[
+            mcd18_weekly_pic["icd_chapter"] == "Diseases of the respiratory system"
+        ]
+        max_date = mcd18_weekly_pic["mmwr_week_date"].max()
+        cutoff = max_date - pd.Timedelta(weeks=PARTIAL_WEEKS_TO_EXCLUDE)
+        weekly_avg = (
+            mcd18_weekly_pic[mcd18_weekly_pic["mmwr_week_date"] <= cutoff]
+            .groupby("mmwr_week")["deaths"]
+            .mean()
+        )
+        mcd18_weekly_pic["avg"] = mcd18_weekly_pic["mmwr_week"].map(weekly_avg)
+        mcd18_weekly_pic.loc[mcd18_weekly_pic["mmwr_week_date"] > cutoff, "avg"] = None
+        if active_tab == "cdc-weekly-tab-flu-chart":
+            cdc_flu_chart = charters.compare_rates(
+                df=mcd18_weekly_pic,
+                x_axis="mmwr_week_date",
+                rates=["deaths", "avg"],
+            )
+            tab_content = html.Div([dcc.Graph(figure=cdc_flu_chart)])
+        else:
+            columnDefs = dash_formats.get_column_defs(mcd18_weekly_pic)
+            grid = dag.AgGrid(
+                id={
+                    "type": "data-table",
+                    "tab": "table",
+                    "page": "cdc-weekly-flu",
+                },
+                rowData=mcd18_weekly_pic.to_dict("records"),
+                columnDefs=columnDefs,
+                dashGridOptions={
+                    "defaultColDef": {
+                        "sortable": True,
+                        "filter": True,
+                        "resizable": True,
+                    },
+                },
+                className="ag-theme-alpine",
+                columnSize="sizeToFit",
+            )
+            export_button = common_build._build_export_button("table", "cdc-weekly-flu")
+            tab_content = html.Div([export_button, grid])
     else:
         tab_content = dash.no_update
 
@@ -1909,13 +2120,24 @@ def refresh_cdc_data() -> None:
         )
         time.sleep(15)
 
-        df = cdc.get_cdc_data_xml(
-            xml_filename="mcd18_weekly_influenza.xml", parse_date_col="mmwr_week_date"
+        mcd18_weekly_pic = cdc.get_cdc_data_xml(
+            xml_filename="mcd18_weekly_pic.xml", parse_date_col="mmwr_week_date"
         )
         sql.export_to_sql(
-            df=df,
+            df=mcd18_weekly_pic,
             db_filepath=db_filepath,
-            table_name="mcd18_weekly_influenza",
+            table_name="mcd18_weekly_pic",
+            if_exists="replace",
+        )
+        time.sleep(15)
+
+        mcd18_monthly_pic = cdc.get_cdc_data_xml(
+            xml_filename="mcd18_monthly_pic.xml", parse_date_col="Month"
+        )
+        sql.export_to_sql(
+            df=mcd18_monthly_pic,
+            db_filepath=db_filepath,
+            table_name="mcd18_monthly_cod",
             if_exists="replace",
         )
     except Exception as e:

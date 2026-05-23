@@ -185,14 +185,21 @@ def test_calc_mi():
     mi_2019 = mi_df.loc[mi_df["year"] == 2019, "crude_adj"].iloc[0]
     mi_2018 = mi_df.loc[mi_df["year"] == 2018, "crude_adj"].iloc[0]
     mi_1_year = 1 - (mi_2019 / mi_2018)
-    mi_10_year = mi_df["1_year_mi"].rolling(window=10).mean().iloc[-1]
+    mi_10_year = mi_df["1_year_mi_pct"].rolling(window=10).mean().iloc[-1]
     assert isinstance(mi_df, pd.DataFrame)
     assert all(
         col in mi_df.columns
-        for col in ["year", "crude_adj", "deaths", "1_year_mi", "10_year_mi", "whl_3"]
+        for col in [
+            "year",
+            "crude_adj",
+            "deaths",
+            "1_year_mi_pct",
+            "10_year_mi_pct",
+            "whl_3_pct",
+        ]
     )
-    assert mi_df["1_year_mi"].iloc[-1] == mi_1_year
-    assert mi_df["10_year_mi"].iloc[-1] == mi_10_year
+    assert mi_df["1_year_mi_pct"].iloc[-1] == mi_1_year
+    assert mi_df["10_year_mi_pct"].iloc[-1] == mi_10_year
 
 
 def test_compare_df():

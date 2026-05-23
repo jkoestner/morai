@@ -19,7 +19,7 @@ and show:
 ## Common changes to template
 
 - update O_show_totals from `True` to `False`
-- Remove the M2 (population estimates), M3 (crude death rate), and M34 (Crude 95%) columns
+- Remove the M2 (population estimates), M3 (crude death rate), M32,  and M34 (Crude 95%) columns
 
 ## List of Queries
 
@@ -29,8 +29,9 @@ Weekly data has to be queried separately from monthly because of the timing diff
 - mcd18_cod:               year, age_group, cod_sub_chapter
 - mcd18_mi:                year, age_group, gender
 - mcd18_monthly:           year, month
+- mcd18_monthly_cod:       year, month, cod_chapter
 - mcd18_weekly:            year, week
-- mcd18_weekly_influenza:  year, week - filtered by influenza cod_sub_chapter
+- mcd18_weekly_pic:        year, week - filtered by flu, infection, covid cod_chapter
 
 ## Limitations
 

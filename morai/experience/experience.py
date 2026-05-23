@@ -82,13 +82,13 @@ def create_study(
 
     """
     # default column names
-    actuals_col = "actuals_cnt"
-    exposures_col = "exposures_cnt"
+    actuals_col = "actual_cnt"
+    exposures_col = "exposure_cnt"
 
     # handle mapping
     if mapping:
-        actuals_col = mapping.get("actuals_cnt", actuals_col)
-        exposures_col = mapping.get("exposures_cnt", exposures_col)
+        actuals_col = mapping.get("actual_cnt", actuals_col)
+        exposures_col = mapping.get("exposure_cnt", exposures_col)
 
     # format the study df
     study_df = format_study_df(
@@ -901,7 +901,7 @@ def summarize_study(
         )
 
     # summarize data
-    logger.info(f"creating summarized study")
+    logger.info("creating summarized study")
     logger.info(f"summing: `{', '.join(required_cols)}`")
     logger.info(f"calculating ratios: `{', '.join(ratios)}`")
     summary_df = (

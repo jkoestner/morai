@@ -39,7 +39,10 @@ def test_asymptotic():
 def test_vm20_buhlmann():
     """Checks vm20 buhlmann credibility."""
     partial = credibility.vm20_buhlmann(
-        df=cred_df, amount_col="amount", rate_col="rate", exposure_col="exposure"
+        seriatim_df=cred_df,
+        amount_col="amount",
+        rate_col="rate",
+        exposure_col="exposure",
     )
     assert partial[0] == approx(0.1682, abs=1e-4)
 

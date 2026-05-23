@@ -1,4 +1,15 @@
-"""Mortality Table Builder."""
+"""
+Rate Table Builder.
+
+Provides a generic `RateTable` for any 1-d rate table (e.g. termination,
+lapse, or any other actuarial rate) and a mortality-specific subclass
+`MortTable` that adds SOA table support and mortality improvement (MI).
+
+A 1-d table has a 'vals' column with all other columns as features/keys.
+
+RateTable supports rate types: csv, workbook
+MortTable additionally supports: soa
+"""
 
 from __future__ import annotations
 
@@ -6,7 +17,7 @@ import copy
 import itertools
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 import pandas as pd
@@ -26,38 +37,46 @@ if TYPE_CHECKING:
     from xml.etree.ElementTree import Element
 
 
-class MortTable:
+class RateTable:
     """
-    A mortality table class that can be used to build a 1-d mortality table.
+    A generic rate table class that can be used to build a 1-d rate table.
 
-    There are a number of functions in the class including:
-        - build_table: build a 1-d mortality table from a list of tables
-        - get_soa_xml: get the soa xml object
+    A 1-d table has a 'vals' column and all other columns are the features/keys
+    (e.g. age, duration, sex). This base class supports loading rates from
+    csv files and Excel workbooks. For mortality-specific functionality
+    (SOA tables, mortality improvement) use `MortTable`.
+
+    Subclasses can extend the supported rate types by extending the
+    `_builders` class attribute with additional `{rate_type: method_name}`
+    entries.
     """
+
+    # allowed rate_types
+    _builders: ClassVar = {
+        "csv": "_build_from_csv",
+        "workbook": "_build_from_workbook",
+    }
 
     def __init__(
         self,
-        rate: pd.DataFrame | None = None,
+        rate: str | None = None,
         rate_filename: str | Path | None = None,
     ) -> None:
         """
-        Initialize the Table class.
+        Initialize the RateTable.
 
         Parameters
         ----------
         rate : str, optional (default=None)
-            A rate to use for the table. The rate can be "vbt15".
+            The rate to use for the table, looked up in the rate mapping file.
         rate_filename : str, optional (default=None)
-            The filename of the rate map. default name is rate_map.yaml.
+            The filename of the rate map. Default name is rate_map.yaml.
 
         """
-        self.rate_table = None
-        self.mult_table = None
-        self.mi_table = None
-        self.rate_dict = None
-        self.rate_name = None
-        self.select_period: int | None = None
-        self.max_age = 121
+        self.rate_table: pd.DataFrame | None = None
+        self.mult_table: pd.DataFrame | None = None
+        self.rate_dict: dict[str, Any] | None = None
+        self.rate_name: str | None = None
         if rate_filename is None:
             rate_filename = "rate_map.yaml"
 
@@ -65,42 +84,54 @@ class MortTable:
         if rate:
             self.rate_dict = get_rate_dict(rate, rate_filename)
             rate_type = next(iter(self.rate_dict["type"].keys()))
-            col_keys = self.rate_dict["keys"] + ["vals"]
             logger.info(f"building table for rate: '{rate}' with format: '{rate_type}'")
             self.rate_name = f"qx_{self.rate_dict['rate']}"
-            if rate_type == "soa":
-                self.rate_table = self.build_table_soa(
-                    table_list=self.rate_dict["type"]["soa"]["table_list"],
-                    extra_dims=self.rate_dict["type"]["soa"]["extra_dims"],
-                    juv_list=self.rate_dict["type"]["soa"]["juv_list"],
-                    extend=self.rate_dict["type"]["soa"]["extend"],
-                )
-            elif rate_type == "csv":
-                csv_location = get_filepath(self.rate_dict["type"]["csv"]["filename"])
-                # read in the csv
-                try:
-                    self.rate_table = pd.read_csv(csv_location, usecols=col_keys)
-                except ValueError as ve:
-                    raise ValueError(f"Error reading csv: {csv_location}. ") from ve
-            elif rate_type == "workbook":
-                workbook_location = get_filepath(
-                    self.rate_dict["type"]["workbook"]["filename"]
-                )
-                self.rate_table, self.mult_table = self.build_table_workbook(
-                    file_location=workbook_location,
-                    has_mults=self.rate_dict["type"]["workbook"]["mult_table"],
-                )
 
-            # get mi_table
-            mi_filename = self.rate_dict.get("mi_table", {}).get("mi_filename")
-            if mi_filename:
-                self.mi_table = self.get_mi_table(mi_filename)
+            builder_name = self._builders.get(rate_type)
+            if builder_name is None:
+                supported = sorted(self._builders.keys())
+                raise ValueError(
+                    f"rate type '{rate_type}' is not supported by "
+                    f"{type(self).__name__}. Supported types: {supported}."
+                )
+            builder = getattr(self, builder_name)
+            builder()
+
+            # allow subclasses to do post-build work (e.g. load mi_table)
+            self._post_init()
+
+    def _post_init(self) -> None:
+        """Post initialization work."""
+        return
+
+    # ------------------------------------------------------------------ #
+    # builders                                                            #
+    # ------------------------------------------------------------------ #
+
+    def _build_from_csv(self) -> None:
+        """Build the rate_table from a csv as specified in rate_dict."""
+        assert self.rate_dict is not None
+        col_keys = self.rate_dict["keys"] + ["vals"]
+        csv_location = get_filepath(self.rate_dict["type"]["csv"]["filename"])
+        try:
+            self.rate_table = pd.read_csv(csv_location, usecols=col_keys)
+        except ValueError as ve:
+            raise ValueError(f"Error reading csv: {csv_location}. ") from ve
+
+    def _build_from_workbook(self) -> None:
+        """Build the rate_table (and mult_table) from a workbook."""
+        assert self.rate_dict is not None
+        workbook_location = get_filepath(self.rate_dict["type"]["workbook"]["filename"])
+        self.rate_table, self.mult_table = self.build_table_workbook(
+            file_location=workbook_location,
+            has_mults=self.rate_dict["type"]["workbook"]["mult_table"],
+        )
 
     def build_table_workbook(
         self, file_location: str | Path, has_mults: bool = False
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame | None]:
         """
-        Build a 1-d mortality table from a workbook.
+        Build a 1-d rate table from a workbook.
 
         A 1-d table is where there is a 'vals' column and all the other columns are the
         features. If the workbook has a multiplier table, then the multiplier table will
@@ -146,6 +177,227 @@ class MortTable:
         self.mult_table = mult_table
 
         return rate_table, mult_table
+
+    # ------------------------------------------------------------------ #
+    # derived tables                                                      #
+    # ------------------------------------------------------------------ #
+
+    def calc_derived_table_from_mults(
+        self,
+        selected_dict: dict[str, list] | None = None,
+        keep_mult: bool = False,
+        rate_table: pd.DataFrame | None = None,
+        mult_table: pd.DataFrame | None = None,
+    ) -> pd.DataFrame:
+        """
+        Calculate a derived rate table from the rate table and multiplier table.
+
+        The derived table is calculated by multiplying the rate table by the
+        multiplier table given the selected multiplier columns.
+
+        Parameters
+        ----------
+        selected_dict : dict, optional (default=None)
+            The selected multiplier columns.
+            If None, then the first subcategory multiplier of each category
+            will be used.
+            e.g.
+                {
+                    "category": ["subcategory"],
+                    "category2": ["subcategory2"],
+                }
+        keep_mult : bool, optional (default=False)
+            Whether to keep the mult column in the derived table.
+        rate_table : pd.DataFrame, optional (default=None)
+            The rate table to use for calculating the derived table.
+        mult_table : pd.DataFrame, optional (default=None)
+            The multiplier table to use for calculating the derived table.
+
+        Returns
+        -------
+        derived_table : pd.DataFrame
+            The derived table.
+
+        """
+        if rate_table is None:
+            rate_table = self.rate_table
+        if mult_table is None:
+            mult_table = self.mult_table
+        if rate_table is None or mult_table is None:
+            raise ValueError(
+                "calc_derived_table_from_mults requires the rate table and "
+                "multiplier table to be set."
+            )
+
+        # get subcategory multipliers if not provided
+        if selected_dict is None:
+            first_mults = mult_table.groupby("category").first().reset_index()
+            selected_dict = (
+                first_mults.set_index("category")["subcategory"]
+                .apply(lambda x: [x])
+                .to_dict()
+            )
+
+        # select the rows in mult_table that match the selected mults
+        selected_mults = mult_table[
+            mult_table.apply(
+                lambda row: (
+                    row["subcategory"] in selected_dict.get(row["category"], [])
+                ),
+                axis=1,
+            )
+        ]
+        selected_mults_grade = []
+        selected_mults_mult = []
+
+        # calculate the multiplier and grade if exists
+        derived_table = rate_table.copy()
+        derived_table["_mult"] = 1
+        for _, row in selected_mults.iterrows():
+            if "grade" in row and not pd.isna(row["grade"]):
+                derived_table["_mult"] *= _formula_grade(
+                    df=derived_table,
+                    multiple=row["multiple"],
+                    formula=row["grade"],
+                )
+                selected_mults_grade.append(row["subcategory"])
+            else:
+                derived_table["_mult"] *= row["multiple"]
+                selected_mults_mult.append(row["subcategory"])
+
+        logger.info(
+            f"derived table average multiplier: `{derived_table['_mult'].mean():.2f}`"
+        )
+        if selected_mults_mult:
+            logger.info(
+                f"used the following subcategories with mult: `{selected_mults_mult}`"
+            )
+        if selected_mults_grade:
+            logger.info(
+                f"used the following subcategories with grade: `{selected_mults_grade}`"
+            )
+
+        # apply the multiplier
+        derived_table["vals"] = derived_table["vals"] * derived_table["_mult"]
+        if not keep_mult:
+            derived_table = derived_table.drop(columns=["_mult"])
+
+        return derived_table
+
+    # ------------------------------------------------------------------ #
+    # internal helpers                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _merge_tables(
+        self,
+        merge_table: pd.DataFrame,
+        source_table: pd.DataFrame,
+        merge_keys: list[str],
+        column_rename: str,
+        extra_dims_list: list[tuple[str, Any]] | None = None,
+    ) -> pd.DataFrame:
+        """
+        Merge the source table into the merge table.
+
+        Handles:
+          - rename 'vals' column to a unique name during the merge
+          - inject extra dimension values onto the source table
+          - fill the merge_table 'vals' column from the merged source values
+
+        Parameters
+        ----------
+        merge_table : pd.DataFrame
+            The table to merge into.
+        source_table : pd.DataFrame
+            The table to merge from.
+        merge_keys : list
+            The keys to merge on.
+        column_rename : str
+            The column to rename.
+        extra_dims_list : list, optional (default=None)
+            A list of tuples of extra dimensions to merge.
+
+        Returns
+        -------
+        merge_table : pd.DataFrame
+            The merged table.
+
+        """
+        if extra_dims_list is None:
+            extra_dims_list = []
+        source_table = source_table.rename(columns={"vals": column_rename})
+        for dim_name, dim_value in extra_dims_list:
+            source_table[dim_name] = dim_value
+        merge_table = merge_table.merge(source_table, on=merge_keys, how="left")
+        merge_table["vals"] = (
+            merge_table["vals"].astype(float).fillna(merge_table[column_rename])
+        )
+        merge_table = merge_table.drop(columns=column_rename)
+        return merge_table
+
+
+class MortTable(RateTable):
+    """
+    A mortality table class that builds a 1-d mortality table.
+
+    Extends `RateTable` with mortality-specific functionality:
+        - Building tables from SOA mortality table ids (mort.soa.org)
+        - Mortality improvement (MI) loading and application
+        - Select-and-ultimate handling
+        - Default max_age = 121
+
+    Inherits csv and workbook rate loading from `RateTable`.
+    """
+
+    # extend the base registry with the soa builder
+    _builders: ClassVar[dict[str, str]] = {
+        **RateTable._builders,
+        "soa": "_build_from_soa",
+    }
+
+    def __init__(
+        self,
+        rate: str | None = None,
+        rate_filename: str | Path | None = None,
+    ) -> None:
+        """
+        Initialize the MortTable.
+
+        Parameters
+        ----------
+        rate : str, optional (default=None)
+            A rate to use for the table. The rate can be e.g. "vbt15".
+        rate_filename : str, optional (default=None)
+            The filename of the rate map. Default name is rate_map.yaml.
+
+        """
+        # mortality-specific state, set before super().__init__ so that
+        # builders called during __init__ can read them
+        self.mi_table: pd.DataFrame | None = None
+        self.select_period: int | None = None
+        self.max_age: int = 121
+        super().__init__(rate=rate, rate_filename=rate_filename)
+
+    def _post_init(self) -> None:
+        """Load the mi_table after the rate table is built, if configured."""
+        assert self.rate_dict is not None
+        mi_filename = self.rate_dict.get("mi_table", {}).get("mi_filename")
+        if mi_filename:
+            self.mi_table = self.get_mi_table(mi_filename)
+
+    # ------------------------------------------------------------------ #
+    # soa builder                                                         #
+    # ------------------------------------------------------------------ #
+
+    def _build_from_soa(self) -> None:
+        """Build the rate_table from a list of SOA table ids."""
+        assert self.rate_dict is not None
+        self.rate_table = self.build_table_soa(
+            table_list=self.rate_dict["type"]["soa"]["table_list"],
+            extra_dims=self.rate_dict["type"]["soa"]["extra_dims"],
+            juv_list=self.rate_dict["type"]["soa"]["juv_list"],
+            extend=self.rate_dict["type"]["soa"]["extend"],
+        )
 
     def build_table_soa(
         self,
@@ -348,6 +600,10 @@ class MortTable:
         soa_xml = pymort.MortXML.from_id(table_id)
         return soa_xml
 
+    # ------------------------------------------------------------------ #
+    # mortality improvement                                               #
+    # ------------------------------------------------------------------ #
+
     def get_mi_table(self, filename: str) -> Any:
         """
         Get the MI table from a file.
@@ -460,154 +716,9 @@ class MortTable:
 
         return rate_table
 
-    def calc_derived_table_from_mults(
-        self,
-        selected_dict: dict[str, list] | None = None,
-        keep_mult: bool = False,
-        rate_table: pd.DataFrame | None = None,
-        mult_table: pd.DataFrame | None = None,
-    ) -> pd.DataFrame:
-        """
-        Calculate a derived rate table from the rate table and multiplier table.
-
-        The derived table is calculated by multiplying the rate table by the
-        multiplier table given the selected multiplier columns.
-
-        Parameters
-        ----------
-        selected_dict : dict, optional (default=None)
-            The selected multiplier columns.
-            If None, then the first subcategory multiplier of each category
-            will be used.
-            e.g.
-                {
-                    "category": ["subcategory"],
-                    "category2": ["subcategory2"],
-                }
-        keep_mult : bool, optional (default=False)
-            Whether to keep the mult column in the derived table.
-        rate_table : pd.DataFrame, optional (default=None)
-            The rate table to use for calculating the derived table.
-        mult_table : pd.DataFrame, optional (default=None)
-            The multiplier table to use for calculating the derived table.
-
-        Returns
-        -------
-        derived_table : pd.DataFrame
-            The derived table.
-
-        """
-        if rate_table is None:
-            rate_table = self.rate_table
-        if mult_table is None:
-            mult_table = self.mult_table
-        if rate_table is None or mult_table is None:
-            raise ValueError(
-                "calc_derived_table_from_mults requires the rate table and "
-                "multiplier table to be set."
-            )
-
-        # get subcategory multipliers if not provided
-        if selected_dict is None:
-            first_mults = mult_table.groupby("category").first().reset_index()
-            selected_dict = (
-                first_mults.set_index("category")["subcategory"]
-                .apply(lambda x: [x])
-                .to_dict()
-            )
-
-        # select the rows in mult_table that match the selected mults
-        selected_mults = mult_table[
-            mult_table.apply(
-                lambda row: (
-                    row["subcategory"] in selected_dict.get(row["category"], [])
-                ),
-                axis=1,
-            )
-        ]
-        selected_mults_grade = []
-        selected_mults_mult = []
-
-        # calculate the multiplier and grade if exists
-        derived_table = rate_table.copy()
-        derived_table["_mult"] = 1
-        for _, row in selected_mults.iterrows():
-            if "grade" in row and not pd.isna(row["grade"]):
-                derived_table["_mult"] *= _formula_grade(
-                    df=derived_table,
-                    multiple=row["multiple"],
-                    formula=row["grade"],
-                )
-                selected_mults_grade.append(row["subcategory"])
-            else:
-                derived_table["_mult"] *= row["multiple"]
-                selected_mults_mult.append(row["subcategory"])
-
-        logger.info(
-            f"derived table average multiplier: `{derived_table['_mult'].mean():.2f}`"
-        )
-        if selected_mults_mult:
-            logger.info(
-                f"used the following subcategories with mult: `{selected_mults_mult}`"
-            )
-        if selected_mults_grade:
-            logger.info(
-                f"used the following subcategories with grade: `{selected_mults_grade}`"
-            )
-
-        # apply the multiplier
-        derived_table["vals"] = derived_table["vals"] * derived_table["_mult"]
-        if not keep_mult:
-            derived_table = derived_table.drop(columns=["_mult"])
-
-        return derived_table
-
-    def _merge_tables(
-        self,
-        merge_table: pd.DataFrame,
-        source_table: pd.DataFrame,
-        merge_keys: list[str],
-        column_rename: str,
-        extra_dims_list: list[tuple[str, Any]] | None = None,
-    ) -> pd.DataFrame:
-        """
-        Merge the source table into the merge table.
-
-        This is specifically for the MortTable class as it will handle
-          - rename 'vals' column
-          - handle extra dimensions
-          - check for missing values
-
-        Parameters
-        ----------
-        merge_table : pd.DataFrame
-            The table to merge into.
-        source_table : pd.DataFrame
-            The table to merge from.
-        merge_keys : list
-            The keys to merge on.
-        column_rename : str
-            The column to rename.
-        extra_dims_list : list, optional (default=None)
-            A list of tuples of extra dimensions to merge.
-
-        Returns
-        -------
-        merge_table : pd.DataFrame
-            The merged table.
-
-        """
-        if extra_dims_list is None:
-            extra_dims_list = []
-        source_table = source_table.rename(columns={"vals": column_rename})
-        for dim_name, dim_value in extra_dims_list:
-            source_table[dim_name] = dim_value
-        merge_table = merge_table.merge(source_table, on=merge_keys, how="left")
-        merge_table["vals"] = (
-            merge_table["vals"].astype(float).fillna(merge_table[column_rename])
-        )
-        merge_table = merge_table.drop(columns=column_rename)
-        return merge_table
+    # ------------------------------------------------------------------ #
+    # internal soa helpers                                                #
+    # ------------------------------------------------------------------ #
 
     def _process_soa_table(
         self, soa_xml: Element, table_index: int, is_select: bool
@@ -665,7 +776,7 @@ def generate_table(
     mult_method: str = "glm",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Generate a 1-d mortality table based on model predictions.
+    Generate a 1-d rate table based on model predictions.
 
     A 1-d table is where there is a 'vals' column and all the other columns are the
     features.
@@ -708,7 +819,7 @@ def generate_table(
     -------
     tuple
         rate_table : pd.DataFrame
-            The 1-d mortality rate_table
+            The 1-d rate_table
         mult_table : pd.DataFrame
             The multiplier table
 
@@ -871,6 +982,7 @@ def map_rates(
     rate: str,
     rate_to_df_map: dict[str, str] | None = None,
     rate_filename: str | None = None,
+    table_class: type[RateTable] = MortTable,
 ) -> pd.DataFrame:
     """
     Map rates to the DataFrame.
@@ -879,7 +991,8 @@ def map_rates(
 
     This function also handles:
         - Multiples
-        - MI rates
+        - MI rates (only when `table_class` is `MortTable` or a subclass that
+          exposes `mi_table`)
 
     Parameters
     ----------
@@ -896,6 +1009,10 @@ def map_rates(
     rate_filename : str, optional
         The location of the rate map file. If none this is assumed to
         be in the dataset/tables folder.
+    table_class : type[RateTable], optional (default=MortTable)
+        The table class to use to load the rate. Use `MortTable` for mortality
+        rates (default, supports soa + mi_table) or `RateTable` for generic
+        rates (termination, lapse, etc - supports csv/workbook only).
 
     Returns
     -------
@@ -904,13 +1021,13 @@ def map_rates(
 
     """
     # get the table
-    mt = suppress_logs(MortTable)(rate=rate, rate_filename=rate_filename)
+    mt = suppress_logs(table_class)(rate=rate, rate_filename=rate_filename)
     rate_name = mt.rate_name
     rate_dict = mt.rate_dict
     rate_type = next(iter(rate_dict["type"].keys()))
     rate_table = mt.rate_table
     mult_table = mt.mult_table
-    mi_table = mt.mi_table
+    mi_table = getattr(mt, "mi_table", None)
     logger.info(f"mapping rate: '{rate_name}' with format: '{rate_type}'")
 
     # create table_to_df_map if not provided

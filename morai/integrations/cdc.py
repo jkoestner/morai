@@ -237,6 +237,7 @@ def get_last_updated(table_name: str | None = None) -> dict:
         - "last_updated": The maximum "added_at" date from the table.
         - "data_through": The maximum "data_through" date from the table.
         - "days_elapsed": The number of days elapsed in the year
+        - "recent_week": The recent week data is through
 
     """
     if table_name is None:
@@ -263,12 +264,14 @@ def get_last_updated(table_name: str | None = None) -> dict:
     data_through = result["data_through"].iloc[0]
     start_of_year = pd.Timestamp(f"{data_through.year}-01-01")
     days_elapsed = (data_through - start_of_year).days + 1
+    recent_week = data_through.isocalendar().week
 
     # create the dict
     result = {
         "last_updated": last_updated,
         "data_through": data_through,
         "days_elapsed": days_elapsed,
+        "recent_week": recent_week,
     }
 
     return result
