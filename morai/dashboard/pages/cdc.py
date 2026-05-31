@@ -1,4 +1,9 @@
-"""CDC dashboard."""
+"""
+CDC dashboard.
+
+If running dashboard in container, ensure timeout is long enough for CDC queries
+to run (can take up to 150 seconds). Timeout is setup in compose file.
+"""
 
 import threading
 import time

@@ -306,6 +306,12 @@ class Neural(nn.Module):
             raise ValueError("task must be 'poisson' or 'binomial'")
         if not (X.index.equals(y.index) and X.index.equals(weights.index)):
             raise ValueError("X, y, weights must share the same index")
+        if not (
+            X_test.index.equals(y_test.index)
+            and X_test.index.equals(weights_test.index)
+        ):
+            raise ValueError("X_test, y_test, weights_test must share the same index")
+
         bad = (weights <= 0) | weights.isna() | y.isna()
         if bad.any():
             logger.warning(
@@ -314,6 +320,15 @@ class Neural(nn.Module):
             X = X.loc[~bad]
             y = y.loc[~bad]
             weights = weights.loc[~bad]
+
+        bad_test = (weights_test <= 0) | weights_test.isna() | y_test.isna()
+        if bad_test.any():
+            logger.warning(
+                f"removing `{bad_test.sum()}` test rows with weights <= 0 or na"
+            )
+            X_test = X_test.loc[~bad_test]
+            y_test = y_test.loc[~bad_test]
+            weights_test = weights_test.loc[~bad_test]
 
         # convert y_train from rate to deaths
         y = y * weights
@@ -358,14 +373,17 @@ class Neural(nn.Module):
         )
 
         # initialize prediction to global rate
-        overall_mu = float(y.sum() / weights.sum())
-        logger.info(f"overall_mu: {overall_mu:.6f}")
+        overall_rate = float(y.sum() / weights.sum())
+        if self.task == "poisson":
+            init_bias = float(np.log(max(overall_rate, 1e-12)))
+        else:  # binomial
+            p = float(np.clip(overall_rate, 1e-12, 1 - 1e-12))
+            init_bias = float(np.log(p / (1 - p)))
+        logger.info(f"overall_rate: {overall_rate:.6f}, init_bias: {init_bias:.6f}")
         with torch.no_grad():
-            self.wide_linear.bias.fill_(
-                np.log(max(overall_mu, 1e-12)).astype(np.float32)
-            )
-            self.output.bias.fill_(0.0)
-            self.output.weight.mul_(0.01)
+            self.wide_linear.bias.fill_(init_bias)
+            self.output.weight.zero_()
+            self.output.bias.zero_()
 
         # logging
         logger.info(f"epochs: {epochs:,.0f}, batch_size: {batch_size}, lr: {lr}")
@@ -504,7 +522,9 @@ class Neural(nn.Module):
                     best_loss = test_loss_value
                     best_epoch = epoch + 1
                     patience_counter = 0
-                    best_state = self.state_dict().copy()
+                    best_state = {
+                        k: v.detach().clone() for k, v in self.state_dict().items()
+                    }
                 elif epoch >= warmup_epochs:
                     patience_counter += 1
                 if patience_counter >= max_patience:
@@ -638,13 +658,10 @@ class Neural(nn.Module):
 
         # convert to rate
         if self.task == "poisson":
-            mu = np.exp(z_torch)
-            q = mu
-            predictions = np.clip(q, 1e-9, 1 - 1e-9)
-
+            q = np.exp(z_torch)
         else:  # binomial
             q = 1.0 / (1.0 + np.exp(-z_torch))
-            predictions = np.clip(q, 1e-9, 1 - 1e-9)
+        predictions = np.clip(q, 1e-9, 1 - 1e-9)
 
         return predictions
 

@@ -82,7 +82,7 @@ services:
   morai:
     image: dmbymdt/morai:latest
     container_name: morai
-    command: gunicorn -b 0.0.0.0:8001 morai.dashboard.app:server
+    command: gunicorn -b 0.0.0.0:8001 --timeout 180 morai.dashboard.app:server
     restart: unless-stopped
     environment:
       MORAI_FILES_PATH: /code/morai/files # setting the files path for morai
