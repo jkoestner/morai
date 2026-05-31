@@ -39,7 +39,7 @@ executor = ThreadPoolExecutor(max_workers=2)
 thread_lock = threading.Lock()
 
 # initialize variables
-DAYS_SINCE_LAST_UPDATE = 5
+DAYS_SINCE_LAST_UPDATE = 1
 FILTER_MI_PREFIX = "cdc-mi"
 FILTER_COD_PREFIX = "cdc-cod"
 FILTER_COD_TRENDS_PREFIX = "cdc-cod-trends"
@@ -2131,11 +2131,11 @@ def refresh_cdc_data() -> None:
         )
         time.sleep(15)
 
-        mcd18_monthly_pic = cdc.get_cdc_data_xml(
-            xml_filename="mcd18_monthly_pic.xml", parse_date_col="Month"
+        mcd18_monthly_cod = cdc.get_cdc_data_xml(
+            xml_filename="mcd18_monthly_cod.xml", parse_date_col="Month"
         )
         sql.export_to_sql(
-            df=mcd18_monthly_pic,
+            df=mcd18_monthly_cod,
             db_filepath=db_filepath,
             table_name="mcd18_monthly_cod",
             if_exists="replace",
