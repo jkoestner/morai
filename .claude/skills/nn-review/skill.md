@@ -1,200 +1,97 @@
 ---
 name: nn-review
-description: Review and analyze neural network mortality models. Use when evaluating model performance, generating A/E analysis, PDP plots, SHAP analysis, or embedding analysis for mortality prediction models.
+description: Neural-network-specific diagnostics for a fitted mortality model. Use AFTER running the model-review skill to cover the items unique to neural nets — SHAP via KernelExplainer, categorical embedding analysis (cosine similarity, PCA), and training/validation loss inspection.
 allowed-tools: Read, Bash, Write, Edit, Glob, Grep
 ---
 
-# Neural Network Mortality Model Review
+# Neural Network Mortality Model — NN-Only Diagnostics
 
-This skill provides a comprehensive review framework for neural network mortality models, following actuarial best practices.
+This skill covers the items unique to neural network mortality models. For the
+generic A/E review (overall + segmented A/E, rate comparisons, PDP, tolerance
+bands), run the `model-review` skill first.
 
-**Important:** This skill is for reviewing pre-trained models, not training new ones.
-
-## Pre-trained Models
-
-Models are stored in `files/models/` and should be loaded using joblib:
-
-```python
-import joblib
-
-# Load the pre-trained neural network model
-model = joblib.load("files/models/neural.joblib")
-
-# Generate predictions (requires preprocessed X data)
-predictions = model.predict(X)
-```
+For terminology and feature conventions, read
+`../_shared/actuarial-reference.md`.
 
 ## When to Use
 
-- When reviewing an existing pre-trained model
-- When evaluating model performance
-- When comparing model predictions to actual experience
-- When analyzing feature importance and relationships
+- After `model-review` on a `morai.models.neural.Neural` model
+- When you need SHAP explanations, embedding analysis, or overfitting checks
+  that draw on the NN training history
 
-## Analysis Framework
+## Loading
 
-### 1. A/E Ratio Analysis (Actual vs Expected)
-
-Generate A/E ratios by key dimensions for both train and test sets:
-
-**Required dimensions:**
-- `sex` (M/F)
-- `smoker_status` (NS/S)
-- `attained_age` (binned: 30-40, 41-50, 51-60, 61-70, 71-80, 81+)
-- `duration` (binned: 1-5, 6-10, 11-15, 16-20, 21+)
-- `observation_year`
-- `insurance_plan` (Term, Perm, UL, ULSG, VL, VLSG)
-- `face_amount_band` or `binned_face`
-- `class_enh` (preferred class combination)
-
-**Output format:**
-```
-| Dimension | Actual | Expected | Exposure | A/E |
-|-----------|--------|----------|----------|-----|
+```python
+import joblib
+model = joblib.load("files/models/neural.joblib")
 ```
 
-**Key metrics:**
-- Overall A/E should be close to 1.00
-- Train vs Test A/E should be similar (check for overfitting)
-- Flag any dimension with A/E < 0.80 or A/E > 1.20
+## 1. SHAP (KernelExplainer)
 
-### 2. Rate Comparison Charts
+Neural models don't have a fast TreeExplainer path — use KernelExplainer with
+sampling.
 
-Compare predicted rates against:
-- `qx_raw` (actual mortality rate)
-- `qx_vbt15` (VBT 2015 benchmark)
-- `qx_model` (model predictions)
+```python
+from morai.models import neural
+import shap
 
-Use weighted averages with `amount_exposed` as weights.
+Shap = neural.Shap(model=model, background_df=X_train, n_samples=100, seed=42)
+shap_values = Shap.compute_values(explain_df=X_test, n_samples=100, seed=42)
 
-### 3. Partial Dependence Plots (PDP)
+shap.plots.bar(Shap.shap_values)
+shap.summary_plot(Shap.shap_values, Shap.sample_explain_df)
+# Plus: waterfall (single prediction), dependence (feature interaction)
+```
 
-Generate PDP plots for key features:
+Settings: 100 background samples, 100 explain samples, `seed=42` for
+reproducibility.
 
-**Priority features:**
-1. `duration` - with line color by `insurance_plan`
-2. `attained_age` - with line color by `class_enh` or `binned_face`
-3. `insurance_plan` - overall effect
+## 2. Embedding Analysis
 
-**PDP settings:**
-- Use `weight="amount_exposed"` for weighted PDPs
-- Include `secondary="death_count"` for context
-- Apply `center="per_x"` for relative comparisons
+For categorical features encoded with embeddings (typically `insurance_plan`,
+`face_amount_band`, `class_enh`):
 
-### 4. SHAP Analysis
+1. **Cosine similarity heatmap** — which categories the model treats as similar
+2. **PCA 2D plot** — visualize category relationships
+3. **Embedding weights table** — raw dimension values
 
-Perform SHAP analysis to understand feature importance:
+Check that the learned similarities match actuarial intuition (e.g., UL near
+ULSG, VL near VLSG). Surprising groupings often indicate sparse-category issues
+or that the model is using the embedding as a proxy for something else.
 
-**Required plots:**
-1. **Bar plot** - overall feature importance
-2. **Summary plot** - feature value impact distribution
-3. **Waterfall plot** - single prediction explanation
-4. **Dependence plot** - feature interaction effects
+## 3. Overfitting via Training History
 
-**Settings:**
-- Use 100 background samples for KernelExplainer
-- Use 100 explainer samples for computation
-- Set seed=42 for reproducibility
+- Plot train vs validation loss across epochs
+- Flag if validation loss bottoms out early then rises (classic overfit)
+- Cross-reference with the Train/Test A/E gap from `model-review`
 
-### 5. Embedding Analysis
+## 4. NN-Specific Improvement Suggestions
 
-For embedded categorical features (e.g., `face_amount_band`, `insurance_plan`):
-
-**Required analysis:**
-1. **Cosine similarity heatmap** - shows which categories are similar
-2. **PCA 2D plot** - visualize category relationships
-3. **Embedding weights table** - raw dimension values
-
-## Model Evaluation Criteria
-
-### Good Model Indicators
-- Overall A/E between 0.95 - 1.05
-- Train/Test A/E difference < 0.05
-- Consistent A/E across all dimensions (0.85 - 1.15)
-- SHAP importance aligns with actuarial intuition
-- Embeddings show sensible category groupings
-
-### Warning Signs
-- A/E < 0.80 or > 1.20 for any major segment
-- Train A/E much better than Test A/E (overfitting)
-- Early durations (1-5) with poor A/E (select mortality issue)
-- Young ages (41-50) with poor A/E
-- High SHAP importance for unexpected features
-
-### Improvement Suggestions
-
-If early duration A/E is poor:
-- Add explicit duration indicators (dur_1, dur_2, etc.)
-- Add select period flag
+If early-duration A/E is poor:
+- Add explicit duration indicators (dur_1, dur_2, …)
+- Add a select-period flag
 - Consider separate select/ultimate models
 
 If age A/E shows patterns:
-- Check spline configuration (n_knots, degree)
-- Consider age x smoker interactions
+- Revisit spline configuration (n_knots, degree)
+- Consider `attained_age × smoker_status` interaction
 
-If categorical features show issues:
-- Consider embeddings instead of OHE
-- Check category groupings (binned_face, class_enh)
+If a categorical embedding looks noisy:
+- Check minimum exposure per category; merge sparse categories
+- Try OHE for low-cardinality features instead of an embedding
+- Reduce embedding dimensionality
 
-## Output Template
+## Output Addendum
+
+Append to the `model-review` output:
 
 ```markdown
-## Neural Network Model Review
+### NN-Specific Findings
+- SHAP top features: …
+- Embedding observations: …
+- Loss curve / overfitting read: …
 
-### Overall Performance
-- Train A/E: X.XX
-- Test A/E: X.XX
-- Overfitting Risk: Low/Medium/High
-
-### A/E by Dimension
-[Tables for each dimension]
-
-### Key Findings
-1. [Finding 1]
-2. [Finding 2]
-3. [Finding 3]
-
-### Recommendations
-1. [Recommendation 1]
-2. [Recommendation 2]
-
-### Charts Generated
-- [ ] A/E ratio charts
-- [ ] Rate comparison
-- [ ] PDP plots
-- [ ] SHAP analysis
-- [ ] Embedding analysis
-```
-
-## Code Patterns
-
-### A/E Calculation
-```python
-ae_table = df.groupby(dimension).agg({
-    'death_claim_amount': 'sum',
-    'expected_claims': 'sum',
-    'amount_exposed': 'sum'
-})
-ae_table['A/E'] = ae_table['death_claim_amount'] / ae_table['expected_claims']
-```
-
-### PDP with morai
-```python
-charters.pdp(
-    model=model,
-    df=md_encoded,
-    x_axis="duration",
-    line_color="insurance_plan",
-    weight="amount_exposed",
-    secondary="death_count",
-    mapping=mapping,
-)
-```
-
-### SHAP Setup
-```python
-Shap = neural.Shap(model=model, background_df=X_train, n_samples=100, seed=42)
-shap_values = Shap.compute_values(explain_df=X_test, n_samples=100, seed=42)
-shap.plots.bar(Shap.shap_values)
-shap.summary_plot(Shap.shap_values, Shap.sample_explain_df)
+### NN-Specific Recommendations
+1. …
+2. …
 ```

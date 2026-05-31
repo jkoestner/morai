@@ -22,6 +22,7 @@
   - [Other Tools](#other-tools)
     - [Jupyter Lab Usage](#jupyter-lab-usage)
     - [Logging](#logging)
+    - [Claude Skills](#claude-skills)
     - [Coverage](#coverage)
 
 ## Overview
@@ -128,6 +129,16 @@ If wanting to get more detail in output of messages the logging can increased
 from morai.utils import custom_logger
 custom_logger.set_log_level("DEBUG")
 ```
+
+### Claude Skills
+
+Project-scoped Claude Code skills live in `.claude/skills/`:
+
+- **`model-review`** — A/E review for any fitted mortality model (GLM, GAM, CatBoost, Neural)
+- **`nn-review`** — neural-network-specific diagnostics (SHAP, embeddings, loss curves)
+- **`mortality-table-build`** — build a deliverable rate table from a fitted model
+
+Shared actuarial reference material is in `.claude/skills/_shared/`.
 
 ### Coverage
 

@@ -31,6 +31,7 @@ def create_study(
     exposure_method: str = "annual",
     calendar_exposure: bool = True,
     get_actuals: bool = True,
+    amount_col: str | None = None,
 ) -> pd.DataFrame:
     """
     Create an experience study including exposures and actuals.
@@ -66,6 +67,8 @@ def create_study(
         Whether to use calendar year days (365/366) or policy year days as denominator.
     get_actuals : bool, optional default=True
         Wether to add actuals to the study
+    amount_col : str, optional default=None
+        Name of the amount column to use in exposure and actual calculations
 
     Returns
     -------
@@ -82,13 +85,21 @@ def create_study(
 
     """
     # default column names
-    actuals_col = "actual_cnt"
-    exposures_col = "exposure_cnt"
+    actuals_cnt_col = "actual_cnt"
+    exposures_cnt_col = "exposure_cnt"
+    actuals_amt_col = "actual_amt"
+    exposures_amt_col = "exposure_amt"
+
+    # validate
+    if amount_col and amount_col not in df.columns:
+        raise ValueError(f"`{amount_col}` column not in the DataFrame.")
 
     # handle mapping
     if mapping:
-        actuals_col = mapping.get("actual_cnt", actuals_col)
-        exposures_col = mapping.get("exposure_cnt", exposures_col)
+        actuals_cnt_col = mapping.get("actual_cnt", actuals_cnt_col)
+        exposures_cnt_col = mapping.get("exposure_cnt", exposures_cnt_col)
+        actuals_amt_col = mapping.get("actual_amt", actuals_amt_col)
+        exposures_amt_col = mapping.get("exposure_amt", exposures_amt_col)
 
     # format the study df
     study_df = format_study_df(
@@ -100,17 +111,23 @@ def create_study(
         mapping=mapping,
     )
     if get_exposures:
-        study_df[exposures_col] = calc_exposures(
+        study_df[exposures_cnt_col] = calc_exposures(
             study_df=study_df,
             study_decrement=study_decrement,
             exposure_method=exposure_method,
             calendar_exposure=calendar_exposure,
             mapping=mapping,
         )
+        if amount_col:
+            study_df[exposures_amt_col] = (
+                study_df[exposures_cnt_col] * study_df[amount_col]
+            )
     if get_actuals:
-        study_df[actuals_col] = calc_actuals(
+        study_df[actuals_cnt_col] = calc_actuals(
             study_df=study_df, study_decrement=study_decrement, mapping=mapping
         )
+        if amount_col:
+            study_df[actuals_amt_col] = study_df[actuals_cnt_col] * study_df[amount_col]
 
     return study_df
 
@@ -854,8 +871,8 @@ def summarize_study(
 
     """
     # default column names
-    actuals_prefix = "actuals"
-    exposures_prefix = "exposures"
+    actuals_prefix = "actual"
+    exposures_prefix = "exposure"
     expecteds_prefix = "expected"
     variance_prefix = "variance"
 

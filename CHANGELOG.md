@@ -5,6 +5,7 @@
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.4...v0.3.5)
 
 **Enhancements**
+- add claude skills
 - cdc analytic enhancements (weekly, flu, cod refinements)
 - create experience study calcs (variance, credibility, ci, summarize data)
 

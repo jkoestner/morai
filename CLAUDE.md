@@ -93,3 +93,18 @@ morai/
 - HMD integration requires authentication credentials
 - Neural network models require the `[neural]` optional dependency
 - R-based GAM models require the `[r]` optional dependency and R installation
+
+## Project Skills
+
+Project-scoped Claude skills live in `.claude/skills/`:
+
+| Skill | Purpose |
+|-------|---------|
+| `model-review` | Generalized A/E review for any fitted mortality model (GLM, GAM, CatBoost, Neural). Covers overall + segmented A/E, rate comparisons vs VBT, PDP, and overfitting checks. |
+| `nn-review` | Neural-only diagnostics — SHAP (KernelExplainer), embedding analysis, training/validation loss. Run after `model-review`. |
+| `mortality-table-build` | Build a deliverable rate table from a fitted model using `morai.experience.tables` (generate, graduate, add ultimate, output). |
+
+Shared actuarial reference (terminology, A/E tolerance bands, expected
+patterns, encoding guidance) lives at
+`.claude/skills/_shared/actuarial-reference.md` and is read on demand by each
+skill.
