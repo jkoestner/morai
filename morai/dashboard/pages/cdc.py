@@ -918,7 +918,7 @@ def update_cdc_data_async(n_clicks):
     if status == "recent":
         return (
             True,
-            "Data was recently updated. Please wait 5 days before updating again.",
+            f"Data was recently updated. Please wait {DAYS_SINCE_LAST_UPDATE} days before updating again.",
             "warning",
             "Warning",
             dash.no_update,
