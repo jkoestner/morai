@@ -902,7 +902,7 @@ def update_cdc_data_async(n_clicks):
     def background_task():
         try:
             last_updated = pd.to_datetime(cdc.get_last_updated()["last_updated"])
-            days_since_update = (pd.Timestamp.now() - last_updated).days
+            days_since_update = (pd.Timestamp.now().date() - last_updated.date()).days
             if days_since_update < DAYS_SINCE_LAST_UPDATE:
                 return "recent", None
             refresh_cdc_data()
