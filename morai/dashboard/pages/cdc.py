@@ -45,6 +45,7 @@ thread_lock = threading.Lock()
 
 # initialize variables
 DAYS_SINCE_LAST_UPDATE = 1
+CDC_WAIT_TIME_SECONDS = 16
 FILTER_MI_PREFIX = "cdc-mi"
 FILTER_COD_PREFIX = "cdc-cod"
 FILTER_COD_TRENDS_PREFIX = "cdc-cod-trends"
@@ -2081,7 +2082,7 @@ def refresh_cdc_data() -> None:
     """
     Refresh the cdc data.
 
-    Includes a 15 second sleep per call, due to CDC guidelines.
+    Includes a ~16 second sleep per call, due to CDC guidelines.
     """
     try:
         db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
@@ -2092,7 +2093,7 @@ def refresh_cdc_data() -> None:
             table_name="mcd18_cod",
             if_exists="replace",
         )
-        time.sleep(15)
+        time.sleep(CDC_WAIT_TIME_SECONDS)
 
         mcd18_monthly = cdc.get_cdc_data_xml(
             xml_filename="mcd18_monthly.xml", parse_date_col="Month"
@@ -2103,7 +2104,7 @@ def refresh_cdc_data() -> None:
             table_name="mcd18_monthly",
             if_exists="replace",
         )
-        time.sleep(15)
+        time.sleep(CDC_WAIT_TIME_SECONDS)
 
         mcd18_mi = cdc.get_cdc_data_xml(xml_filename="mcd18_mi.xml")
         sql.export_to_sql(
@@ -2112,7 +2113,7 @@ def refresh_cdc_data() -> None:
             table_name="mcd18_mi",
             if_exists="replace",
         )
-        time.sleep(15)
+        time.sleep(CDC_WAIT_TIME_SECONDS)
 
         mcd18_weekly = cdc.get_cdc_data_xml(
             xml_filename="mcd18_weekly.xml", parse_date_col="mmwr_week_date"
@@ -2123,7 +2124,7 @@ def refresh_cdc_data() -> None:
             table_name="mcd18_weekly",
             if_exists="replace",
         )
-        time.sleep(15)
+        time.sleep(CDC_WAIT_TIME_SECONDS)
 
         mcd18_weekly_pic = cdc.get_cdc_data_xml(
             xml_filename="mcd18_weekly_pic.xml", parse_date_col="mmwr_week_date"
@@ -2134,7 +2135,7 @@ def refresh_cdc_data() -> None:
             table_name="mcd18_weekly_pic",
             if_exists="replace",
         )
-        time.sleep(15)
+        time.sleep(CDC_WAIT_TIME_SECONDS)
 
         mcd18_monthly_cod = cdc.get_cdc_data_xml(
             xml_filename="mcd18_monthly_cod.xml", parse_date_col="Month"
