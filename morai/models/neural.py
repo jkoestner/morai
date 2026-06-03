@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import numpy as np
@@ -20,6 +21,23 @@ from tqdm.auto import tqdm
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
+
+
+def set_deterministic() -> None:
+    """
+    Enable deterministic PyTorch operations for reproducible training.
+
+    Call this at the top of notebook prior to a CUDA call.
+
+    Notes
+    -----
+    Deterministic kernels 10 to 20% slower than non-deterministic ones,
+    so this is not enabled by default.
+
+    """
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    logger.info("deterministic mode enabled")
 
 
 class Neural(nn.Module):
@@ -60,6 +78,7 @@ class Neural(nn.Module):
         task: str = "poisson",
         embedding_cols: list | None = None,
         embedding_dims: dict[str, int] | None = None,
+        device: str | None = None,
     ) -> None:
         """
         Initialize the model.
@@ -74,10 +93,15 @@ class Neural(nn.Module):
             Dictionary mapping categorical feature names to their embedding dimensions
             e.g., {"age_group": 8, "region": 4}
             If None, will use min(50, (vocab_size + 1) // 2) for each feature
+        device : str, optional
+            Device to run the model on ("cuda" or "cpu"). If None, will auto-detect.
 
         """
         super().__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device is not None and device in ("cuda", "cpu"):
+            self.device = torch.device(device)
+        else:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.task = task
         self.feature_names: list[str] | None = None
         if embedding_cols is None:
@@ -272,6 +296,8 @@ class Neural(nn.Module):
             Number of epochs with no improvement to wait before stopping training
         seed : int, optional
             Random seed for reproducibility
+            Seed will not be deterministic on it's own and would need the
+            set_deterministic() function to be called before creating the model.
 
         """
         # defaults
