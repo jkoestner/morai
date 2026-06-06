@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import shap
 import torch
 import torch.nn.functional as F
+from plotly.subplots import make_subplots
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_similarity
@@ -21,6 +22,10 @@ from tqdm.auto import tqdm
 from morai.utils import custom_logger
 
 logger = custom_logger.setup_logging(__name__)
+
+# defaults
+MAX_NORM = 5.0
+MAX_NEGATIVE_LOG = -30.0
 
 
 def set_deterministic() -> None:
@@ -98,7 +103,9 @@ class Neural(nn.Module):
 
         """
         super().__init__()
-        if device is not None and device in ("cuda", "cpu"):
+        if device is not None:
+            if device == "cuda" and not torch.cuda.is_available():
+                raise ValueError("device='cuda' requested but CUDA is not available")
             self.device = torch.device(device)
         else:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -254,10 +261,12 @@ class Neural(nn.Module):
         lr: float = 0.001,
         batch_size: int | None = None,
         dropout: float = 0.0,
-        weight_decay: float = 0.0001,
+        weight_decay: float = 0.0,
         early_stopping: bool = True,
         warmup_epochs: int = 50,
         max_patience: int = 20,
+        min_delta: float = 0.0,
+        ae_interval: int = 10,
         seed: int | None = None,
     ) -> None:
         """
@@ -286,7 +295,7 @@ class Neural(nn.Module):
             slower learning, higher values will result in faster learning
         dropout : float, optional (default=0.0)
             Dropout rate for the model
-        weight_decay : float, optional (default=1e-4)
+        weight_decay : float, optional (default=0.0)
             similar to L2 regularization to prevent overfitting
         early_stopping : bool, optional (default=True)
             Whether to use early stopping based on test loss
@@ -294,6 +303,10 @@ class Neural(nn.Module):
             Number of epochs to wait before starting early stopping
         max_patience : int, optional (default=20)
             Number of epochs with no improvement to wait before stopping training
+        min_delta : float, optional (default=0.0)
+            Minimum change in loss to qualify as improvement for early stopping
+        ae_interval : int, optional (default=10)
+            Number of epochs between computing A/E ratios for train and test sets
         seed : int, optional
             Random seed for reproducibility
             Seed will not be deterministic on it's own and would need the
@@ -301,8 +314,6 @@ class Neural(nn.Module):
 
         """
         # defaults
-        MAX_NORM = 5.0
-        MAX_NEGATIVE_LOG = -30.0
         best_loss = float("inf")
         best_state = None
         best_epoch = 0
@@ -389,13 +400,33 @@ class Neural(nn.Module):
         # if batch_size is None or >= dataset size, use full-batch
         use_mini_batch = batch_size is not None and batch_size < y_torch_length
 
+        # initialize loss / ae lists
         train_losses, test_losses, learning_rates = [], [], []
+        train_aes, test_aes, ae_epochs = [], [], []
 
         # setup optimizer and a learning rate scheduler to reduce learning rate
         # when loss plateaus
-        opt = optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay)
+        # weight decay only applied to non-bias and non-embedding parameters
+        decay, no_decay = [], []
+        for name, p in self.named_parameters():
+            if "bias" in name or "embedding" in name.lower():
+                no_decay.append(p)
+            else:
+                decay.append(p)
+        opt = optim.Adam(
+            [
+                {"params": decay, "weight_decay": weight_decay},
+                {"params": no_decay, "weight_decay": 0.0},
+            ],
+            lr=lr,
+        )
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            opt, mode="min", factor=0.5, patience=10
+            opt,
+            mode="min",
+            factor=0.5,
+            patience=5,
+            threshold=min_delta,
+            threshold_mode="abs",
         )
 
         # initialize prediction to global rate
@@ -452,22 +483,9 @@ class Neural(nn.Module):
                     ]
 
                     z_torch = self(batch_num, batch_embed_list)
-
-                    if self.task == "poisson":
-                        logE = torch.log(batch_weights).clamp(min=MAX_NEGATIVE_LOG)
-                        loglam = z_torch + logE
-                        loss = F.poisson_nll_loss(
-                            input=loglam,
-                            target=batch_y,
-                            log_input=True,
-                            full=False,
-                            reduction="mean",
-                        )
-                    else:  # binomial
-                        loss = -(
-                            batch_y * F.logsigmoid(z_torch)
-                            + (batch_weights - batch_y) * F.logsigmoid(-z_torch)
-                        ).mean()
+                    loss = self._loss(
+                        predictions=z_torch, target=batch_y, weights=batch_weights
+                    )
 
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
@@ -486,22 +504,9 @@ class Neural(nn.Module):
                 ]
 
                 z_torch = self(X_torch_num, X_torch_embed_list)
-
-                if self.task == "poisson":
-                    logE = torch.log(weights_torch).clamp(min=MAX_NEGATIVE_LOG)
-                    loglam = z_torch + logE
-                    loss = F.poisson_nll_loss(
-                        input=loglam,
-                        target=y_torch,
-                        log_input=True,
-                        full=False,
-                        reduction="mean",
-                    )
-                else:  # binomial
-                    loss = -(
-                        y_torch * F.logsigmoid(z_torch)
-                        + (weights_torch - y_torch) * F.logsigmoid(-z_torch)
-                    ).mean()
+                loss = self._loss(
+                    predictions=z_torch, target=y_torch, weights=weights_torch
+                )
 
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
@@ -516,35 +521,43 @@ class Neural(nn.Module):
             with torch.no_grad():
                 self.eval()
                 z_torch_test = self(X_torch_test_num, X_torch_test_embed_idx)
-                if self.task == "poisson":
-                    logE_test = torch.log(weights_torch_test).clamp(
-                        min=MAX_NEGATIVE_LOG
-                    )
-                    loglam_test = z_torch_test + logE_test
-                    test_loss = F.poisson_nll_loss(
-                        input=loglam_test,
-                        target=y_torch_test,
-                        log_input=True,
-                        full=False,
-                        reduction="mean",
-                    )
-                else:
-                    test_loss = -(
-                        y_torch_test * F.logsigmoid(z_torch_test)
-                        + (weights_torch_test - y_torch_test)
-                        * F.logsigmoid(-z_torch_test)
-                    ).mean()
+                test_loss = self._loss(
+                    predictions=z_torch_test,
+                    target=y_torch_test,
+                    weights=weights_torch_test,
+                )
 
             test_loss_value = test_loss.item()
             train_losses.append(train_loss_value)
             test_losses.append(test_loss_value)
             learning_rates.append(opt.param_groups[0]["lr"])
 
+            # track a/e ratios at intervals
+            if epoch % ae_interval == 0:
+                with torch.no_grad():
+                    self.eval()
+                    eval_embed_list = [
+                        X_torch_embed_stacked[:, i]
+                        for i in range(X_torch_embed_stacked.shape[1])
+                    ]
+                    z_train_eval = self(X_torch_num, eval_embed_list)
+                    if self.task == "poisson":
+                        train_expected = torch.exp(z_train_eval) * weights_torch
+                        test_expected = torch.exp(z_torch_test) * weights_torch_test
+                    else:  # binomial
+                        train_expected = torch.sigmoid(z_train_eval) * weights_torch
+                        test_expected = torch.sigmoid(z_torch_test) * weights_torch_test
+                    train_ae = (y_torch.sum() / train_expected.sum()).item()
+                    test_ae = (y_torch_test.sum() / test_expected.sum()).item()
+                    ae_epochs.append(epoch + 1)
+                    train_aes.append(train_ae)
+                    test_aes.append(test_ae)
+
             scheduler.step(test_loss_value)
 
             # early stopping when loss does not improve
             if early_stopping:
-                if test_loss_value < best_loss:
+                if test_loss_value < best_loss - min_delta:
                     best_loss = test_loss_value
                     best_epoch = epoch + 1
                     patience_counter = 0
@@ -584,41 +597,149 @@ class Neural(nn.Module):
             )
         self._is_fitted = True
 
-        # create loss plot
-        fig = go.Figure()
+        # a/e of final state
+        with torch.no_grad():
+            self.eval()
+            final_embed_list = [
+                X_torch_embed_stacked[:, i]
+                for i in range(X_torch_embed_stacked.shape[1])
+            ]
+            z_train_final = self(X_torch_num, final_embed_list)
+            z_test_final = self(X_torch_test_num, X_torch_test_embed_idx)
+            if self.task == "poisson":
+                train_expected = torch.exp(z_train_final) * weights_torch
+                test_expected = torch.exp(z_test_final) * weights_torch_test
+            else:  # binomial
+                train_expected = torch.sigmoid(z_train_final) * weights_torch
+                test_expected = torch.sigmoid(z_test_final) * weights_torch_test
+            final_train_ae = (y_torch.sum() / train_expected.sum()).item()
+            final_test_ae = (y_torch_test.sum() / test_expected.sum()).item()
+        final_epoch = (
+            best_epoch if (early_stopping and best_state is not None) else (epoch + 1)
+        )
+        logger.info(
+            f"final state A/E (epoch {final_epoch}) - "
+            f"train: {final_train_ae:.4f}, test: {final_test_ae:.4f}"
+        )
+
+        # creating plots
+        fig = make_subplots(
+            rows=2,
+            cols=1,
+            subplot_titles=("Loss", "A/E Ratio"),
+            specs=[[{"secondary_y": True}], [{"secondary_y": False}]],
+            vertical_spacing=0.12,
+        )
+
+        # plot - losses and learning rate
+        fig.add_trace(
+            go.Scatter(y=train_losses, mode="lines+markers", name="Train Loss"),
+            row=1,
+            col=1,
+            secondary_y=False,
+        )
+        fig.add_trace(
+            go.Scatter(y=test_losses, mode="lines+markers", name="Test Loss"),
+            row=1,
+            col=1,
+            secondary_y=False,
+        )
+        fig.add_trace(
+            go.Scatter(y=learning_rates, mode="lines", name="Learning Rate"),
+            row=1,
+            col=1,
+            secondary_y=True,
+        )
+
+        # plot - a/e ratios
         fig.add_trace(
             go.Scatter(
-                y=train_losses,
-                mode="lines+markers",
-                name="Train Loss",
-            )
+                x=ae_epochs, y=train_aes, mode="lines+markers", name="Train A/E"
+            ),
+            row=2,
+            col=1,
         )
         fig.add_trace(
-            go.Scatter(
-                y=test_losses,
-                mode="lines+markers",
-                name="Test Loss",
-            )
+            go.Scatter(x=ae_epochs, y=test_aes, mode="lines+markers", name="Test A/E"),
+            row=2,
+            col=1,
         )
+        fig.add_hline(y=1.0, line_dash="dash", line_color="gray", row=2, col=1)
+
+        # plot - mark the state a/e of the final model
         fig.add_trace(
             go.Scatter(
-                y=learning_rates,
-                mode="lines",
-                name="Learning Rate",
-                yaxis="y2",
-            )
+                x=[final_epoch, final_epoch],
+                y=[final_train_ae, final_test_ae],
+                mode="markers",
+                marker={"symbol": "star", "size": 12, "color": "black"},
+                name="Final State A/E",
+            ),
+            row=2,
+            col=1,
         )
-        fig.update_layout(
-            title="Neural Network Training",
-            xaxis_title="Epoch",
-            yaxis_title="Loss",
-            yaxis2={
-                "title": "Learning Rate",
-                "overlaying": "y",
-                "side": "right",
-            },
-        )
+
+        # plot - format axes
+        fig.update_xaxes(title_text="Epoch", row=1, col=1)
+        fig.update_xaxes(title_text="Epoch", row=2, col=1)
+        fig.update_yaxes(title_text="Loss", row=1, col=1, secondary_y=False)
+        fig.update_yaxes(title_text="Learning Rate", row=1, col=1, secondary_y=True)
+        fig.update_yaxes(title_text="A/E", row=2, col=1)
+        fig.update_layout(title="Neural Network Training")
+
         return fig
+
+    def score(self, X: pd.DataFrame, y: pd.Series, weights: pd.Series) -> float:
+        """
+        Compute the loss on the given data.
+
+        Mirrors the loss used in `fit`, in eval mode (dropout off) with no
+        gradients, so it's directly comparable to the train/test loss logged
+        during training.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The data to score
+        y : pd.Series
+            The labels to score
+        weights : pd.Series
+            The weights to score
+
+        Returns
+        -------
+        loss : float
+            The computed loss
+
+        """
+        if self.wide_linear is None or self.output is None:
+            raise RuntimeError("Model must be fitted before scoring.")
+
+        # drop rows the loss can't use
+        bad = (weights <= 0) | weights.isna() | y.isna()
+        if bad.any():
+            X = X.loc[~bad]
+            y = y.loc[~bad]
+            weights = weights.loc[~bad]
+
+        # prepare tensors
+        D = y * weights
+
+        X_num, X_embed_idx = self._prepare_input_tensor(X)
+        D_torch = torch.tensor(
+            D.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
+        )
+        w_torch = torch.tensor(
+            weights.to_numpy().reshape(-1), dtype=torch.float32, device=self.device
+        )
+
+        # compute loss in eval mode with no gradients
+        self.eval()
+        with torch.no_grad():
+            z = self(X_num, X_embed_idx)
+            loss = self._loss(predictions=z, target=D_torch, weights=w_torch)
+
+        return float(loss.item())
 
     def predict(
         self,
@@ -824,6 +945,97 @@ class Neural(nn.Module):
 
         return embedding_fig
 
+    def rebalance_ae(self, X: pd.DataFrame, y: pd.Series, weights: pd.Series) -> float:
+        """
+        Adjust predictions so that training data A/E ratio is 1.
+
+        Call after the `fit` method to rebalance the model's predictions
+        to the overall rate in the training data.
+
+        Notes
+        -----
+        - relativities between test and train predictions are unchanged.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Features
+        y : pd.Series
+            Observed rate (qx)
+        weights : pd.Series
+            Exposure
+
+        Returns
+        -------
+        ae : float
+            The aggregate A/E ratio before rebalancing.
+            Model is also updated in-place to rebalance predictions to training data.
+
+        """
+        if self.wide_linear is None:
+            raise RuntimeError("Model must be fitted before rebalancing.")
+
+        q = self.predict(X).ravel()
+        w = weights.to_numpy()
+        actual = float((y.to_numpy() * w).sum())
+        expected = float((q * w).sum())
+        ae = actual / expected
+        logger.info(f"rebalanced intercept; A/E before = {ae:.2f}")
+
+        with torch.no_grad():
+            if self.task == "poisson":
+                self.wide_linear.bias.add_(float(np.log(ae)))
+            else:  # binomial
+                z = np.log(q / (1.0 - q))
+                delta = float(np.log(ae))
+                for _ in range(25):
+                    p = 1.0 / (1.0 + np.exp(-(z + delta)))
+                    f = float((w * p).sum()) - actual
+                    fp = float((w * p * (1.0 - p)).sum())
+                    if fp == 0:
+                        break
+                    delta -= f / fp
+                self.wide_linear.bias.add_(float(delta))
+        return ae
+
+    def _loss(
+        self, predictions: torch.Tensor, target: torch.Tensor, weights: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Calculate the loss for the given predictions, targets, and weights.
+
+        Parameters
+        ----------
+        predictions : torch.Tensor
+            The predicted log rates (for Poisson) or logits (for Binomial).
+        target : torch.Tensor
+            The target counts (for Poisson) or successes (for Binomial).
+        weights : torch.Tensor
+            The weights (exposures for Poisson, trials for Binomial).
+
+        Returns
+        -------
+        loss : torch.Tensor
+            The computed loss value.
+
+        """
+        if self.task == "poisson":
+            logE = torch.log(weights).clamp(min=MAX_NEGATIVE_LOG)
+            loglam = predictions + logE
+            loss = F.poisson_nll_loss(
+                input=loglam,
+                target=target,
+                log_input=True,
+                full=False,
+                reduction="mean",
+            )
+        else:  # binomial
+            loss = -(
+                target * F.logsigmoid(predictions)
+                + (weights - target) * F.logsigmoid(-predictions)
+            ).mean()
+        return loss
+
     def _create_embeddings(self, X: pd.DataFrame) -> int:
         """
         Create embeddings for categorical features.
@@ -930,7 +1142,9 @@ class Neural(nn.Module):
 
             # label encode
             idx = mapped_values.fillna(0).astype("int64").to_numpy()
-            X_torch_embed_idx.append(torch.from_numpy(idx).to(self.device))
+            X_torch_embed_idx.append(
+                torch.tensor(idx, dtype=torch.long, device=self.device)
+            )
 
         return X_torch_num, X_torch_embed_idx
 
