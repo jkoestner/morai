@@ -5,12 +5,22 @@
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.4...v0.3.5)
 
 **Enhancements**
-- add claude skills
+- add claude skills (model-review, nn-review, mortality-table-build)
 - cdc analytic enhancements (weekly, flu, cod refinements)
 - create experience study calcs (variance, credibility, ci, summarize data)
+- enhance the neural model including
+  - new methods (score, rebalance_ae, set_deterministic, _loss)
+  - provide test/train a/e during fit
+  - add new parameters (device, min_delta, ae_interval)
 
 **Documentation**
 - update tests
+
+**Bugs**
+- fixed a few neural model bugs
+  - add weight decay only on non-bias non-embedding columns
+  - fix `init bias` for binomial path
+  - load the best state epoch instead of last state epoch
 
 ## [0.3.4](https://github.com/jkoestner/morai/tree/v0.3.4)
 

@@ -420,6 +420,8 @@ class Neural(nn.Module):
             ],
             lr=lr,
         )
+        # setting min_lr to 1/128 of initial lr (7 decay steps)
+        min_lr = lr * (0.5**7)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             opt,
             mode="min",
@@ -427,6 +429,7 @@ class Neural(nn.Module):
             patience=5,
             threshold=min_delta,
             threshold_mode="abs",
+            min_lr=min_lr,
         )
 
         # initialize prediction to global rate
