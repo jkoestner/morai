@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?><request-parameters>
 	<parameter>
 		<name>B_1</name>
-		<value>D176.V1-level1</value>
+		<value>D176.V100-level1</value>
 	</parameter>
 	<parameter>
 		<name>B_2</name>
-		<value>D176.V1-level2</value>
+		<value>D176.V100-level2</value>
 	</parameter>
 	<parameter>
 		<name>B_3</name>
@@ -203,7 +203,7 @@
 	</parameter>
 	<parameter>
 		<name>O_dates</name>
-		<value>YEAR</value>
+		<value>MMWR</value>
 	</parameter>
 	<parameter>
 		<name>O_death_location</name>
@@ -330,6 +330,10 @@
 		<value>*All*</value>
 	</parameter>
 	<parameter>
+		<name>V_D176.V18</name>
+		<value>*All*</value>
+	</parameter>
+	<parameter>
 		<name>V_D176.V19</name>
 		<value>*All*</value>
 	</parameter>
@@ -422,6 +426,10 @@
 		<value>*All*</value>
 	</parameter>
 	<parameter>
+		<name>V_D176.V82</name>
+		<value>*All*</value>
+	</parameter>
+	<parameter>
 		<name>V_D176.V89</name>
 		<value>*All*</value>
 	</parameter>
@@ -443,7 +451,7 @@
 	</parameter>
 	<parameter>
 		<name>dataset_vintage</name>
-		<value>June 29, 2024 as of July 07, 2024</value>
+		<value>April 4, 2026 as of  April 12, 2026</value>
 	</parameter>
 	<parameter>
 		<name>finder-stage-D176.V1</name>

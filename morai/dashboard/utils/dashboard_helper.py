@@ -226,8 +226,6 @@ def generate_filters(
     filters = []
     str_cols = []
     num_cols = []
-    prefix_str_filter = f"{prefix}-str-filter"
-    prefix_num_filter = f"{prefix}-num-filter"
     duckdb_source = None
 
     # get column types
@@ -362,13 +360,21 @@ def generate_filters(
                             html.Span(col, style={"flex-grow": 1}),
                             html.I(className="fas fa-chevron-down"),
                         ],
-                        id={"type": f"{prefix}-collapse-button", "index": col},
+                        id={
+                            "type": "filter-collapse-button",
+                            "prefix": prefix,
+                            "index": col,
+                        },
                         className="mb-2 w-100 text-start d-flex align-items-center",
                         color="light",
                     ),
                     dbc.Collapse(
                         dcc.Checklist(
-                            id={"type": prefix_str_filter, "index": col},
+                            id={
+                                "type": "filter-str",
+                                "prefix": prefix,
+                                "index": col,
+                            },
                             options=options,
                             value=(
                                 initial_values.get("str_filters", {}).get(col, [])
@@ -378,7 +384,11 @@ def generate_filters(
                             className="ms-2",
                             labelStyle={"display": "block"},
                         ),
-                        id={"type": f"{prefix}-collapse", "index": col},
+                        id={
+                            "type": "filter-collapse",
+                            "prefix": prefix,
+                            "index": col,
+                        },
                         is_open=False,
                     ),
                 ],
@@ -397,13 +407,21 @@ def generate_filters(
                             html.Span(col, style={"flex-grow": 1}),
                             html.I(className="fas fa-chevron-down"),
                         ],
-                        id={"type": f"{prefix}-collapse-button", "index": col},
+                        id={
+                            "type": "filter-collapse-button",
+                            "prefix": prefix,
+                            "index": col,
+                        },
                         className="mb-2 w-100 text-start d-flex align-items-center",
                         color="light",
                     ),
                     dbc.Collapse(
                         dcc.RangeSlider(
-                            id={"type": prefix_num_filter, "index": col},
+                            id={
+                                "type": "filter-num",
+                                "prefix": prefix,
+                                "index": col,
+                            },
                             min=min_val,
                             max=max_val,
                             step=1,
@@ -415,9 +433,13 @@ def generate_filters(
                                 if initial_values
                                 else [min_val, max_val]
                             ),
-                            tooltip={"always_visible": True, "placement": "bottom"},
+                            tooltip={"placement": "top"},
                         ),
-                        id={"type": f"{prefix}-collapse", "index": col},
+                        id={
+                            "type": "filter-collapse",
+                            "prefix": prefix,
+                            "index": col,
+                        },
                         is_open=False,
                     ),
                 ],
@@ -446,19 +468,31 @@ def generate_filters(
                             html.Span(category, style={"flex-grow": 1}),
                             html.I(className="fas fa-chevron-down"),
                         ],
-                        id={"type": f"{prefix}-collapse-button", "index": category},
+                        id={
+                            "type": "filter-collapse-button",
+                            "prefix": prefix,
+                            "index": category,
+                        },
                         className="mb-2 w-100 text-start d-flex align-items-center",
                         color="light",
                     ),
                     dbc.Collapse(
                         dcc.RadioItems(
-                            id={"type": prefix_str_filter, "index": category},
+                            id={
+                                "type": "filter-str",
+                                "prefix": prefix,
+                                "index": category,
+                            },
                             options=options,
                             value=default_value,
                             className="ms-2",
                             labelStyle={"display": "block"},
                         ),
-                        id={"type": f"{prefix}-collapse", "index": category},
+                        id={
+                            "type": "filter-collapse",
+                            "prefix": prefix,
+                            "index": category,
+                        },
                         is_open=False,
                     ),
                 ],
@@ -539,9 +573,7 @@ def get_active_filters(
     return active_filters_list
 
 
-def toggle_collapse(
-    callback_context: Any, is_open: list[bool], children: list[dict]
-) -> tuple[list[Any], list[Any]]:
+def toggle_collapse(callback_context: Any, is_open: list, children: list) -> tuple:
     """
     Toggle collapse state of filter checklists.
 
@@ -549,14 +581,14 @@ def toggle_collapse(
     ----------
     callback_context : dash.callback_context
         The callback context containing states information
-    is_open : List[bool]
+    is_open : List
         List of current collapse states
-    children : List[dict]
+    children : List
         List of current button children
 
     Returns
     -------
-    tuple[List[bool], List[List[dict]]]
+    tuple
         Updated collapse states and button children
 
     """
@@ -1322,7 +1354,7 @@ def _inputs_parse_id(input_list: list[Any], id_value: str) -> Any:
     return None
 
 
-def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
+def _inputs_parse_type(input_list: list, type_value: str, prefix: str) -> list:
     """
     Parse inputs for type value.
 
@@ -1334,6 +1366,8 @@ def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
         List of inputs.
     type_value : str
         type to parse.
+    prefix : str
+        prefix of the id to parse.
 
     Returns
     -------
@@ -1346,93 +1380,9 @@ def _inputs_parse_type(input_list: list[Any], type_value: str) -> list[Any]:
         input_id = input.get("id")
         # id is a dict
         if isinstance(input_id, dict):
-            if input_id.get("type") == type_value:
-                type_list.append(input)
-    return type_list
-
-
-def register_export_callback(app) -> None:  # noqa: ANN001
-    """
-    Register a universal callback for exporting table data to CSV.
-
-    This function should be called once in the app initialization to register
-    the export functionality for all data tables across the application.
-
-    Parameters
-    ----------
-    app : dash.Dash
-        The Dash application instance.
-
-    Notes
-    -----
-    For this callback to work, the following components must be present:
-    1. A Download component with id="download-dataframe-csv" in each page's layout
-    2. Export buttons with pattern-matching ID:
-       {"type": "export-button", "tab": <tab_name>, "page": <page_name>}
-    3. Data tables with pattern-matching ID:
-       {"type": "data-table", "tab": <tab_name>, "page": <page_name>}
-
-    The tab and page values must match between the button and table for proper pairing.
-
-    """
-    import dash  # noqa: PLC0415
-    import pandas as pd  # noqa: PLC0415
-    from dash_extensions.enrich import (  # noqa: PLC0415
-        ALL,
-        Input,
-        Output,
-        State,
-        callback,
-        callback_context,
-        dcc,
-    )
-
-    @callback(
-        Output("download-dataframe-csv", "data"),
-        Input({"type": "export-button", "tab": ALL, "page": ALL}, "n_clicks"),
-        State({"type": "data-table", "tab": ALL, "page": ALL}, "rowData"),
-        prevent_initial_call=True,
-    )
-    def export_table(
-        n_clicks_list: list[int | None], table_data_list: list[list[Any]]
-    ) -> None:
-        """
-        Export table data to CSV.
-
-        This generic function handles exporting data from any
-        table with an export button.
-
-        The button and table must use pattern-matching IDs
-        with the following structure:
-        - Button:
-          {"type": "export-button", "tab": <tab_name>, "page": <page_name>}
-        - Table:
-          {"type": "data-table", "tab": <tab_name>, "page": <page_name>}
-
-        Where <tab_name> identifies the specific tab
-        and <page_name> identifies the page.
-        """
-        ctx = callback_context
-        if not ctx.triggered or not ctx.triggered[0]["value"]:
-            return dash.no_update
-
-        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        button_id = eval(triggered_id)
-        tab = button_id["tab"]
-        page = button_id["page"]
-
-        # Find the matching table data by comparing both tab and page values
-        for i, table_data in enumerate(table_data_list):
-            if not table_data:
+            if input_id.get("type") != type_value:
                 continue
-
-            # Get the corresponding table ID
-            table_id = ctx.states_list[0][i]["id"]
-
-            # Check if this table matches the clicked button's tab and page
-            if table_id["tab"] == tab and table_id["page"] == page:
-                df = pd.DataFrame(table_data)
-                filename = f"{page}_{tab}.csv"
-                return dcc.send_data_frame(df.to_csv, filename, index=False)
-
-        return dash.no_update
+            if prefix is not None and input_id.get("prefix") != prefix:
+                continue
+            type_list.append(input)
+    return type_list

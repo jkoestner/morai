@@ -57,8 +57,8 @@ def test_get_cdc_data_xml(mock_post, tmp_path):
         df = cdc.get_cdc_data_xml(xml_filename="cdc_d176.xml", parse_date_col="Month")
 
     assert isinstance(df, pd.DataFrame)
-    assert df.shape == (93, 6)
-    assert df.iloc[-1]["month"] == pd.Timestamp("2025-09-01")
+    assert df.shape == (93, 7)
+    assert df.iloc[-1]["month"] == 9
     assert df.iloc[-1]["year"] == 2025
 
 
@@ -86,7 +86,7 @@ def test_get_cdc_data_sql():
     """Tests getting cdc data from sql."""
     df = cdc.get_cdc_data_sql(db_filepath=test_sql_path, table_name="mcd18_monthly")
     assert isinstance(df, pd.DataFrame)
-    assert df.shape == (92, 7)
+    assert df.shape == (100, 6)
 
 
 def test_get_last_updated():
@@ -96,8 +96,8 @@ def test_get_last_updated():
     Patched the files path to the tests path.
     """
     with patch("morai.utils.helpers.FILES_PATH", helpers.TESTS_PATH):
-        last_updated = cdc.get_last_updated(table_name="mcd18_monthly")
-    assert last_updated == "2025-10-14 23:13:03"
+        last_updated_meta = cdc.get_last_updated(table_name="mcd18_monthly")
+    assert last_updated_meta["last_updated"] == "2026-05-03 23:36:09"
 
 
 def test_get_cdc_reference():
@@ -185,14 +185,21 @@ def test_calc_mi():
     mi_2019 = mi_df.loc[mi_df["year"] == 2019, "crude_adj"].iloc[0]
     mi_2018 = mi_df.loc[mi_df["year"] == 2018, "crude_adj"].iloc[0]
     mi_1_year = 1 - (mi_2019 / mi_2018)
-    mi_10_year = mi_df["1_year_mi"].rolling(window=10).mean().iloc[-1]
+    mi_10_year = mi_df["1_year_mi_pct"].rolling(window=10).mean().iloc[-1]
     assert isinstance(mi_df, pd.DataFrame)
     assert all(
         col in mi_df.columns
-        for col in ["year", "crude_adj", "deaths", "1_year_mi", "10_year_mi", "whl_3"]
+        for col in [
+            "year",
+            "crude_adj",
+            "deaths",
+            "1_year_mi_pct",
+            "10_year_mi_pct",
+            "whl_3_pct",
+        ]
     )
-    assert mi_df["1_year_mi"].iloc[-1] == mi_1_year
-    assert mi_df["10_year_mi"].iloc[-1] == mi_10_year
+    assert mi_df["1_year_mi_pct"].iloc[-1] == mi_1_year
+    assert mi_df["10_year_mi_pct"].iloc[-1] == mi_10_year
 
 
 def test_compare_df():

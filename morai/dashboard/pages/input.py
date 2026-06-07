@@ -41,6 +41,16 @@ def layout():
     """Input layout."""
     return html.Div(
         [
+            # Toast notifications
+            dbc.Toast(
+                id="input-toast",
+                header="Error",
+                is_open=False,
+                dismissable=True,
+                icon="danger",
+                className="toast",
+                style={"position": "fixed", "top": 10, "right": 10, "zIndex": 1050},
+            ),
             # Header section with gradient background
             html.Div(
                 [
@@ -248,6 +258,8 @@ def layout():
     [
         Output("store-config", "data"),
         Output("store-dataset", "data"),
+        Output("input-toast", "is_open"),
+        Output("input-toast", "children"),
     ],
     [Input("button-load-config", "n_clicks")],
     [State("dataset-dropdown", "value")],
@@ -256,24 +268,30 @@ def load_config(n_clicks, dataset):
     """Load the configuration file."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
-    logger.debug("load config")
-    config = dh.load_config()
-    if dataset is not None:
-        config["general"]["dataset"] = dataset
 
-    # load dataset
-    # only works with parquet, csv files
-    # could add more
-    logger.debug("load data")
-    config_dataset = config["datasets"][config["general"]["dataset"]]
-    file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
-    if file_path.suffix == ".parquet":
-        pl.enable_string_cache()
-        lzdf = pl.scan_parquet(file_path)
-    if file_path.suffix == ".csv":
-        lzdf = pl.read_csv(file_path)
+    try:
+        logger.debug("load config")
+        config = dh.load_config()
+        if dataset is not None:
+            config["general"]["dataset"] = dataset
 
-    return config, Serverside(lzdf, key=config["general"]["dataset"])
+        # load dataset
+        # only works with parquet, csv files
+        # could add more
+        logger.debug("load data")
+        config_dataset = config["datasets"][config["general"]["dataset"]]
+        file_path = helpers.FILES_PATH / "dataset" / config_dataset["filename"]
+        if file_path.suffix == ".parquet":
+            pl.enable_string_cache()
+            lzdf = pl.scan_parquet(file_path)
+        if file_path.suffix == ".csv":
+            lzdf = pl.read_csv(file_path)
+
+        return config, Serverside(lzdf, key=config["general"]["dataset"]), False, ""
+
+    except Exception as e:
+        logger.error(f"Error loading config: {e}")
+        return dash.no_update, dash.no_update, True, str(e)
 
 
 @callback(

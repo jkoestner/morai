@@ -19,7 +19,7 @@ import dash_extensions.enrich as dash
 import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, ServersideOutputTransform, dcc, html
 
-from morai.dashboard.utils import dashboard_helper as dh
+from morai.dashboard.components import common_build
 from morai.utils import custom_logger
 
 #      _    ____  ____
@@ -148,7 +148,8 @@ app.layout = dmc.MantineProvider(
     )
 )
 
-dh.register_export_callback(app)
+common_build.register_export_callback(app)
+common_build.register_filter_callbacks(app)
 
 
 # Navbar toggle callback

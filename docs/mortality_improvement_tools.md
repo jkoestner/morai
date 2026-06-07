@@ -1,0 +1,53 @@
+Mortality Improvement Tools
+
+- MIM tool: Provides tools to compare mortality improvement models. It uses SSA, NCHS, and Insured data
+  - https://www.soa.org/resources/research-reports/2023/mortality-improvement-model/
+  - There are 2 tools that are provided, the "2021-mim-application-tool-v4.xlsm" and "2021-min-data-analysis-v4b.xlsm"
+    - Application Tool - this lets you replicate the model results such as MP-2021, O2-2021, Insured, or own
+	- Data Tool - this provides datasets for comparison including population (SSA and NCHS) and the insured
+  - Notes
+    - The MIM dataset (NCHS) is not available to public at the granularity used (single age and FIPs)
+	- The county quintile subsets, using FIPs, were created by Dr. Magali Barbieri, Ph.D. at the following location.
+	  - https://www.soa.org/resources/research-reports/2020/us-mort-rate-socioeconomic/
+	  - The dataset does include FIPs mapping for each quintile for each of the different eras using different data sources
+	    - Census Bureau (1980, 1990, 2000)
+		  - https://www.census.gov/programs-surveys/decennial-census/data.html
+		- American Community Surveys - ACS (5-year increments since 2005)
+		  - https://www.census.gov/programs-surveys/acs
+	  - It was recommended to have the SIS stay constant, as it avoids large counties such as LA going from 1 decile to another and keeps the trends smoother. It was seen that the outcome was similar.
+	  - Another paper that references the FIPs mapping is the annual population mortality report. This used the 2008-2012 ACS quintiles and held them constant.
+	    - https://www.soa.org/resources/research-reports/2022/us-population-mortality/ 
+		
+- ILEC Mortality Improvement
+  - Starting in 2025 the AG38/VM20 scale was switched from using a general population dataset to an insured dataset. The insured dataset was normalized to avoid distribution changes. The data was also smoothed by creating qx rates using the neighboring 4 cells on each side.
+  - https://www.soa.org/resources/research-reports/2024/ind-life-mort-tools/
+  - Personal Note:
+    - The scale shows that insured data had negative mortality improvement in older ages. Using a CatBoost model I did not see the same mortality disimprovement at older ages and saw some improvement where data was credible up to attained age 90
+	
+- RPEC Mortality Improvement Report
+  - The report provides an update to the mortality improvement for retirement planning pension funds. Within the report it describes how the mortality improvement tables were created
+  - https://www.soa.org/resources/research-reports/2025/rpec-mort-improvement-update/
+  - MP-2021 (section 2.1)
+    - https://www.soa.org/resources/experience-studies/2021/mortality-improvement-scale-mp-2021/
+    - data: SSA (1950-2016), CDC (2017-2019) mortality rates
+	- transform: log(qx) - this allows the rates to be smoother across ages
+	- order: order 3
+	- dimension: 2-dimension
+	- initialize year: 2017 - this is a 2-year stepback
+	- horizontal-convergence (age): 10 years (e.g. 2027)
+	- diagonal-convergence (birth-cohort): 20 years (e.g. 2037)
+	- horizontal/diagonal blending percentage: 50% / 50%
+	- long-term rates
+	- personal research: to replicate use log(qx) and have horizontal-lamda (age) = 400 and vertical-lamda (year) = 100
+  - MP-2015 
+    - https://www.soa.org/resources/experience-studies/2015/research-2015-mp/
+    - data: SSA (1950-2011) mortality rates
+	- transform: log(qx) - this allows the rates to be smoother across ages
+	- order: order 3
+	- dimension: 2-dimension
+	- initialize year: 2009 - this is a 2-year stepback
+	- horizontal-convergence (age): 20 years (e.g. 2029)
+	- diagonal-convergence (birth-cohort): 20 years (e.g. 2039)
+	- horizontal/diagonal blending percentage: 50% / 50%
+	- long-term rates
+  

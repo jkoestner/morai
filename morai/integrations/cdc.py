@@ -59,7 +59,7 @@ AGE_GROUP_ORDER = [
     "65-74 years",
     "75-84 years",
     "85+ years",
-    "total",
+    "All ages",
 ]
 
 
@@ -116,11 +116,8 @@ def get_cdc_data_xml(
     logger.debug("creating dataframe from response")
     cdc_df = _xml_create_df(xml_response=xml_response)
 
-    # parse the month column
+    # parse the date-like column
     if parse_date_col:
-        if parse_date_col not in cdc_df.columns:
-            logger.warning(f"Column not found: {parse_date_col}")
-            return cdc_df
         cdc_df[parse_date_col] = _parse_date_col(df=cdc_df, col=parse_date_col)
 
     # clean the dataframe
@@ -128,6 +125,12 @@ def get_cdc_data_xml(
         cdc_df = suppress_logs(helpers.clean_df)(cdc_df, update_cat=False)
         if "year" in cdc_df.columns:
             cdc_df["year"] = cdc_df["year"].str[:4]
+        if parse_date_col == "Month":
+            cdc_df["reported_date"] = cdc_df["month"]
+            cdc_df["month"] = cdc_df["month"].dt.month
+        if parse_date_col == "mmwr_week_date":
+            cdc_df["mmwr_week"] = cdc_df["mmwr_week_date"].dt.isocalendar().week
+            cdc_df["mmwr_year"] = cdc_df["mmwr_week_date"].dt.isocalendar().year
 
     if convert_dtypes:
         cdc_df = _infer_dtypes(cdc_df)
@@ -218,9 +221,9 @@ def get_cdc_data_sql(db_filepath: str | Path, table_name: str) -> pd.DataFrame:
     return cdc_df
 
 
-def get_last_updated(table_name: str | None = None) -> str:
+def get_last_updated(table_name: str | None = None) -> dict:
     """
-    Get the last updated date of a table.
+    Get the last updated meta of a table.
 
     Parameters
     ----------
@@ -229,19 +232,49 @@ def get_last_updated(table_name: str | None = None) -> str:
 
     Returns
     -------
-    last_updated : str
-        The last updated date of the table.
+    last_update_meta : dict
+        A dictionary containing:
+        - "last_updated": The maximum "added_at" date from the table.
+        - "data_through": The maximum "data_through" date from the table.
+        - "days_elapsed": The number of days elapsed in the year
+        - "recent_week": The recent week data is through
 
     """
     if table_name is None:
         table_name = "mcd18_cod"
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
-    tables = sql.get_tables(db_filepath=db_filepath)
-    if table_name not in tables:
-        return ""
-    query = f"SELECT MAX(added_at) as last_updated FROM {table_name}"
-    result = sql.read_sql(db_filepath, query)
-    return result["last_updated"].iloc[0] or ""
+
+    # query the table
+    query = (
+        f"SELECT MAX(added_at) as last_updated, MAX(data_through) as "
+        f"data_through FROM {table_name}"
+    )
+    try:
+        result = sql.read_sql(db_filepath, query)
+    except Exception:
+        logger.error(
+            f"Error querying table `{table_name}` for last updated date: {db_filepath}"
+        )
+        return {
+            "last_updated": None,
+            "data_through": None,
+            "days_elapsed": None,
+        }
+    last_updated = result["last_updated"].iloc[0]
+    data_through = result["data_through"].iloc[0]
+    start_of_year = pd.Timestamp(f"{data_through.year}-01-01")
+    days_elapsed = (data_through - start_of_year).days + 1
+    recent_week = data_through.isocalendar().week
+
+    # create the dict
+    result = {
+        "last_updated": last_updated,
+        "data_through": data_through,
+        "days_elapsed": days_elapsed,
+        "recent_week": recent_week,
+    }
+
+    return result
 
 
 @lru_cache(maxsize=10)
@@ -362,29 +395,64 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
         "calculating mortality improvement by using a `2000 age adjusted` crude "
         "mortality rate"
     )
-    # group and calculate crude 2000 adjusted mortality rate
-    mi_df = (
+
+    # groupby year and age_groups and calculate crude 2000 adjusted mortality rate
+    mi_grouped = (
         df.groupby(["year", "age_groups"])[["deaths", "population"]].sum().reset_index()
     )
-    mi_df = map_reference(
-        df=mi_df,
+    mi_grouped = map_reference(
+        df=mi_grouped,
         col="population_%",
         on_dict={"age_groups": "age_bucket"},
         sheet_name="age_std_2000",
     )
-    mi_df["crude_adj"] = (
-        mi_df["deaths"] / mi_df["population"] * 100000 * mi_df["population_%"]
+    total_weight = mi_grouped.groupby("age_groups")["population_%"].first().sum()
+    mi_grouped["population_%"] = mi_grouped["population_%"] / total_weight
+    mi_grouped["crude_adj"] = (
+        mi_grouped["deaths"]
+        / mi_grouped["population"]
+        * 100000
+        * mi_grouped["population_%"]
     )
 
-    # calculate mortality improvement
-    mi_df = mi_df.groupby(["year"])[["crude_adj", "deaths"]].sum().reset_index()
-    mi_df["1_year_mi"] = 1 - (mi_df["crude_adj"] / mi_df["crude_adj"].shift(1))
-    mi_df[f"{rolling}_year_mi"] = mi_df["1_year_mi"].rolling(window=rolling).mean()
+    # calculate mortality improvement for each age_group
+    mi_df_list = []
+    for age_group in [*mi_grouped["age_groups"].unique(), "All ages"]:
+        # filter and groupby
+        if age_group == "All ages":
+            mi_df_age = mi_grouped.copy()
+        else:
+            mi_df_age = mi_grouped[mi_grouped["age_groups"] == age_group]
 
-    # calculate whittaker-henderson-lowrie (whl)
-    mi_df = mi_df[mi_df["1_year_mi"].notna()]
-    mi_df["whl_3"] = graduation.whl(
-        rates=mi_df["1_year_mi"], horizontal_order=3, horizontal_lambda=400
+        mi_df_age = (
+            mi_df_age.groupby(["year"])[["crude_adj", "deaths", "population"]]
+            .sum()
+            .reset_index()
+        )
+        mi_df_age["age_groups"] = age_group
+
+        # 1-year MI
+        mi_df_age["1_year_mi_pct"] = 1 - (
+            mi_df_age["crude_adj"] / mi_df_age["crude_adj"].shift(1)
+        )
+
+        # rolling average MI
+        mi_df_age[f"{rolling}_year_mi_pct"] = (
+            mi_df_age["1_year_mi_pct"].rolling(window=rolling).mean()
+        )
+
+        # whittaker-henderson-lowrie (whl)
+        mi_df_age = mi_df_age[mi_df_age["1_year_mi_pct"].notna()]
+        mi_df_age["whl_3_pct"] = graduation.whl(
+            rates=mi_df_age["1_year_mi_pct"], horizontal_order=3, horizontal_lambda=400
+        )
+
+        mi_df_list.append(mi_df_age)
+    mi_df = pd.concat(mi_df_list, ignore_index=True)
+
+    # re-apply categorical ordering
+    mi_df["age_groups"] = pd.Categorical(
+        mi_df["age_groups"], categories=AGE_GROUP_ORDER, ordered=True
     )
 
     return mi_df
@@ -597,7 +665,7 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
         if code is not None:
             measure_selections.append(code.split(".")[1])
     columns = byvariables + measure_selections
-    columns = [cdc_mapping.get(key, key) for key in columns]
+    columns = [cdc_mapping.get(col, col) for col in columns]
     num_columns = len(columns)
 
     # initialize row-span counts and values for each column
@@ -653,18 +721,25 @@ def _xml_create_df(xml_response: str) -> pd.DataFrame:
 
 def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
     """
-    Parse the date column to a datetime object.
+    Parse a cdc column that is date-like into a datetime series.
 
-    CDC has the "Month" column as a string with the format "Month., Year"
-    when grouping by month and year.
-    This function parses the month column to a datetime object.
+    CDC has a few columns from the wonder data that are date-like but will not
+    parse to a friendly format without some cleaning.
+
+    Options
+    - Month
+      - example: "Feb., 2026 (provisional and partial)"
+      - clean: "2026-02-01"
+    - mmwr_week_date
+      - example: "2026 Week 13 ending April 04, 2026 (provisional)"
+      - clean: "2026-04-04"
 
     Parameters
     ----------
     df : pd.DataFrame
         DataFrame object.
     col : str
-        Column name to parse dates.
+        Column name to parse dates such as "Month" or "MMWR Week".
 
     Returns
     -------
@@ -672,9 +747,19 @@ def _parse_date_col(df: pd.DataFrame, col: str = "Month") -> pd.Series:
         Series of parsed dates.
 
     """
-    parsed_dates = [date.split(" (")[0].strip() for date in df[col]]
-    parsed_dates = [date.replace(".", "") for date in parsed_dates]
-    parsed_dates = pd.to_datetime(parsed_dates, format="%b, %Y")
+    if col not in df.columns:
+        logger.error(f"Column not found: {col}")
+        return pd.Series([None] * len(df))
+    if col == "Month":
+        parsed_dates = [date.split(" (")[0].strip() for date in df[col]]
+        parsed_dates = [date.replace(".", "") for date in parsed_dates]
+        parsed_dates = pd.to_datetime(parsed_dates, format="%b, %Y")
+    elif col == "mmwr_week_date":
+        parsed_dates = pd.to_datetime(
+            df[col].str.extract(r"ending (\w+ \d{2}, \d{4})", expand=False),
+            format="%B %d, %Y",
+            errors="coerce",
+        )
     parsed_dates = pd.Series(parsed_dates)
 
     return parsed_dates

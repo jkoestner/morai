@@ -331,6 +331,7 @@ class ModelResults:
                 {col[1] for col in scorecard_df.columns if col[1] != ""}
             )
         else:
+            self.filepath = "model_results.json"
             self.model = pd.DataFrame()
             self.scorecard = pd.DataFrame()
             self.importance = pd.DataFrame()

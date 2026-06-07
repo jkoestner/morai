@@ -5,6 +5,7 @@ import json
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_extensions.enrich as dash
+import dash_mantine_components as dmc
 import joblib
 import pandas as pd
 from dash_extensions.enrich import (
@@ -71,6 +72,7 @@ def layout():
                 dismissable=True,
                 icon="danger",
                 className="toast",
+                style={"position": "fixed", "top": 10, "right": 10, "zIndex": 1050},
             ),
             # Main Content Accordion
             dbc.Accordion(
@@ -192,8 +194,9 @@ def layout():
                                                     # Chart
                                                     dcc.Loading(
                                                         id="loading-pdp-chart",
-                                                        type="default",
-                                                        color="#007bff",
+                                                        custom_spinner=dmc.Skeleton(
+                                                            visible=True, h="100%"
+                                                        ),
                                                         children=html.Div(
                                                             id="pdp-chart",
                                                             className="bg-white rounded-3 shadow-sm p-3",
@@ -442,7 +445,7 @@ def display_model_results(pathname, model_results):
                     dbc.Col(
                         dcc.Loading(
                             id="loading-importance-chart",
-                            type="dot",
+                            custom_spinner=dmc.Skeleton(visible=True, h="100%"),
                             children=html.Div(id="importance-chart"),
                         ),
                         xs=12,
@@ -473,7 +476,7 @@ def display_model_results(pathname, model_results):
                     dbc.Col(
                         dcc.Loading(
                             id="loading-target-chart",
-                            type="dot",
+                            custom_spinner=dmc.Skeleton(visible=True, h="100%"),
                             children=html.Div(id="target-chart"),
                         ),
                         xs=12,
@@ -574,8 +577,8 @@ def clicked_cell_target_dictionary(cell, model_data, config):
         State("store-model-results", "data"),
         State("store-dataset", "data"),
         State({"type": "pdp-selector", "index": ALL}, "value"),
-        State({"type": "pdp-str-filter", "index": ALL}, "value"),
-        State({"type": "pdp-num-filter", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "pdp", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "pdp", "index": ALL}, "value"),
     ],
 )
 def display_pdp(
@@ -594,65 +597,70 @@ def display_pdp(
     if model_file is None or x_axis_col is None:
         return dash.no_update, True, "Model file or x-axis column is not selected."
 
-    # load model
-    model = joblib.load(helpers.FILES_PATH / "models" / model_file)
-    model_name = model_file.split(".")[0]
+    try:
+        # load model
+        model = joblib.load(helpers.FILES_PATH / "models" / model_file)
+        model_name = model_file.split(".")[0]
 
-    # get model parameters
-    standardize = model_results.model[
-        model_results.model["model_name"] == model_name
-    ].iloc[0]["preprocess_params"]["standardize"]
-    preset = model_results.model[model_results.model["model_name"] == model_name].iloc[
-        0
-    ]["preprocess_params"]["preset"]
-    add_constant = model_results.model[
-        model_results.model["model_name"] == model_name
-    ].iloc[0]["preprocess_params"]["add_constant"]
-    feature_dict = model_results.model[
-        model_results.model["model_name"] == model_name
-    ].iloc[0]["feature_dict"]
+        # get model parameters
+        standardize = model_results.model[
+            model_results.model["model_name"] == model_name
+        ].iloc[0]["preprocess_params"]["standardize"]
+        preset = model_results.model[
+            model_results.model["model_name"] == model_name
+        ].iloc[0]["preprocess_params"]["preset"]
+        add_constant = model_results.model[
+            model_results.model["model_name"] == model_name
+        ].iloc[0]["preprocess_params"]["add_constant"]
+        feature_dict = model_results.model[
+            model_results.model["model_name"] == model_name
+        ].iloc[0]["feature_dict"]
 
-    # filter_data
-    filtered_df = dh.filter_data(df=model_data, callback_context=states_info)
+        # filter_data
+        filtered_df = dh.filter_data(df=model_data, callback_context=states_info)
 
-    # encode data
-    filtered_df = filtered_df.collect().to_pandas()
-    preprocess_dict = preprocessors.preprocess_data(
-        filtered_df,
-        feature_dict=feature_dict,
-        standardize=standardize,
-        preset=preset,
-        add_constant=add_constant,
-    )
-    mapping = preprocess_dict["mapping"]
-    md_encoded = preprocess_dict["md_encoded"]
+        # encode data
+        filtered_df = filtered_df.collect().to_pandas()
+        preprocess_dict = preprocessors.preprocess_data(
+            filtered_df,
+            feature_dict=feature_dict,
+            standardize=standardize,
+            preset=preset,
+            add_constant=add_constant,
+        )
+        mapping = preprocess_dict["mapping"]
+        md_encoded = preprocess_dict["md_encoded"]
 
-    # get parameters from config
-    line_color = dh._inputs_parse_id(states_info, "color_selector")
-    weight = dh._inputs_parse_id(states_info, "weights_selector")
-    secondary = dh._inputs_parse_id(states_info, "secondary_selector")
-    x_bins = dh._inputs_parse_id(states_info, "x_bins_selector")
+        # get parameters from config
+        line_color = dh._inputs_parse_id(states_info, "color_selector")
+        weight = dh._inputs_parse_id(states_info, "weights_selector")
+        secondary = dh._inputs_parse_id(states_info, "secondary_selector")
+        x_bins = dh._inputs_parse_id(states_info, "x_bins_selector")
 
-    # verify parameters are in the model
-    if not any(
-        col in mapping.keys() for col in [x_axis_col, line_color, weight, secondary]
-    ):
-        return dash.no_update, True, "Column was not included in model."
+        # verify parameters are in the model
+        if not any(
+            col in mapping.keys() for col in [x_axis_col, line_color, weight, secondary]
+        ):
+            return dash.no_update, True, "Column was not included in model."
 
-    # create pdp
-    pdp_chart = charters.pdp(
-        model=model,
-        df=md_encoded,
-        x_axis=x_axis_col,
-        line_color=line_color,
-        weight=weight,
-        secondary=secondary,
-        mapping=mapping,
-        x_bins=x_bins,
-        quick=True,
-    )
+        # create pdp
+        pdp_chart = charters.pdp(
+            model=model,
+            df=md_encoded,
+            x_axis=x_axis_col,
+            line_color=line_color,
+            weight=weight,
+            secondary=secondary,
+            mapping=mapping,
+            x_bins=x_bins,
+            quick=True,
+        )
 
-    return dcc.Graph(figure=pdp_chart), False, ""
+        return dcc.Graph(figure=pdp_chart), False, ""
+
+    except Exception as e:
+        logger.error(f"Error creating PDP: {e}")
+        return dash.no_update, True, str(e)
 
 
 # Add new callbacks for the filter offcanvas
@@ -670,8 +678,8 @@ def toggle_pdp_filters_offcanvas(n_clicks, is_open):
 
 @callback(
     [
-        Output({"type": "pdp-str-filter", "index": ALL}, "value"),
-        Output({"type": "pdp-num-filter", "index": ALL}, "value"),
+        Output({"type": "filter-str", "prefix": "pdp", "index": ALL}, "value"),
+        Output({"type": "filter-num", "prefix": "pdp", "index": ALL}, "value"),
     ],
     [Input("reset-pdp-filters-button", "n_clicks")],
     [State("store-dataset", "data"), State("store-config", "data")],

@@ -78,7 +78,6 @@ morai = "morai.utils.cli:cli" # the entry points provide console scripts at comm
 homepage = "https://github.com/jkoestner/morai"
 repository = "https://github.com/jkoestner/morai"
 
-# TODO: Remove after setuptools support is dropped.
 [tool.setuptools]
 include-package-data = true # include files from MANIFEST.in
 
@@ -191,7 +190,7 @@ exclude = ["*.ipynb", "__init__.py"]
 pylint.max-args = 10
 
 [tool.ruff.lint.per-file-ignores]
-"morai/dashboard/pages/*.py" = ["ANN", "E501"]
+"morai/dashboard/*/*.py" = ["ANN", "E501"]
 "tests/*.py" = ["ANN001","ANN201"]
 
 [tool.mypy]

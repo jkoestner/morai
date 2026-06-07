@@ -89,6 +89,7 @@ def layout():
                 dismissable=True,
                 icon="danger",
                 className="toast",
+                style={"position": "fixed", "top": 10, "right": 10, "zIndex": 1050},
             ),
             # Description Card
             dbc.Card(
@@ -638,73 +639,78 @@ def initialize_tables(
     if table1_id is None or table2_id is None:
         return (*no_upate_tuple, True, "No table selected.", dash.no_update)
 
-    # check if tables have changed
-    tables_changed = (
-        prev_table1_id is None
-        or prev_table2_id is None
-        or prev_table1_id != table1_id
-        or prev_table2_id != table2_id
-        or prev_table1_mi_years != table1_mi_years
-        or prev_table2_mi_years != table2_mi_years
-    )
+    try:
+        # check if tables have changed
+        tables_changed = (
+            prev_table1_id is None
+            or prev_table2_id is None
+            or prev_table1_id != table1_id
+            or prev_table2_id != table2_id
+            or prev_table1_mi_years != table1_mi_years
+            or prev_table2_mi_years != table2_mi_years
+        )
 
-    # generate filters only if tables have changed
-    if tables_changed:
-        # load tables
-        (
-            table_1,
-            table_2,
+        # generate filters only if tables have changed
+        if tables_changed:
+            # load tables
+            (
+                table_1,
+                table_2,
+                table_1_select_period,
+                table_2_select_period,
+                mults_1,
+                mults_2,
+                mi_table_1,
+                mi_table_2,
+                warning_tuple,
+            ) = load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years)
+
+            if True in warning_tuple:
+                return (*no_upate_tuple, *warning_tuple, dash.no_update)
+
+            # mi
+            mi_1_style = {"display": "none" if mi_table_1 is None else "block"}
+            mi_2_style = {"display": "none" if mi_table_2 is None else "block"}
+
+            # filters
+            filters_1 = dh.generate_filters(
+                df=table_1,
+                prefix="table-1",
+                exclude_cols=["vals", "constant"],
+                mult_table=mults_1,
+            ).get("filters")
+            filters_2 = dh.generate_filters(
+                df=table_2,
+                prefix="table-2",
+                exclude_cols=["vals", "constant"],
+                mult_table=mults_2,
+            ).get("filters")
+        else:
+            return (*no_upate_tuple, *warning_tuple, trigger_value)
+
+        return (
+            table1_id,
+            table2_id,
+            table_1.to_dict("records"),
+            table_2.to_dict("records"),
+            mults_1.to_dict("records"),
+            mults_2.to_dict("records"),
             table_1_select_period,
             table_2_select_period,
-            mults_1,
-            mults_2,
-            mi_table_1,
-            mi_table_2,
-            warning_tuple,
-        ) = load_tables(table1_id, table2_id, table1_mi_years, table2_mi_years)
+            table1_mi_years,
+            table2_mi_years,
+            filters_1,
+            filters_2,
+            mi_1_style,
+            mi_2_style,
+            False,
+            False,
+            trigger_value,
+        )
 
-        if True in warning_tuple:
-            return (*no_upate_tuple, *warning_tuple, dash.no_update)
-
-        # mi
-        mi_1_style = {"display": "none" if mi_table_1 is None else "block"}
-        mi_2_style = {"display": "none" if mi_table_2 is None else "block"}
-
-        # filters
-        filters_1 = dh.generate_filters(
-            df=table_1,
-            prefix="table-1",
-            exclude_cols=["vals", "constant"],
-            mult_table=mults_1,
-        ).get("filters")
-        filters_2 = dh.generate_filters(
-            df=table_2,
-            prefix="table-2",
-            exclude_cols=["vals", "constant"],
-            mult_table=mults_2,
-        ).get("filters")
-    else:
-        return (*no_upate_tuple, *warning_tuple, trigger_value)
-
-    return (
-        table1_id,
-        table2_id,
-        table_1.to_dict("records"),
-        table_2.to_dict("records"),
-        mults_1.to_dict("records"),
-        mults_2.to_dict("records"),
-        table_1_select_period,
-        table_2_select_period,
-        table1_mi_years,
-        table2_mi_years,
-        filters_1,
-        filters_2,
-        mi_1_style,
-        mi_2_style,
-        False,
-        False,
-        trigger_value,
-    )
+    except Exception as e:
+        logger.error(f"Error initializing tables: {e}")
+        return (*no_upate_tuple, True, str(e), dash.no_update)
 
 
 @callback(
@@ -729,10 +735,10 @@ def initialize_tables(
         State("store-table-2-select", "data"),
         State("table-1-mi-years", "value"),
         State("table-2-mi-years", "value"),
-        State({"type": "table-1-str-filter", "index": ALL}, "value"),
-        State({"type": "table-1-num-filter", "index": ALL}, "value"),
-        State({"type": "table-2-str-filter", "index": ALL}, "value"),
-        State({"type": "table-2-num-filter", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "table-1", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "table-1", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "table-2", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "table-2", "index": ALL}, "value"),
     ],
     prevent_initial_call=True,
 )
@@ -763,11 +769,11 @@ def filter_tables_callback(
     # get filters from the callback context for description
     states_info = dh._inputs_flatten_list(callback_context.states_list)
     filters_table_1 = dh._inputs_parse_type(
-        states_info, "table-1-num-filter"
-    ) + dh._inputs_parse_type(states_info, "table-1-str-filter")
+        states_info, "filter-num", prefix="table-1"
+    ) + dh._inputs_parse_type(states_info, "filter-str", prefix="table-1")
     filters_table_2 = dh._inputs_parse_type(
-        states_info, "table-2-num-filter"
-    ) + dh._inputs_parse_type(states_info, "table-2-str-filter")
+        states_info, "filter-num", prefix="table-2"
+    ) + dh._inputs_parse_type(states_info, "filter-str", prefix="table-2")
 
     # filter the datasets
     filtered_table_1, filtered_table_2 = filter_tables(
@@ -980,10 +986,10 @@ def update_graphs_from_slider(issue_age_value, compare_df):
         State("table-2-id", "value"),
         State("table-1-mi-years", "value"),
         State("table-2-mi-years", "value"),
-        State({"type": "table-1-str-filter", "index": ALL}, "value"),
-        State({"type": "table-1-num-filter", "index": ALL}, "value"),
-        State({"type": "table-2-str-filter", "index": ALL}, "value"),
-        State({"type": "table-2-num-filter", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "table-1", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "table-1", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": "table-2", "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": "table-2", "index": ALL}, "value"),
     ],
     prevent_initial_call=True,
 )
@@ -1180,11 +1186,11 @@ def filter_tables(table_1, table_2, mults_1, mults_2, filter_list):
     # callback context
     inputs_info = dh._inputs_flatten_list(filter_list)
     filters_table_1 = dh._inputs_parse_type(
-        inputs_info, "table-1-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-1-str-filter")
+        inputs_info, "filter-num", prefix="table-1"
+    ) + dh._inputs_parse_type(inputs_info, "filter-str", prefix="table-1")
     filters_table_2 = dh._inputs_parse_type(
-        inputs_info, "table-2-num-filter"
-    ) + dh._inputs_parse_type(inputs_info, "table-2-str-filter")
+        inputs_info, "filter-num", prefix="table-2"
+    ) + dh._inputs_parse_type(inputs_info, "filter-str", prefix="table-2")
 
     # filter the datasets
     filtered_table_1 = dh.filter_data(
@@ -1367,91 +1373,3 @@ def get_su_graph(df, select_period, title):
     fig.update_traces(contours_coloring="heatmap", colorscale=colorscale)
 
     return dcc.Graph(figure=fig)
-
-
-@callback(
-    Output({"type": "table-1-collapse", "index": ALL}, "is_open"),
-    Output({"type": "table-1-collapse-button", "index": ALL}, "children"),
-    Input({"type": "table-1-collapse-button", "index": ALL}, "n_clicks"),
-    State({"type": "table-1-collapse", "index": ALL}, "is_open"),
-    State({"type": "table-1-collapse-button", "index": ALL}, "children"),
-    prevent_initial_call=True,
-)
-def toggle_table_1_collapse(n_clicks, is_open, children):
-    """Toggle collapse state of filter checklists for table 1."""
-    if not n_clicks or not any(n_clicks):
-        raise dash.exceptions.PreventUpdate
-
-    # Find which button was clicked
-    ctx = callback_context
-    if not ctx.triggered:
-        return [False] * len(is_open), children
-
-    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    button_idx = eval(button_id)["index"]
-
-    # Update the collapse states and button icons
-    new_is_open = []
-    new_children = []
-
-    for _, (col, is_open_state, child) in enumerate(
-        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
-    ):
-        # Update collapse state
-        new_state = not is_open_state if col == button_idx else is_open_state
-        new_is_open.append(new_state)
-
-        # Update button content
-        label = child[0]["props"]["children"]  # Get the column name
-        new_children.append(
-            [
-                html.Span(label, style={"flex-grow": 1}),
-                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
-            ]
-        )
-
-    return new_is_open, new_children
-
-
-@callback(
-    Output({"type": "table-2-collapse", "index": ALL}, "is_open"),
-    Output({"type": "table-2-collapse-button", "index": ALL}, "children"),
-    Input({"type": "table-2-collapse-button", "index": ALL}, "n_clicks"),
-    State({"type": "table-2-collapse", "index": ALL}, "is_open"),
-    State({"type": "table-2-collapse-button", "index": ALL}, "children"),
-    prevent_initial_call=True,
-)
-def toggle_table_2_collapse(n_clicks, is_open, children):
-    """Toggle collapse state of filter checklists for table 2."""
-    if not n_clicks or not any(n_clicks):
-        raise dash.exceptions.PreventUpdate
-
-    # Find which button was clicked
-    ctx = callback_context
-    if not ctx.triggered:
-        return [False] * len(is_open), children
-
-    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    button_idx = eval(button_id)["index"]
-
-    # Update the collapse states and button icons
-    new_is_open = []
-    new_children = []
-
-    for _, (col, is_open_state, child) in enumerate(
-        zip([x["id"]["index"] for x in ctx.inputs_list[0]], is_open, children)
-    ):
-        # Update collapse state
-        new_state = not is_open_state if col == button_idx else is_open_state
-        new_is_open.append(new_state)
-
-        # Update button content
-        label = child[0]["props"]["children"]  # Get the column name
-        new_children.append(
-            [
-                html.Span(label, style={"flex-grow": 1}),
-                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
-            ]
-        )
-
-    return new_is_open, new_children

@@ -42,6 +42,7 @@ def chart(
     x_bins: int | None = None,
     y_log: bool = False,
     add_line: bool = False,
+    add_total: bool = False,
     agg: str = "sum",
     display: bool = True,
     **kwargs: Any,
@@ -88,6 +89,8 @@ def chart(
         Whether to log the y-axis.
     add_line : bool, optional (default=False)
         Whether to add a line to the chart at y-axis of 1.
+    add_total : bool, optional (default=False)
+        Whether to add a total line to the chart.
     agg : str, optional (default="sum")
         The aggregation to use for the y-axis.
     display : bool, optional (default=True)
@@ -191,6 +194,24 @@ def chart(
 
     # return data if not display
     if not display:
+        if add_total:
+            # convert numeric col to string and then sum rows for total row
+            grouped_data[groupby_cols] = grouped_data[groupby_cols].astype(str)
+            total_row: dict = dict.fromkeys(groupby_cols, "Total")
+            total_row.update(
+                {agg_col: grouped_data[agg_col].sum() for agg_col in agg_cols}
+            )
+            if use_num_and_den and y_axis in ["ratio", "risk"]:
+                if y_axis == "ratio":
+                    total_row[y_axis] = total_row[numerator] / total_row[denominator]
+                else:
+                    average_y_axis = (total_row[numerator] / total_row[denominator]) / (
+                        grouped_data[numerator].sum() / grouped_data[denominator].sum()
+                    )
+                    total_row[y_axis] = average_y_axis
+            grouped_data = pd.concat(
+                [grouped_data, pd.DataFrame([total_row])], ignore_index=True
+            )
         return grouped_data
 
     # Selecting the plot type based on the 'chart_type' parameter
@@ -1086,9 +1107,9 @@ def pdp(
     if secondary:
         logger.info(f"Adding secondary to chart: [{secondary}]")
 
-        for index, line_color_value in enumerate(secondary_df[line_color].unique()):
+        for index, line_color_value in enumerate(pdp_df[line_color].unique()):
             color_index = index % num_colors
-            df_subset = secondary_df[secondary_df[line_color] == line_color_value]
+            df_subset = pdp_df[pdp_df[line_color] == line_color_value]
             fig.add_trace(
                 go.Bar(
                     x=df_subset[x_axis],

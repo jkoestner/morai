@@ -22,6 +22,7 @@
   - [Other Tools](#other-tools)
     - [Jupyter Lab Usage](#jupyter-lab-usage)
     - [Logging](#logging)
+    - [Claude Skills](#claude-skills)
     - [Coverage](#coverage)
 
 ## Overview
@@ -81,7 +82,7 @@ services:
   morai:
     image: dmbymdt/morai:latest
     container_name: morai
-    command: gunicorn -b 0.0.0.0:8001 morai.dashboard.app:server
+    command: gunicorn -b 0.0.0.0:8001 --timeout 180 morai.dashboard.app:server
     restart: unless-stopped
     environment:
       MORAI_FILES_PATH: /code/morai/files # setting the files path for morai
@@ -128,6 +129,16 @@ If wanting to get more detail in output of messages the logging can increased
 from morai.utils import custom_logger
 custom_logger.set_log_level("DEBUG")
 ```
+
+### Claude Skills
+
+Project-scoped Claude Code skills live in `.claude/skills/`:
+
+- **`model-review`** — A/E review for any fitted mortality model (GLM, GAM, CatBoost, Neural)
+- **`nn-review`** — neural-network-specific diagnostics (SHAP, embeddings, loss curves)
+- **`mortality-table-build`** — build a deliverable rate table from a fitted model
+
+Shared actuarial reference material is in `.claude/skills/_shared/`.
 
 ### Coverage
 

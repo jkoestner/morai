@@ -1,9 +1,8 @@
 """
 Credibility measures.
 
-Todo:
-----
-- add in more resources including buhlmann credibility
+Resources:
+----------
 - CREDIBILITY - HOWARD C. MAHLER AND CURTIS GARY DEAN
    - https://www.ressources-actuarielles.net/EXT/ISFA/1226.nsf/0/bf4517bb19eee4cec125704600554ce6/$FILE/chapter8.pdf
 - pymc
@@ -26,6 +25,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pandas as pd
 from scipy import stats
 
 from morai.utils import custom_logger
@@ -44,7 +44,7 @@ def limited_fluctuation(
     sd: float = 1,
     u: float = 1,
     groupby_cols: list[str] | None = None,
-) -> pd.DataFrame:
+) -> pd.Series:
     """
     Determine the credibility of a measure based on limited fluctuation.
 
@@ -99,8 +99,8 @@ def limited_fluctuation(
 
     Returns
     -------
-    df : pd.DataFrame
-        DataFrame with additional columns for credibility measures.
+    credibility_lf : pd.Series
+        credibility of the measure based on limited fluctuation.
 
     """
     # get the number of observations for full credibility
@@ -109,7 +109,6 @@ def limited_fluctuation(
     logger.info(
         f"Credibility calculated using 'limited fluctuation' on '{measure}'.\n"
         f"Dataframe does not need to be seriatim.\n"
-        f"Created column 'credibility_lf'.\n"
         f"Full credibility threshold: {full_credibility:,.1f}\n"
         f"Probability measure within range: {p:,.1f}\n"
         f"Range +/-: {r:,.1f}\n"
@@ -117,12 +116,15 @@ def limited_fluctuation(
         f"Mean: {u:,.1f}"
     )
     if groupby_cols:
-        df = df.groupby(groupby_cols, observed=True)[[measure]].sum().reset_index()
+        measure_sum = df.groupby(groupby_cols, observed=True)[measure].transform("sum")
+    else:
+        measure_sum = df[measure]
 
     # calculate the credibility and cap at 1
-    df["credibility_lf"] = ((df[measure] / full_credibility) ** 0.5).clip(upper=1)
+    credibility_lf = ((measure_sum / full_credibility) ** 0.5).clip(upper=1)
+    credibility_lf = credibility_lf.rename("credibility_lf")
 
-    return df
+    return credibility_lf
 
 
 def asymptotic(
@@ -130,7 +132,7 @@ def asymptotic(
     measure: str,
     k: float = 270,
     groupby_cols: list[str] | None = None,
-) -> pd.DataFrame:
+) -> pd.Series:
     """
     Determine the credibility of a measure using asymptotic credibility.
 
@@ -172,31 +174,34 @@ def asymptotic(
 
     Returns
     -------
-    df : pd.DataFrame
-        DataFrame with additional columns for credibility measures.
+    credibility_as : pd.Series
+        credibility of the measure based on asymptotic credibility.
 
     """
     # calculate the credibility
     logger.info(
         f"Credibility calculated using 'asymptotic' on '{measure}'.\n"
         f"Dataframe does not need to be seriatim.\n"
-        f"Created column 'credibility_as'.\n"
         f"Constant k: {k}."
     )
     if groupby_cols:
-        df = df.groupby(groupby_cols, observed=True)[[measure]].sum().reset_index()
-    df["credibility_as"] = df[measure] / (df[measure] + k)
+        measure_sum = df.groupby(groupby_cols, observed=True)[measure].transform("sum")
+    else:
+        measure_sum = df[measure]
 
-    return df
+    credibility_as = measure_sum / (measure_sum + k)
+    credibility_as = credibility_as.rename("credibility_as")
+
+    return credibility_as
 
 
 def vm20_buhlmann(
-    df: pd.DataFrame,
+    seriatim_df: pd.DataFrame,
     amount_col: str,
     rate_col: str,
     exposure_col: str | None = None,
     groupby_cols: list[str] | None = None,
-) -> pd.DataFrame:
+) -> pd.Series:
     """
     Determine the credibility of a measure using the SOA VM-20 method.
 
@@ -235,7 +240,7 @@ def vm20_buhlmann(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    seriatim_df : pd.DataFrame
         DataFrame with the data.
     amount_col : str
         Column name of the 'amount' field.
@@ -248,60 +253,58 @@ def vm20_buhlmann(
 
     Returns
     -------
-    df : pd.DataFrame
-        DataFrame with additional columns for credibility measures.
+    credibility_vm20 : pd.Series
+        Credibility of the measure based on the SOA VM-20 method.
 
     """
     logger.info(
-        "Credibility calculated using 'SOA VM-20'.\n"
-        "Created column 'credibility_vm20'.\n"
-        "Dataframe should be seriatim.\n"
+        "Credibility calculated using 'SOA VM-20'.\nDataframe should be seriatim.\n"
     )
-    vm20_df = df.copy()
-    # check if the columns exist
-    if groupby_cols is None:
-        vm20_df["aggregate"] = "all"
-        groupby_cols = ["aggregate"]
 
-    missing_cols = [
-        col
-        for col in [amount_col, rate_col, *groupby_cols]
-        if col not in vm20_df.columns
-    ]
+    # validate required columns
+    required = [amount_col, rate_col]
+    if exposure_col is not None:
+        required.append(exposure_col)
+    if groupby_cols:
+        required.extend(groupby_cols)
+    missing_cols = [col for col in required if col not in seriatim_df.columns]
     if missing_cols:
         raise ValueError(
             f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
         )
 
     # parameters
+    amount = seriatim_df[amount_col]
+    rate = seriatim_df[rate_col]
     if exposure_col is None:
-        logger.warning(
-            "Using approximation for credibility, due to the exposure "
-            "string was not provided."
-        )
-        vm20_df["exposure"] = 1
+        logger.warning("Exposure column was not provided; assuming exposure = 1.")
+        exposure = 1
+    else:
+        exposure = seriatim_df[exposure_col]
 
     # calculate the vm20 parameters
-    vm20_df["a"] = vm20_df["amount"] * vm20_df["exposure"] * vm20_df["rate"]
-    vm20_df["b"] = vm20_df["amount"] ** 2 * vm20_df["exposure"] * vm20_df["rate"]
-    vm20_df["c"] = (
-        vm20_df["amount"] ** 2 * vm20_df["exposure"] ** 2 * vm20_df["rate"] ** 2
-    )
+    a = amount * exposure * rate
+    b = amount**2 * exposure * rate
+    c = amount**2 * exposure**2 * rate**2
 
     # group by and sum the vm20 parameters
-    vm20_df = (
-        vm20_df.groupby(groupby_cols, observed=True)[["a", "b", "c"]]
-        .sum()
-        .reset_index()
-    )
+    if groupby_cols:
+        group_keys = [seriatim_df[col] for col in groupby_cols]
+        a_sum = a.groupby(group_keys, observed=True).transform("sum")
+        b_sum = b.groupby(group_keys, observed=True).transform("sum")
+        c_sum = c.groupby(group_keys, observed=True).transform("sum")
+    else:
+        a_sum = pd.Series(a.sum(), index=seriatim_df.index)
+        b_sum = pd.Series(b.sum(), index=seriatim_df.index)
+        c_sum = pd.Series(c.sum(), index=seriatim_df.index)
 
     # calculate the credibility
-    vm20_df["credibility_vm20"] = vm20_df["a"] / (
-        vm20_df["a"]
-        + ((1.090 * vm20_df["b"]) - (1.204 * vm20_df["c"])) / (0.019604 * vm20_df["a"])
+    credibility_vm20 = a_sum / (
+        a_sum + ((1.090 * b_sum) - (1.204 * c_sum)) / (0.019604 * a_sum)
     )
+    credibility_vm20 = credibility_vm20.rename("credibility_vm20")
 
-    return vm20_df
+    return credibility_vm20
 
 
 def vm20_buhlmann_approx(
@@ -310,7 +313,7 @@ def vm20_buhlmann_approx(
     b_col: str,
     c_col: str,
     groupby_cols: list[str] | None = None,
-) -> pd.DataFrame:
+) -> pd.Series:
     """
     Determine the credibility of a measure using an SOA VM-20 approximation.
 
@@ -354,50 +357,42 @@ def vm20_buhlmann_approx(
 
     Returns
     -------
-    df : pd.DataFrame
-        DataFrame with additional columns for credibility measures.
+    credibility_vm20_approx : pd.Series
+        Series with credibility values.
 
     """
     logger.info(
         "Credibility calculated using 'SOA VM-20 approximation'.\n"
-        "Created column 'credibility_vm20_approx'.\n"
         "Dataframe does not need to be seriatim.\n"
     )
-    vm20_df = df.copy()
-    # check if the columns exist
-    if groupby_cols is None:
-        vm20_df["aggregate"] = "all"
-        groupby_cols = ["aggregate"]
-
-    missing_cols = [
-        col
-        for col in [a_col, b_col, c_col, *groupby_cols]
-        if col not in vm20_df.columns
-    ]
+    # validate required columns
+    required = [a_col, b_col, c_col]
+    if groupby_cols:
+        required.extend(groupby_cols)
+    missing_cols = [col for col in required if col not in df.columns]
     if missing_cols:
         raise ValueError(
             f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
         )
 
-    # calculate the vm20 parameters
-    vm20_df["a"] = vm20_df[a_col]
-    vm20_df["b"] = vm20_df[b_col]
-    vm20_df["c"] = vm20_df[c_col]
-
     # group by and sum the vm20 parameters
-    vm20_df = (
-        vm20_df.groupby(groupby_cols, observed=True)[["a", "b", "c"]]
-        .sum()
-        .reset_index()
-    )
+    if groupby_cols:
+        grouped = df.groupby(groupby_cols, observed=True)
+        a_sum = grouped[a_col].transform("sum")
+        b_sum = grouped[b_col].transform("sum")
+        c_sum = grouped[c_col].transform("sum")
+    else:
+        a_sum = pd.Series(df[a_col].sum(), index=df.index)
+        b_sum = pd.Series(df[b_col].sum(), index=df.index)
+        c_sum = pd.Series(df[c_col].sum(), index=df.index)
 
     # calculate the credibility
-    vm20_df["credibility_vm20_approx"] = vm20_df["a"] / (
-        vm20_df["a"]
-        + ((1.090 * vm20_df["b"]) - (1.204 * vm20_df["c"])) / (0.019604 * vm20_df["a"])
+    credibility_vm20_approx = a_sum / (
+        a_sum + ((1.090 * b_sum) - (1.204 * c_sum)) / (0.019604 * a_sum)
     )
+    credibility_vm20_approx = credibility_vm20_approx.rename("credibility_vm20_approx")
 
-    return vm20_df
+    return credibility_vm20_approx
 
 
 def buhlmann(
@@ -446,19 +441,23 @@ def buhlmann(
 
     Returns
     -------
-    df : pd.DataFrame
-        DataFrame with additional columns for credibility measures.
+    df : pd.Series
+        Credibility of the measure based on Bühlmann credibility.
 
     """
     # calculate the credibility
     logger.info(
         f"Credibility calculated using 'bühlmann' on '{measure}'.\n"
         f"Dataframe does not need to be seriatim.\n"
-        f"Created column 'credibility_bu'.\n"
         f"Constant k: {k}."
     )
-    if groupby_cols:
-        df = df.groupby(groupby_cols, observed=True)[[measure]].sum().reset_index()
-    df["credibility_bu"] = df[measure] / (df[measure] + k)
 
-    return df
+    if groupby_cols:
+        measure_sum = df.groupby(groupby_cols, observed=True)[measure].transform("sum")
+    else:
+        measure_sum = df[measure]
+
+    credibility_bu = measure_sum / (measure_sum + k)
+    credibility_bu = credibility_bu.rename("credibility_bu")
+
+    return credibility_bu

@@ -12,8 +12,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import polars as pl
+from scipy import stats
 
 from morai.utils import custom_logger
+from morai.utils.custom_logger import suppress_logs
 
 logger = custom_logger.setup_logging(__name__)
 
@@ -29,6 +31,7 @@ def create_study(
     exposure_method: str = "annual",
     calendar_exposure: bool = True,
     get_actuals: bool = True,
+    amount_col: str | None = None,
 ) -> pd.DataFrame:
     """
     Create an experience study including exposures and actuals.
@@ -54,7 +57,8 @@ def create_study(
         "quarterly", "monthly", "weekly", or "daily"
     mapping : dict, optional default=None
         Mapping for the column names if they differ from the expected column names
-        (termination_date, termination_reason, issue_date, bos_date, eos_date).
+        (termination_date, termination_reason, issue_date, bos_date, eos_date)
+        (exposure_cnt, actuals_cnt).
     get_exposures : bool, optional default=True
         Wether to add exposures to the study
     exposure_method : str, optional default="annual"
@@ -63,6 +67,8 @@ def create_study(
         Whether to use calendar year days (365/366) or policy year days as denominator.
     get_actuals : bool, optional default=True
         Wether to add actuals to the study
+    amount_col : str, optional default=None
+        Name of the amount column to use in exposure and actual calculations
 
     Returns
     -------
@@ -78,6 +84,24 @@ def create_study(
             on/after the study period (before, on_after)
 
     """
+    # default column names
+    actuals_cnt_col = "actual_cnt"
+    exposures_cnt_col = "exposure_cnt"
+    actuals_amt_col = "actual_amt"
+    exposures_amt_col = "exposure_amt"
+
+    # validate
+    if amount_col and amount_col not in df.columns:
+        raise ValueError(f"`{amount_col}` column not in the DataFrame.")
+
+    # handle mapping
+    if mapping:
+        actuals_cnt_col = mapping.get("actual_cnt", actuals_cnt_col)
+        exposures_cnt_col = mapping.get("exposure_cnt", exposures_cnt_col)
+        actuals_amt_col = mapping.get("actual_amt", actuals_amt_col)
+        exposures_amt_col = mapping.get("exposure_amt", exposures_amt_col)
+
+    # format the study df
     study_df = format_study_df(
         df=df,
         bos=bos,
@@ -87,17 +111,23 @@ def create_study(
         mapping=mapping,
     )
     if get_exposures:
-        study_df["exposure"] = calc_exposures(
+        study_df[exposures_cnt_col] = calc_exposures(
             study_df=study_df,
             study_decrement=study_decrement,
             exposure_method=exposure_method,
             calendar_exposure=calendar_exposure,
             mapping=mapping,
         )
+        if amount_col:
+            study_df[exposures_amt_col] = (
+                study_df[exposures_cnt_col] * study_df[amount_col]
+            )
     if get_actuals:
-        study_df["actuals"] = calc_actuals(
+        study_df[actuals_cnt_col] = calc_actuals(
             study_df=study_df, study_decrement=study_decrement, mapping=mapping
         )
+        if amount_col:
+            study_df[actuals_amt_col] = study_df[actuals_cnt_col] * study_df[amount_col]
 
     return study_df
 
@@ -317,9 +347,11 @@ def calc_exposures(
     - annual: before gets proportional days, after gets a full year (Balducci)
     - distributed: before gets proportional days, after gets proportional days (UDD)
     - exact: both before and after get exact days to decrement (constant force)
-      - mx ≈ ux
-      - qx = 1 - exp(-ux)
-      - ux = -log(1-ux)
+      - A central rate (mx) can be used to approximate initial rate (qx) using
+      the average force of mortality (ux).
+        - mx ≈ ux
+        - qx = 1 - exp(-ux)
+        - ux = -log(1-qx)
 
     Expects the DataFrame to already have these columns:
     - termination_date, termination_reason, issue_date
@@ -681,70 +713,257 @@ def calc_actuals(
     return actuals
 
 
-def _get_study_periods(
-    bos_date: pd.Timestamp,
-    eos_date: pd.Timestamp,
-    study_frequency: str = "annually",
-) -> list[Any]:
+def calc_variance(
+    seriatim_df: pd.DataFrame,
+    rate_col: str,
+    exposure_col: str,
+    amount_col: str | None = None,
+) -> pd.Series:
     """
-    Generate study periods between bos and eos based on frequency.
+    Calculate the variance of a binomial distribution.
 
-    Uses pandas date_range to generate the start dates of the periods and
-    then calculates the end dates using an offset.
+    variance = amount^2 * exposure * rate * (1 - rate)
+
+    Notes
+    -----
+    Needs to be based on seriatim data and not aggregated data.
+
+    Reference
+    ---------
+    https://www.soa.org/resources/tables-calcs-tools/table-development/
+    page 59
 
     Parameters
     ----------
-    bos_date : pd.Timestamp
-        Beginning of study date.
-    eos_date : pd.Timestamp
-        End of study date.
-    study_frequency : str, optional
-        Frequency of study periods. Default is "annually".
+    seriatim_df : pd.DataFrame
+        DataFrame with the data.
+    rate_col : str
+        Column name of the rate.
+    exposure_col : str
+        Column name of the exposure, should be between 0 and 1.
+    amount_col : str, optional
+        Column name of the face amount.
 
     Returns
     -------
-    periods : list
-        list of (bos, eos) tuples for each period.
+    variance : pd.Series
+        Series with the variance values.
 
     """
-    freq_map = {
-        "annually": "YS",
-        "semi-annually": "6MS",
-        "quarterly": "QS",
-        "monthly": "MS",
-        "weekly": "W-MON",
-        "daily": "D",
-    }
-
-    date_offset_kwargs = {
-        "annually": {"years": 1},
-        "semi-annually": {"months": 6},
-        "quarterly": {"months": 3},
-        "monthly": {"months": 1},
-        "weekly": {"weeks": 1},
-    }
-
-    if study_frequency not in freq_map:
+    # validations
+    # check the columns exist
+    required_cols = [rate_col, exposure_col]
+    if amount_col is not None:
+        required_cols.append(amount_col)
+    missing_cols = [col for col in required_cols if col not in seriatim_df.columns]
+    if missing_cols:
         raise ValueError(
-            f"Unsupported frequency: {study_frequency}, "
-            f"supported frequencies are: {', '.join(freq_map.keys())}."
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
+        )
+    # exposure should be between 0 and 1
+    if not ((seriatim_df[exposure_col] >= 0) & (seriatim_df[exposure_col] <= 1)).all():
+        logger.warning(f"Exposure column '{exposure_col}' has values outside of [0, 1]")
+
+    # calculate the variance
+    amount = 1 if amount_col is None else seriatim_df[amount_col]
+    variance = (
+        amount**2
+        * seriatim_df[exposure_col]
+        * seriatim_df[rate_col]
+        * (1 - seriatim_df[rate_col])
+    )
+
+    return variance
+
+
+def calc_confidence_intervals(
+    summary_df: pd.DataFrame,
+    estimate_col: str,
+    variance_col: str,
+    confidence_level: float = 0.95,
+) -> tuple[pd.Series, pd.Series]:
+    """
+    Calculate the confidence intervals for a rate based on the variance.
+
+    confidence_interval = z_score * sqrt(variance)
+
+    Notes
+    -----
+    Needs to be based on aggregated data and not seriatim data.
+
+    Parameters
+    ----------
+    summary_df : pd.DataFrame
+        DataFrame with the data.
+    estimate_col : str
+        Column name of the estimate, for example the rate.
+    variance_col : str
+        Column name of the variance.
+    confidence_level : float, optional
+        Confidence level for the intervals, default is 0.95.
+
+    Returns
+    -------
+    lower_bound, upper_bound : pd.Series
+        Series with the lower and upper bounds of the confidence intervals.
+
+    """
+    # check the column exists
+    if variance_col not in summary_df.columns:
+        raise ValueError(f"Column {variance_col} not found in DataFrame.")
+
+    # calculate the confidence intervals
+    z_score = stats.norm.ppf(1 - (1 - confidence_level) / 2)
+    logger.info(
+        f"Confidence Intervals - z-score: {z_score:.2f}, "
+        f"confidence level: {confidence_level:.0%}"
+    )
+    margin_of_error = z_score * np.sqrt(summary_df[variance_col])
+    lower_bound = summary_df[estimate_col] - margin_of_error
+    upper_bound = summary_df[estimate_col] + margin_of_error
+
+    return lower_bound, upper_bound
+
+
+def summarize_study(
+    study_df: pd.DataFrame,
+    groupby_cols: list,
+    expecteds: list,
+    suffixes: list,
+    ratios: list,
+    ci: bool = False,
+    mapping: dict | None = None,
+) -> pd.DataFrame:
+    """
+    Summarize the study DataFrame.
+
+    It is expected that there will be a naming convention for
+    actuals, exposures, expecteds, and variances.
+      - naming convention:
+        - actuals_<suffix>
+        - exposures_<suffix>
+        - expected_<version>_<suffix>
+        - variance_<version>_<suffix>
+
+    Parameters
+    ----------
+    study_df : pd.DataFrame
+        DataFrame with the data.
+    groupby_cols : list
+        List of columns to group by.
+    expecteds : list
+        List of expected versions to calculate rates for.
+    suffixes : list
+        List of suffixes for the actuals and exposures columns
+        for example ["cnt", "amt"]
+    ratios : list
+        List of ratios to calculate
+        for example ["ae", "ao"]
+    ci : bool, optional default=True
+        Whether to calculate confidence intervals for the rates.
+    mapping : dict, optional default=None
+        Mapping for the column names if they differ from the expected column names.
+
+    Returns
+    -------
+    summary_df : pd.DataFrame
+        DataFrame with the summarized data.
+
+    """
+    # default column names
+    actuals_prefix = "actual"
+    exposures_prefix = "exposure"
+    expecteds_prefix = "expected"
+    variance_prefix = "variance"
+
+    # handle mapping
+    if mapping:
+        actuals_prefix = mapping.get("actuals_prefix", actuals_prefix)
+        exposures_prefix = mapping.get("exposures_prefix", exposures_prefix)
+        expecteds_prefix = mapping.get("expecteds_prefix", expecteds_prefix)
+        variance_prefix = mapping.get("variance_prefix", variance_prefix)
+
+    # gather columns
+    actual_cols = [f"{actuals_prefix}_{suffix}" for suffix in suffixes]
+    exposure_cols = [f"{exposures_prefix}_{suffix}" for suffix in suffixes]
+    expected_cols = [
+        f"{expecteds_prefix}_{version}_{suffix}"
+        for version in expecteds
+        for suffix in suffixes
+    ]
+    variance_cols = [
+        f"{variance_prefix}_{version}_{suffix}"
+        for version in expecteds
+        for suffix in suffixes
+    ]
+
+    # validations
+    # columns exist
+    required_cols = actual_cols + exposure_cols + expected_cols
+    if ci and "ae" in ratios:
+        required_cols += variance_cols
+    missing_cols = [col for col in required_cols if col not in study_df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame. "
+            f"Please check the column names and the mapping provided."
         )
 
-    if study_frequency == "daily":
-        return [(d, d) for d in pd.date_range(bos_date, eos_date, freq="D")]
-
-    starts = pd.date_range(bos_date, eos_date, freq=freq_map[study_frequency])
-    periods = []
-    for start in starts:
-        end = min(
-            start
-            + pd.tseries.offsets.DateOffset(**date_offset_kwargs[study_frequency])
-            - pd.Timedelta(days=1),
-            eos_date,
+    # ratios are valid
+    invalid_ratios = [ratio for ratio in ratios if ratio not in ["ae", "ao"]]
+    if invalid_ratios:
+        raise ValueError(
+            f"Invalid ratios: {', '.join(invalid_ratios)}. "
+            f"Valid options are 'ae' and 'ao'."
         )
-        periods.append((start, end))
 
-    return periods
+    # summarize data
+    logger.info("creating summarized study")
+    logger.info(f"summing: `{', '.join(required_cols)}`")
+    logger.info(f"calculating ratios: `{', '.join(ratios)}`")
+    summary_df = (
+        study_df.groupby(groupby_cols, observed=True, sort=False)
+        .agg(dict.fromkeys(required_cols, "sum"))
+        .reset_index()
+    )
+
+    # calculate ratios
+    for ratio in ratios:
+        for version in expecteds:
+            for suffix in suffixes:
+                expected_col = f"{expecteds_prefix}_{version}_{suffix}"
+                actual_col = f"{actuals_prefix}_{suffix}"
+                exposure_col = f"{exposures_prefix}_{suffix}"
+                if ratio == "ae":
+                    ratio_col = f"{ratio}_{version}_{suffix}"
+                    summary_df[ratio_col] = (
+                        summary_df[actual_col] / summary_df[expected_col]
+                    )
+                    if ci:
+                        variance_col = f"{variance_prefix}_{version}_{suffix}"
+                        lower_col = f"ci_lower_ae_{version}_{suffix}"
+                        upper_col = f"ci_upper_ae_{version}_{suffix}"
+
+                        expected_lower, expected_upper = suppress_logs(
+                            calc_confidence_intervals
+                        )(
+                            summary_df=summary_df,
+                            estimate_col=expected_col,
+                            variance_col=variance_col,
+                        )
+                        summary_df[lower_col] = (
+                            expected_lower / summary_df[expected_col]
+                        )
+                        summary_df[upper_col] = (
+                            expected_upper / summary_df[expected_col]
+                        )
+                elif ratio == "ao":
+                    ratio_col = f"{ratio}_{suffix}"
+                    summary_df[ratio_col] = (
+                        summary_df[actual_col] / summary_df[exposure_col]
+                    )
+
+    return summary_df
 
 
 def normalize(
@@ -1205,59 +1424,8 @@ def calc_relative_risk(
     return df
 
 
-def calc_variance(
-    df: pd.DataFrame,
-    rate_col: str,
-    exposure_col: str,
-    amount_col: str | None = None,
-) -> pd.Series:
-    """
-    Calculate the variance of a binomial distribution.
-
-    variance = amount^2 * exposure * rate * (1 - rate)
-
-    Notes
-    -----
-    Needs to be based on seriatim data and not aggregated data.
-
-    Reference
-    ---------
-    https://www.soa.org/resources/tables-calcs-tools/table-development/
-    page 59
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with the data.
-    rate_col : str
-        Column name of the rate.
-    exposure_col : str
-        Column name of the exposure.
-    amount_col : str, optional
-        Column name of the face amount.
-
-    Returns
-    -------
-    variance : pd.Series
-        Series with the variance values.
-
-    """
-    # check the columns exist
-    missing_cols = [col for col in [rate_col, exposure_col] if col not in df.columns]
-    if missing_cols:
-        raise ValueError(
-            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
-        )
-    amount = 1 if amount_col is None else df[amount_col]
-
-    # calculate the variance
-    variance = amount**2 * df[exposure_col] * df[rate_col] * (1 - df[rate_col])
-
-    return variance
-
-
 def calc_moments(
-    df: pd.DataFrame,
+    seriatim_df: pd.DataFrame,
     rate_col: str,
     exposure_col: str,
     amount_col: str | None = None,
@@ -1291,7 +1459,7 @@ def calc_moments(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    seriatim_df : pd.DataFrame
         DataFrame with the data.
     rate_col : str
         Column name of the rate.
@@ -1310,7 +1478,9 @@ def calc_moments(
 
     """
     # check the columns exist
-    missing_cols = [col for col in [rate_col, exposure_col] if col not in df.columns]
+    missing_cols = [
+        col for col in [rate_col, exposure_col] if col not in seriatim_df.columns
+    ]
     if missing_cols:
         raise ValueError(
             f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
@@ -1320,28 +1490,28 @@ def calc_moments(
     else:
         sffx = f"_{sffx}"
         logger.info(f"Adding the label: '{sffx}' to the moment columns.")
-    amount = 1 if amount_col is None else df[amount_col]
+    amount = 1 if amount_col is None else seriatim_df[amount_col]
 
     # calculate the moments
     logger.info(
         "Calculating moments for the binomial distribution, need to be seriatim data."
     )
-    moment_1 = amount * df[exposure_col] * df[rate_col]
-    moment_2_p1 = amount**2 * df[exposure_col] * df[rate_col]
-    moment_2_p2 = amount**2 * df[exposure_col] * df[rate_col] ** 2
-    moment_3_p1 = amount**3 * df[exposure_col] * df[rate_col]
-    moment_3_p2 = amount**3 * df[exposure_col] * df[rate_col] ** 2
-    moment_3_p3 = amount**3 * df[exposure_col] * df[rate_col] ** 3
+    moment_1 = amount * seriatim_df[exposure_col] * seriatim_df[rate_col]
+    moment_2_p1 = amount**2 * seriatim_df[exposure_col] * seriatim_df[rate_col]
+    moment_2_p2 = amount**2 * seriatim_df[exposure_col] * seriatim_df[rate_col] ** 2
+    moment_3_p1 = amount**3 * seriatim_df[exposure_col] * seriatim_df[rate_col]
+    moment_3_p2 = amount**3 * seriatim_df[exposure_col] * seriatim_df[rate_col] ** 2
+    moment_3_p3 = amount**3 * seriatim_df[exposure_col] * seriatim_df[rate_col] ** 3
 
     # add the moments to the dataframe
-    df[f"moment{sffx}_1"] = moment_1
-    df[f"moment{sffx}_2_p1"] = moment_2_p1
-    df[f"moment{sffx}_2_p2"] = moment_2_p2
-    df[f"moment{sffx}_3_p1"] = moment_3_p1
-    df[f"moment{sffx}_3_p2"] = moment_3_p2
-    df[f"moment{sffx}_3_p3"] = moment_3_p3
+    seriatim_df[f"moment{sffx}_1"] = moment_1
+    seriatim_df[f"moment{sffx}_2_p1"] = moment_2_p1
+    seriatim_df[f"moment{sffx}_2_p2"] = moment_2_p2
+    seriatim_df[f"moment{sffx}_3_p1"] = moment_3_p1
+    seriatim_df[f"moment{sffx}_3_p2"] = moment_3_p2
+    seriatim_df[f"moment{sffx}_3_p3"] = moment_3_p3
 
-    return df
+    return seriatim_df
 
 
 def calc_qx_exp_ae(
@@ -1387,3 +1557,69 @@ def calc_qx_exp_ae(
         ),
     )
     return model_data
+
+
+def _get_study_periods(
+    bos_date: pd.Timestamp,
+    eos_date: pd.Timestamp,
+    study_frequency: str = "annually",
+) -> list[Any]:
+    """
+    Generate study periods between bos and eos based on frequency.
+
+    Uses pandas date_range to generate the start dates of the periods and
+    then calculates the end dates using an offset.
+
+    Parameters
+    ----------
+    bos_date : pd.Timestamp
+        Beginning of study date.
+    eos_date : pd.Timestamp
+        End of study date.
+    study_frequency : str, optional
+        Frequency of study periods. Default is "annually".
+
+    Returns
+    -------
+    periods : list
+        list of (bos, eos) tuples for each period.
+
+    """
+    freq_map = {
+        "annually": "YS",
+        "semi-annually": "6MS",
+        "quarterly": "QS",
+        "monthly": "MS",
+        "weekly": "W-MON",
+        "daily": "D",
+    }
+
+    date_offset_kwargs = {
+        "annually": {"years": 1},
+        "semi-annually": {"months": 6},
+        "quarterly": {"months": 3},
+        "monthly": {"months": 1},
+        "weekly": {"weeks": 1},
+    }
+
+    if study_frequency not in freq_map:
+        raise ValueError(
+            f"Unsupported frequency: {study_frequency}, "
+            f"supported frequencies are: {', '.join(freq_map.keys())}."
+        )
+
+    if study_frequency == "daily":
+        return [(d, d) for d in pd.date_range(bos_date, eos_date, freq="D")]
+
+    starts = pd.date_range(bos_date, eos_date, freq=freq_map[study_frequency])
+    periods = []
+    for start in starts:
+        end = min(
+            start
+            + pd.tseries.offsets.DateOffset(**date_offset_kwargs[study_frequency])
+            - pd.Timedelta(days=1),
+            eos_date,
+        )
+        periods.append((start, end))
+
+    return periods

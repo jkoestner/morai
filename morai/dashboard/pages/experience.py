@@ -23,7 +23,7 @@ from dash_extensions.enrich import (
     html,
 )
 
-from morai.dashboard.components import dash_formats
+from morai.dashboard.components import common_build, dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters, experience
 from morai.forecast import metrics
@@ -35,6 +35,8 @@ pl.enable_string_cache()
 
 
 dash.register_page(__name__, path="/experience", title="morai - Experience", order=2)
+
+FILTER_PREFIX = "experience"
 
 #   _                            _
 #  | |    __ _ _   _  ___  _   _| |_
@@ -55,6 +57,15 @@ def layout():
             _build_cards_row(),
             _build_main_content(),
             dcc.Download(id="download-dataframe-csv"),
+            dbc.Toast(
+                id="experience-toast",
+                header="Error",
+                is_open=False,
+                dismissable=True,
+                icon="danger",
+                className="toast",
+                style={"position": "fixed", "top": 10, "right": 10, "zIndex": 1050},
+            ),
         ],
         className="container-fluid px-4 py-3",
     )
@@ -140,199 +151,20 @@ def _build_main_content():
         [
             # Selectors column (left)
             _build_selectors_column(),
-            # Chart column (middle)
+            # chart column (middle)
             dbc.Col(
-                [
-                    # Filter toggle button
-                    dbc.Button(
-                        [
-                            html.I(className="fas fa-filter me-2"),
-                            "Show Filters",
-                        ],
-                        id="open-offcanvas-button",
-                        className="mb-3",
-                        color="primary",
+                common_build._build_tabbed_content(
+                    tabs=[
+                        common_build.TabSpec(label="Chart", tab_id="chart"),
+                        common_build.TabSpec(label="Table", tab_id="table"),
+                        common_build.TabSpec(label="Rank", tab_id="rank"),
+                    ],
+                    prefix=FILTER_PREFIX,
+                    filter_panel=common_build.FilterPanel(
+                        children=_build_filter_children()
                     ),
-                    # Tabs and content
-                    dbc.Tabs(
-                        [
-                            dbc.Tab(
-                                children=[],
-                                label="Chart",
-                                tab_id="tab-chart",
-                                label_class_name="fw-bold",
-                                active_label_class_name="text-primary",
-                            ),
-                            dbc.Tab(
-                                children=[],
-                                label="Table",
-                                tab_id="tab-table",
-                                label_class_name="fw-bold",
-                                active_label_class_name="text-primary",
-                            ),
-                            dbc.Tab(
-                                children=[],
-                                label="Rank",
-                                tab_id="tab-rank",
-                                label_class_name="fw-bold",
-                                active_label_class_name="text-primary",
-                            ),
-                        ],
-                        id="tabs",
-                        active_tab="tab-chart",
-                        className="mb-3",
-                    ),
-                    html.Div(
-                        [
-                            dcc.Loading(
-                                id="loading-tab-content",
-                                custom_spinner=dmc.Skeleton(
-                                    visible=True, h="100%", w="100%"
-                                ),
-                                children=html.Div(
-                                    id="tab-content",
-                                    className="bg-white rounded-3 shadow-sm p-4 border border-light",
-                                ),
-                            ),
-                            dcc.Loading(
-                                id="loading-chart-secondary",
-                                custom_spinner=dmc.Skeleton(
-                                    visible=True, h="100%", w="100%"
-                                ),
-                                children=html.Div(
-                                    id="chart-secondary",
-                                    className="mt-4 bg-white rounded-3 shadow-sm p-4 border border-light",
-                                ),
-                            ),
-                        ],
-                        className="h-100",
-                    ),
-                    # Offcanvas for filters
-                    dbc.Offcanvas(
-                        [
-                            html.H4(
-                                [
-                                    html.I(className="fas fa-filter me-2"),
-                                    "Data Filters",
-                                ],
-                                className="mb-3",
-                            ),
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader(
-                                        html.H6(
-                                            [
-                                                html.I(
-                                                    className="fas fa-bookmark me-2"
-                                                ),
-                                                "Bookmarks",
-                                            ],
-                                            className="mb-0",
-                                        )
-                                    ),
-                                    dbc.CardBody(
-                                        [
-                                            dbc.Row(
-                                                [
-                                                    dbc.Col(
-                                                        dbc.Input(
-                                                            id="bookmark-name-input",
-                                                            placeholder="Bookmark name...",
-                                                            size="sm",
-                                                        ),
-                                                        width=9,
-                                                    ),
-                                                    dbc.Col(
-                                                        dbc.Button(
-                                                            "Save",
-                                                            id="save-bookmark-button",
-                                                            color="success",
-                                                            size="sm",
-                                                            n_clicks=0,
-                                                            className="w-100",
-                                                        ),
-                                                        width=3,
-                                                    ),
-                                                ],
-                                                className="mb-2 g-1",
-                                            ),
-                                            dcc.Dropdown(
-                                                id="bookmark-dropdown",
-                                                placeholder="Select bookmark...",
-                                                className="mb-2",
-                                            ),
-                                            dbc.Row(
-                                                [
-                                                    dbc.Col(
-                                                        dbc.Button(
-                                                            [
-                                                                html.I(
-                                                                    className="fas fa-upload me-1"
-                                                                ),
-                                                                "Load",
-                                                            ],
-                                                            id="load-bookmark-button",
-                                                            color="primary",
-                                                            size="sm",
-                                                            n_clicks=0,
-                                                            className="w-100",
-                                                        ),
-                                                        width=6,
-                                                    ),
-                                                    dbc.Col(
-                                                        dbc.Button(
-                                                            [
-                                                                html.I(
-                                                                    className="fas fa-trash me-1"
-                                                                ),
-                                                                "Delete",
-                                                            ],
-                                                            id="delete-bookmark-button",
-                                                            color="outline-danger",
-                                                            size="sm",
-                                                            n_clicks=0,
-                                                            className="w-100",
-                                                        ),
-                                                        width=6,
-                                                    ),
-                                                ],
-                                                className="g-1",
-                                            ),
-                                        ],
-                                        className="p-2",
-                                    ),
-                                ],
-                                className="mb-3 shadow-sm",
-                            ),
-                            html.Button(
-                                [
-                                    html.I(className="fas fa-undo me-2"),
-                                    "Reset Filters",
-                                ],
-                                id="reset-filters-button",
-                                n_clicks=0,
-                                className="btn btn-outline-primary w-100 shadow-sm mb-4",
-                            ),
-                            html.Div(
-                                id="chart-filters",
-                                className="overflow-auto custom-scrollbar",
-                                style={
-                                    "max-height": "calc(100vh - 300px)",
-                                    "backgroundColor": "#f0f7f0",
-                                    "padding": "15px",
-                                    "borderRadius": "8px",
-                                    "width": "100%",
-                                },
-                            ),
-                        ],
-                        id="filters-offcanvas",
-                        title="",
-                        placement="end",
-                        scrollable=True,
-                        is_open=False,
-                        className="offcanvas",
-                    ),
-                ],
+                    include_secondary_chart=True,
+                ),
                 xs=12,
                 lg=9,
             ),
@@ -407,6 +239,110 @@ def _build_selectors_column():
     )
 
 
+def _build_filter_children():
+    """Build the contents of the filter offcanvas panel."""
+    return [
+        html.H4(
+            [html.I(className="fas fa-filter me-2"), "Data Filters"],
+            className="mb-3",
+        ),
+        _build_bookmarks_card(),
+        html.Button(
+            [html.I(className="fas fa-undo me-2"), "Reset Filters"],
+            id={"type": "filter-reset-button", "prefix": FILTER_PREFIX},
+            n_clicks=0,
+            className="btn btn-outline-primary w-100 shadow-sm mb-4",
+        ),
+        html.Div(
+            id=f"{FILTER_PREFIX}-filters",
+            className="overflow-auto custom-scrollbar",
+            style={
+                "max-height": "calc(100vh - 300px)",
+                "backgroundColor": "#f0f7f0",
+                "padding": "15px",
+                "borderRadius": "8px",
+                "width": "100%",
+            },
+        ),
+    ]
+
+
+def _build_bookmarks_card():
+    """Build the bookmarks card inside the filter panel."""
+    return dbc.Card(
+        [
+            dbc.CardHeader(
+                html.H6(
+                    [html.I(className="fas fa-bookmark me-2"), "Bookmarks"],
+                    className="mb-0",
+                )
+            ),
+            dbc.CardBody(
+                [
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                dbc.Input(
+                                    id="bookmark-name-input",
+                                    placeholder="Bookmark name...",
+                                    size="sm",
+                                ),
+                                width=9,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    "Save",
+                                    id="save-bookmark-button",
+                                    color="success",
+                                    size="sm",
+                                    n_clicks=0,
+                                    className="w-100",
+                                ),
+                                width=3,
+                            ),
+                        ],
+                        className="mb-2 g-1",
+                    ),
+                    dcc.Dropdown(
+                        id="bookmark-dropdown",
+                        placeholder="Select bookmark...",
+                        className="mb-2",
+                    ),
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                dbc.Button(
+                                    [html.I(className="fas fa-upload me-1"), "Load"],
+                                    id="load-bookmark-button",
+                                    color="primary",
+                                    size="sm",
+                                    n_clicks=0,
+                                    className="w-100",
+                                ),
+                                width=6,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    [html.I(className="fas fa-trash me-1"), "Delete"],
+                                    id="delete-bookmark-button",
+                                    color="outline-danger",
+                                    size="sm",
+                                    n_clicks=0,
+                                    className="w-100",
+                                ),
+                                width=6,
+                            ),
+                        ],
+                        className="g-1",
+                    ),
+                ],
+                className="p-2",
+            ),
+        ],
+        className="mb-3 shadow-sm",
+    )
+
+
 #    ____      _ _ _                _
 #   / ___|__ _| | | |__   __ _  ___| | _____
 #  | |   / _` | | | '_ \ / _` |/ __| |/ / __|
@@ -418,7 +354,7 @@ def _build_selectors_column():
     [
         Output("store-initial-filters", "data"),
         Output("chart-selectors", "children"),
-        Output("chart-filters", "children"),
+        Output(f"{FILTER_PREFIX}-filters", "children"),
         Output("card", "children"),
     ],
     [Input("store-dataset", "data")],
@@ -432,7 +368,7 @@ def load_data(dataset, config, saved_filter_values):
     logger.debug("generate selectors and filters")
     filter_dict = dh.generate_filters(
         df=dataset,
-        prefix="chart",
+        prefix=FILTER_PREFIX,
         config=config,
         initial_values=saved_filter_values,
     )
@@ -483,21 +419,23 @@ def load_data(dataset, config, saved_filter_values):
 
 @callback(
     [
-        Output("tab-content", "children"),
-        Output("chart-secondary", "children"),
+        Output(f"{FILTER_PREFIX}-tab-content", "children"),
+        Output(f"{FILTER_PREFIX}-chart-secondary", "children"),
         Output("filtered-card", "children"),
+        Output("experience-toast", "is_open"),
+        Output("experience-toast", "children"),
     ],
     [
         # tabs
-        Input("tabs", "active_tab"),
+        Input(f"{FILTER_PREFIX}-tabs", "active_tab"),
         # update button
         Input("update-content-button", "n_clicks"),
         # tools
         State("tool-selector", "value"),
         # selectors
         State({"type": "chart-selector", "index": ALL}, "value"),
-        State({"type": "chart-str-filter", "index": ALL}, "value"),
-        State({"type": "chart-num-filter", "index": ALL}, "value"),
+        State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+        State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
         # stores
         State("store-dataset", "data"),
         State("store-initial-filters", "data"),
@@ -520,289 +458,292 @@ def update_tab_content(
     if not n_clicks and not active_tab:  # Prevent update if neither trigger is present
         raise dash.exceptions.PreventUpdate
 
-    logger.debug("creating tab content")
-    config_dataset = config["datasets"][config["general"]["dataset"]]
+    try:
+        logger.debug("creating tab content")
+        config_dataset = config["datasets"][config["general"]["dataset"]]
 
-    # callback context
-    states_info = dh._inputs_flatten_list(callback_context.states_list)
-    x_axis = dh._inputs_parse_id(states_info, "x_axis_selector")
-    y_axis = dh._inputs_parse_id(states_info, "y_axis_selector")
-    color = dh._inputs_parse_id(states_info, "color_selector")
-    chart_type = dh._inputs_parse_id(states_info, "chart_type_selector")
-    rates = dh._inputs_parse_id(states_info, "rates_selector")
-    weights = dh._inputs_parse_id(states_info, "weights_selector")
-    secondary = dh._inputs_parse_id(states_info, "secondary_selector")
-    x_bins = dh._inputs_parse_id(states_info, "x_bins_selector")
-    add_line = dh._inputs_parse_id(states_info, "add_line_selector")
-    y_log = dh._inputs_parse_id(states_info, "y_log_selector")
-    numerator = dh._inputs_parse_id(states_info, "numerator_selector")
-    denominator = dh._inputs_parse_id(states_info, "denominator_selector")
-    target = dh._inputs_parse_id(states_info, "target_selector")
-    normalize = dh._inputs_parse_id(states_info, "normalize_selector")
-    relative = dh._inputs_parse_id(states_info, "relative_selector")
-    relative_to = dh._inputs_parse_id(states_info, "relative_to_selector")
-    relative_cols = dh._inputs_parse_id(states_info, "relative_cols_selector")
-    subset_dict = dh._inputs_parse_id(states_info, "subset_dict_selector")
-    flip_x_color = dh._inputs_parse_id(states_info, "flip_x_color_selector")
-    rank_columns = dh._inputs_parse_id(states_info, "rank_columns_selector")
-    if not subset_dict or subset_dict.strip() == "":
-        subset_dict = None
-    else:
-        try:
-            subset_dict = ast.literal_eval(subset_dict)
-        except Exception:
-            logger.warning(f"`{subset_dict}` is not a dictionary.")
+        # callback context
+        states_info = dh._inputs_flatten_list(callback_context.states_list)
+        x_axis = dh._inputs_parse_id(states_info, "x_axis_selector")
+        y_axis = dh._inputs_parse_id(states_info, "y_axis_selector")
+        color = dh._inputs_parse_id(states_info, "color_selector")
+        chart_type = dh._inputs_parse_id(states_info, "chart_type_selector")
+        rates = dh._inputs_parse_id(states_info, "rates_selector")
+        weights = dh._inputs_parse_id(states_info, "weights_selector")
+        secondary = dh._inputs_parse_id(states_info, "secondary_selector")
+        x_bins = dh._inputs_parse_id(states_info, "x_bins_selector")
+        add_line = dh._inputs_parse_id(states_info, "add_line_selector")
+        y_log = dh._inputs_parse_id(states_info, "y_log_selector")
+        numerator = dh._inputs_parse_id(states_info, "numerator_selector")
+        denominator = dh._inputs_parse_id(states_info, "denominator_selector")
+        target = dh._inputs_parse_id(states_info, "target_selector")
+        normalize = dh._inputs_parse_id(states_info, "normalize_selector")
+        relative = dh._inputs_parse_id(states_info, "relative_selector")
+        relative_to = dh._inputs_parse_id(states_info, "relative_to_selector")
+        relative_cols = dh._inputs_parse_id(states_info, "relative_cols_selector")
+        subset_dict = dh._inputs_parse_id(states_info, "subset_dict_selector")
+        flip_x_color = dh._inputs_parse_id(states_info, "flip_x_color_selector")
+        rank_columns = dh._inputs_parse_id(states_info, "rank_columns_selector")
+        if not subset_dict or subset_dict.strip() == "":
             subset_dict = None
+        else:
+            try:
+                subset_dict = ast.literal_eval(subset_dict)
+            except Exception:
+                logger.warning(f"`{subset_dict}` is not a dictionary.")
+                subset_dict = None
 
-    # filter the dataset - only filter what's needed
-    # pre-collect to avoid multiple downstream collections
-    logger.debug("filtering dataset")
-    filtered_df = dh.filter_data(
-        df=dataset,
-        callback_context=states_info,
-        str_cols=filter_dict["str_cols"],
-        num_cols=filter_dict["num_cols"],
-    )
-    if isinstance(filtered_df, pl.LazyFrame):
-        filtered_df = filtered_df.collect().lazy()
-    logger.debug("filtered dataset")
+        # filter the dataset - only filter what's needed
+        # pre-collect to avoid multiple downstream collections
+        logger.debug("filtering dataset")
+        filtered_df = dh.filter_data(
+            df=dataset,
+            callback_context=states_info,
+            str_cols=filter_dict["str_cols"],
+            num_cols=filter_dict["num_cols"],
+        )
+        if isinstance(filtered_df, pl.LazyFrame):
+            filtered_df = filtered_df.collect().lazy()
+        logger.debug("filtered dataset")
 
-    # create cards
-    card_list = dh.get_card_list(config)
-    filtered_card = dh.generate_card(
-        df=filtered_df,
-        card_list=card_list,
-        title="Filtered",
-        color="LightGreen",
-    )
+        # create cards
+        card_list = dh.get_card_list(config)
+        filtered_card = dh.generate_card(
+            df=filtered_df,
+            card_list=card_list,
+            title="Filtered",
+            color="LightGreen",
+        )
 
-    chart_secondary = None
-    tab_content = None
+        chart_secondary = None
+        tab_content = None
 
-    # Early validation for chart/table tabs
-    if (active_tab in ["tab-chart", "tab-table"]) and (
-        x_axis is None or y_axis is None
-    ):
-        return "Select X-Axis and Y-Axis to view content", None, filtered_card
-
-    # update tab content based on tab and tool
-    if active_tab == "tab-chart":
-        if tool == "compare":
-            chart = charters.compare_rates(
-                df=filtered_df,
-                x_axis=x_axis,
-                rates=rates,
-                weights=weights,
-                secondary=secondary,
-                x_bins=x_bins,
+        # Early validation for chart/table tabs
+        if (
+            active_tab in [f"{FILTER_PREFIX}-tab-chart", f"{FILTER_PREFIX}-tab-table"]
+        ) and (x_axis is None or y_axis is None):
+            return (
+                "Select X-Axis and Y-Axis to view content",
+                None,
+                filtered_card,
+                False,
+                "",
             )
-        elif tool == "chart":
-            if normalize:
-                filtered_df = experience.normalize(
-                    df=filtered_df,
-                    features=normalize,
-                    normalize_col=numerator,
-                    weight_col=denominator,
-                    add_norm_col=False,
-                    ratio=True,
-                )
-            chart = charters.chart(
-                df=filtered_df,
-                x_axis=x_axis,
-                y_axis=y_axis if chart_type != "heatmap" else color,
-                color=color if chart_type != "heatmap" else y_axis,
-                type=chart_type,
-                numerator=numerator,
-                denominator=denominator,
-                x_bins=x_bins,
-                add_line=add_line,
-                y_log=y_log,
-            )
-            if secondary:
-                if color:
-                    type = "histogram"
-                    barmode = "group"
-                else:
-                    type = "bar"
-                    barmode = "relative"
-                chart_secondary = charters.chart(
+
+        # update tab content based on tab and tool
+        if active_tab == f"{FILTER_PREFIX}-tab-chart":
+            if tool == "compare":
+                chart = charters.compare_rates(
                     df=filtered_df,
                     x_axis=x_axis,
-                    y_axis=secondary,
-                    color=color,
-                    type=type,
+                    rates=rates,
+                    weights=weights,
+                    secondary=secondary,
                     x_bins=x_bins,
-                    barmode=barmode,
                 )
-                chart_secondary = dcc.Graph(figure=chart_secondary)
-        elif tool == "target":
-            chart = charters.target(
-                df=filtered_df,
-                target=[target],
-                features=config_dataset["columns"]["features"],
-                numerator=numerator,
-                denominator=denominator,
-                add_line=add_line,
-            )
-        elif tool == "relative":
-            chart = charters.relative_risk(
-                df=filtered_df,
-                y_axis=y_axis,
-                features=relative,
-                numerator=numerator,
-                denominator=denominator,
-                relative_to=relative_to,
-                relative_cols=relative_cols,
-                subset_dict=subset_dict,
-                x_bins=x_bins,
-                add_line=add_line,
-                flip_x_color=flip_x_color,
-            )
-            if flip_x_color:
-                relative, relative_cols = relative_cols, relative
-            if secondary:
-                if relative_cols:
-                    type = "histogram"
-                    barmode = "group"
-                else:
-                    type = "bar"
-                    barmode = "relative"
-                chart_secondary = charters.chart(
+            elif tool == "chart":
+                if normalize:
+                    filtered_df = experience.normalize(
+                        df=filtered_df,
+                        features=normalize,
+                        normalize_col=numerator,
+                        weight_col=denominator,
+                        add_norm_col=False,
+                        ratio=True,
+                    )
+                chart = charters.chart(
                     df=filtered_df,
-                    x_axis=relative,
-                    y_axis=secondary,
-                    color=relative_cols,
-                    type=type,
+                    x_axis=x_axis,
+                    y_axis=y_axis if chart_type != "heatmap" else color,
+                    color=color if chart_type != "heatmap" else y_axis,
+                    type=chart_type,
+                    numerator=numerator,
+                    denominator=denominator,
                     x_bins=x_bins,
-                    barmode=barmode,
+                    add_line=add_line,
+                    y_log=y_log,
                 )
-                chart_secondary = dcc.Graph(figure=chart_secondary)
-        tab_content = dcc.Graph(figure=chart)
+                if secondary:
+                    if color:
+                        type = "histogram"
+                        barmode = "group"
+                    else:
+                        type = "bar"
+                        barmode = "relative"
+                    chart_secondary = charters.chart(
+                        df=filtered_df,
+                        x_axis=x_axis,
+                        y_axis=secondary,
+                        color=color,
+                        type=type,
+                        x_bins=x_bins,
+                        barmode=barmode,
+                    )
+                    chart_secondary = dcc.Graph(figure=chart_secondary)
+            elif tool == "target":
+                chart = charters.target(
+                    df=filtered_df,
+                    target=[target],
+                    features=config_dataset["columns"]["features"],
+                    numerator=numerator,
+                    denominator=denominator,
+                    add_line=add_line,
+                )
+            elif tool == "relative":
+                chart = charters.relative_risk(
+                    df=filtered_df,
+                    y_axis=y_axis,
+                    features=relative,
+                    numerator=numerator,
+                    denominator=denominator,
+                    relative_to=relative_to,
+                    relative_cols=relative_cols,
+                    subset_dict=subset_dict,
+                    x_bins=x_bins,
+                    add_line=add_line,
+                    flip_x_color=flip_x_color,
+                )
+                if flip_x_color:
+                    relative, relative_cols = relative_cols, relative
+                if secondary:
+                    if relative_cols:
+                        type = "histogram"
+                        barmode = "group"
+                    else:
+                        type = "bar"
+                        barmode = "relative"
+                    chart_secondary = charters.chart(
+                        df=filtered_df,
+                        x_axis=relative,
+                        y_axis=secondary,
+                        color=relative_cols,
+                        type=type,
+                        x_bins=x_bins,
+                        barmode=barmode,
+                    )
+                    chart_secondary = dcc.Graph(figure=chart_secondary)
+            tab_content = html.Div([dcc.Graph(figure=chart)])
 
-    elif active_tab == "tab-table":
-        if tool == "compare":
-            table = charters.compare_rates(
-                df=filtered_df,
-                x_axis=x_axis,
-                rates=rates,
-                weights=weights,
-                secondary=secondary,
-                x_bins=x_bins,
-                display=False,
-            )
-        elif tool == "chart":
-            table = charters.chart(
-                df=filtered_df,
-                x_axis=x_axis,
-                y_axis=y_axis,
-                color=color,
-                type=chart_type,
-                numerator=numerator,
-                denominator=denominator,
-                x_bins=x_bins,
-                display=False,
-            )
-        elif tool == "target":
-            # give blank table
-            table = filtered_df.head(0)
-        elif tool == "relative":
-            table = charters.relative_risk(
-                df=filtered_df,
-                y_axis=y_axis,
-                features=relative,
-                numerator=numerator,
-                denominator=denominator,
-                relative_to=relative_to,
-                relative_cols=relative_cols,
-                subset_dict=subset_dict,
-                x_bins=x_bins,
-                add_line=add_line,
-                flip_x_color=flip_x_color,
-                display=False,
-            )
+        elif active_tab == f"{FILTER_PREFIX}-tab-table":
+            if tool == "compare":
+                table = charters.compare_rates(
+                    df=filtered_df,
+                    x_axis=x_axis,
+                    rates=rates,
+                    weights=weights,
+                    secondary=secondary,
+                    x_bins=x_bins,
+                    display=False,
+                )
+            elif tool == "chart":
+                table = charters.chart(
+                    df=filtered_df,
+                    x_axis=x_axis,
+                    y_axis=y_axis,
+                    color=color,
+                    type=chart_type,
+                    numerator=numerator,
+                    denominator=denominator,
+                    x_bins=x_bins,
+                    add_total=True,
+                    display=False,
+                )
+            elif tool == "target":
+                # give blank table
+                table = filtered_df.head(0)
+            elif tool == "relative":
+                table = charters.relative_risk(
+                    df=filtered_df,
+                    y_axis=y_axis,
+                    features=relative,
+                    numerator=numerator,
+                    denominator=denominator,
+                    relative_to=relative_to,
+                    relative_cols=relative_cols,
+                    subset_dict=subset_dict,
+                    x_bins=x_bins,
+                    add_line=add_line,
+                    flip_x_color=flip_x_color,
+                    display=False,
+                )
 
-        columnDefs = dash_formats.get_column_defs(table)
-        export_button = html.Button(
-            "Export to CSV",
-            id={"type": "export-button", "tab": "table", "page": "experience"},
-            className="btn btn-primary mt-2 mb-2",
-        )
-
-        grid = dag.AgGrid(
-            id={"type": "data-table", "tab": "table", "page": "experience"},
-            rowData=table.to_dict("records"),
-            columnDefs=columnDefs,
-            dashGridOptions={
-                "enableRangeSelection": True,
-                "copyHeadersToClipboard": True,
-                "enableCellTextSelection": True,
-                "defaultColDef": {
-                    "sortable": True,
-                    "filter": True,
-                    "resizable": True,
+            columnDefs = dash_formats.get_column_defs(table)
+            grid = dag.AgGrid(
+                id={"type": "data-table", "tab": "table", "page": FILTER_PREFIX},
+                rowData=table.to_dict("records"),
+                columnDefs=columnDefs,
+                dashGridOptions={
+                    "enableRangeSelection": True,
+                    "copyHeadersToClipboard": True,
+                    "enableCellTextSelection": True,
+                    "defaultColDef": {
+                        "sortable": True,
+                        "filter": True,
+                        "resizable": True,
+                    },
                 },
-            },
-            className="ag-theme-alpine",
-            columnSize="sizeToFit",
-        )
+                className="ag-theme-alpine",
+                columnSize="sizeToFit",
+            )
 
-        tab_content = html.Div([export_button, grid])
+            export_button = common_build._build_export_button("table", FILTER_PREFIX)
+            tab_content = html.Div([export_button, grid])
 
-    elif active_tab == "tab-rank":
-        rank_features = (
-            rank_columns if rank_columns else config_dataset["columns"]["features"]
-        )
-        rank = metrics.ae_rank(
-            df=filtered_df,
-            features=rank_features,
-            actuals=config_dataset["columns"]["actuals_amt"],
-            expecteds=config_dataset["columns"]["expecteds_amt"],
-            exposures=config_dataset["columns"]["exposure_amt"],
-            bin_threshold=20,
-            n_bins=10,
-        )
+        elif active_tab == f"{FILTER_PREFIX}-tab-rank":
+            rank_features = (
+                rank_columns if rank_columns else config_dataset["columns"]["features"]
+            )
+            rank = metrics.ae_rank(
+                df=filtered_df,
+                features=rank_features,
+                actuals=config_dataset["columns"]["actuals_amt"],
+                expecteds=config_dataset["columns"]["expecteds_amt"],
+                exposures=config_dataset["columns"]["exposure_amt"],
+                bin_threshold=20,
+                n_bins=10,
+            )
 
-        columnDefs = dash_formats.get_column_defs(rank)
-        export_button = html.Button(
-            "Export to CSV",
-            id={"type": "export-button", "tab": "rank", "page": "experience"},
-            className="btn btn-primary mt-2 mb-2",
-        )
+            columnDefs = dash_formats.get_column_defs(rank)
 
-        grid = dag.AgGrid(
-            id={"type": "data-table", "tab": "rank", "page": "experience"},
-            rowData=rank.to_dict("records"),
-            columnDefs=columnDefs,
-            dashGridOptions={
-                "enableRangeSelection": True,
-                "copyHeadersToClipboard": True,
-                "enableCellTextSelection": True,
-                "defaultColDef": {
-                    "sortable": True,
-                    "filter": True,
-                    "resizable": True,
+            grid = dag.AgGrid(
+                id={"type": "data-table", "tab": "rank", "page": FILTER_PREFIX},
+                rowData=rank.to_dict("records"),
+                columnDefs=columnDefs,
+                dashGridOptions={
+                    "enableRangeSelection": True,
+                    "copyHeadersToClipboard": True,
+                    "enableCellTextSelection": True,
+                    "defaultColDef": {
+                        "sortable": True,
+                        "filter": True,
+                        "resizable": True,
+                    },
                 },
-            },
-            className="ag-theme-alpine",
-            columnSize="sizeToFit",
-        )
+                className="ag-theme-alpine",
+                columnSize="sizeToFit",
+            )
 
-        rank_description = html.P(
-            children=[
-                "Rank identifies features driving A/E deviations. "
-                "'Issue' ranks high-loss values with high-loss percentages. "
-                "'Driver' ranks high-loss values with small exposure.",
-                html.Br(),
-                "Issue = abs((actuals - expected) * (actuals/expected - 1))",
-                html.Br(),
-                "Driver = abs((actuals - expected) * (1 - exposure/total_exposure))",
-            ],
-            style={"fontSize": "0.85em", "color": "gray", "marginBottom": "6px"},
-        )
+            rank_description = html.P(
+                children=[
+                    "Rank identifies features driving A/E deviations. "
+                    "'Issue' ranks high-loss values with high-loss percentages. "
+                    "'Driver' ranks high-loss values with small exposure.",
+                    html.Br(),
+                    "Issue = abs((actuals - expected) * (actuals/expected - 1))",
+                    html.Br(),
+                    "Driver = abs((actuals - expected) * (1 - exposure/total_exposure))",
+                ],
+                style={"fontSize": "0.85em", "color": "gray", "marginBottom": "6px"},
+            )
 
-        tab_content = html.Div([rank_description, export_button, grid])
+            export_button = common_build._build_export_button("rank", FILTER_PREFIX)
+            tab_content = html.Div([rank_description, export_button, grid])
 
-    return tab_content, chart_secondary, filtered_card
+        return tab_content, chart_secondary, filtered_card, False, ""
+
+    except Exception as e:
+        logger.error(f"Error updating tab content: {e}")
+        return dash.no_update, dash.no_update, dash.no_update, True, str(e)
 
 
 @callback(
@@ -901,100 +842,17 @@ def update_tool_description(tool):
 
 
 @callback(
-    [
-        Output({"type": "chart-str-filter", "index": ALL}, "value"),
-        Output({"type": "chart-num-filter", "index": ALL}, "value"),
-    ],
-    [Input("reset-filters-button", "n_clicks")],
-    [State("store-dataset", "data"), State("store-initial-filters", "data")],
-    prevent_initial_call=True,
-)
-def reset_filters(n_clicks, dataset, filter_dict):
-    """Reset all filters to default values."""
-    logger.debug("resetting filters")
-    str_reset_values = [[]] * len(filter_dict["str_cols"])
-    num_reset_values = [
-        [
-            dataset.select(pl.col(col).min()).collect().item(),
-            dataset.select(pl.col(col).max()).collect().item(),
-        ]
-        for col in filter_dict["num_cols"]
-    ]
-    return str_reset_values, num_reset_values
-
-
-@callback(
-    Output("filters-offcanvas", "is_open"),
-    [Input("open-offcanvas-button", "n_clicks")],
-    [State("filters-offcanvas", "is_open")],
-)
-def toggle_filters_offcanvas(n_clicks, is_open):
-    """Toggle the filters offcanvas."""
-    if n_clicks:
-        return not is_open
-    return is_open
-
-
-@callback(
-    Output({"type": "chart-collapse", "index": ALL}, "is_open"),
-    Output({"type": "chart-collapse-button", "index": ALL}, "children"),
-    Input({"type": "chart-collapse-button", "index": ALL}, "n_clicks"),
-    State({"type": "chart-collapse", "index": ALL}, "is_open"),
-    State({"type": "chart-collapse-button", "index": ALL}, "children"),
-    prevent_initial_call=True,
-)
-def toggle_collapse(n_clicks, is_open, children):
-    """Toggle collapse state of filter checklists."""
-    if not n_clicks or not any(n_clicks):
-        raise dash.exceptions.PreventUpdate
-
-    # Find which button was clicked
-    ctx = callback_context
-    if not ctx.triggered:
-        return [False] * len(is_open), children
-
-    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    button_idx = eval(button_id)["index"]
-
-    # Update the collapse states and button icons
-    new_is_open = []
-    new_children = []
-
-    for _, (col, is_open_state, child) in enumerate(
-        zip(
-            [x["id"]["index"] for x in ctx.inputs_list[0]],
-            is_open,
-            children,
-            strict=False,
-        )
-    ):
-        # Update collapse state
-        new_state = not is_open_state if col == button_idx else is_open_state
-        new_is_open.append(new_state)
-
-        # Update button content
-        label = child[0]["props"]["children"]  # Get the column name
-        new_children.append(
-            [
-                html.Span(label, style={"flex-grow": 1}),
-                html.I(className=f"fas fa-chevron-{'up' if new_state else 'down'}"),
-            ]
-        )
-
-    return new_is_open, new_children
-
-
-@callback(
     Output("active-filters-card", "children"),
     [
-        Input({"type": "chart-str-filter", "index": ALL}, "value"),
-        Input({"type": "chart-num-filter", "index": ALL}, "value"),
+        Input({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+        Input({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
     ],
     [
-        State({"type": "chart-str-filter", "index": ALL}, "id"),
-        State({"type": "chart-num-filter", "index": ALL}, "id"),
+        State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+        State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
         State("store-initial-filters", "data"),
     ],
+    prevent_initial_call=True,
 )
 def update_active_filters_card(
     str_filters, num_filters, str_filter_ids, num_filter_ids, filter_dict
@@ -1038,10 +896,10 @@ def update_active_filters_card(
 
 @callback(
     Output("store-filter-values", "data"),
-    Input({"type": "chart-str-filter", "index": ALL}, "value"),
-    Input({"type": "chart-num-filter", "index": ALL}, "value"),
-    State({"type": "chart-str-filter", "index": ALL}, "id"),
-    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    Input({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    Input({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
     prevent_initial_call=True,
 )
 def save_filter_state(str_vals, num_vals, str_ids, num_ids):
@@ -1056,8 +914,28 @@ def save_filter_state(str_vals, num_vals, str_ids, num_ids):
 
 
 @callback(
+    Output({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    Output({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    Input({"type": "filter-reset-button", "prefix": FILTER_PREFIX}, "n_clicks"),
+    State("store-initial-filters", "data"),
+    prevent_initial_call=True,
+)
+def reset_filters(n_clicks, filter_dict):
+    """Clear the filters."""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    str_reset = [[]] * len(filter_dict["str_cols"])
+    num_reset = [
+        [filter_dict["min_max"][f"{col}_min"], filter_dict["min_max"][f"{col}_max"]]
+        for col in filter_dict["num_cols"]
+    ]
+    return str_reset, num_reset
+
+
+@callback(
     Output("bookmark-dropdown", "options"),
     Input("store-bookmarks", "data"),
+    prevent_initial_call=True,
 )
 def update_bookmark_dropdown(bookmarks):
     """Populate the bookmark dropdown from the bookmarks store."""
@@ -1071,10 +949,10 @@ def update_bookmark_dropdown(bookmarks):
     Output("bookmark-name-input", "value"),
     Input("save-bookmark-button", "n_clicks"),
     State("bookmark-name-input", "value"),
-    State({"type": "chart-str-filter", "index": ALL}, "value"),
-    State({"type": "chart-num-filter", "index": ALL}, "value"),
-    State({"type": "chart-str-filter", "index": ALL}, "id"),
-    State({"type": "chart-num-filter", "index": ALL}, "id"),
+    State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
+    State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
     State("store-bookmarks", "data"),
     prevent_initial_call=True,
 )
@@ -1094,14 +972,22 @@ def save_bookmark(n_clicks, name, str_vals, num_vals, str_ids, num_ids, bookmark
 
 
 @callback(
-    Output({"type": "chart-str-filter", "index": ALL}, "value", allow_duplicate=True),
-    Output({"type": "chart-num-filter", "index": ALL}, "value", allow_duplicate=True),
+    Output(
+        {"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL},
+        "value",
+        allow_duplicate=True,
+    ),
+    Output(
+        {"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL},
+        "value",
+        allow_duplicate=True,
+    ),
     Input("load-bookmark-button", "n_clicks"),
     State("bookmark-dropdown", "value"),
     State("store-bookmarks", "data"),
-    State({"type": "chart-str-filter", "index": ALL}, "id"),
-    State({"type": "chart-num-filter", "index": ALL}, "id"),
-    State({"type": "chart-num-filter", "index": ALL}, "value"),
+    State({"type": "filter-str", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "id"),
+    State({"type": "filter-num", "prefix": FILTER_PREFIX, "index": ALL}, "value"),
     prevent_initial_call=True,
 )
 def load_bookmark(n_clicks, selected, bookmarks, str_ids, num_ids, current_num_vals):
