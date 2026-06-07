@@ -11,7 +11,7 @@
 - enhance the neural model including
   - new methods (score, rebalance_ae, set_deterministic, _loss)
   - provide test/train a/e during fit
-  - add new parameters (device, min_delta, ae_interval)
+  - add new parameters (device, min_delta, ae_interval, loss_target)
 
 **Documentation**
 - update tests

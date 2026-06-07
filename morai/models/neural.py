@@ -258,6 +258,7 @@ class Neural(nn.Module):
         y_test: pd.Series,
         weights_test: pd.Series,
         epochs: int = 100,
+        loss_target: float | None = None,
         lr: float = 0.001,
         batch_size: int | None = None,
         dropout: float = 0.0,
@@ -288,6 +289,8 @@ class Neural(nn.Module):
             The weights for the testing data
         epochs : int, optional (default=100)
             The number of epochs to train the model for, by default 100
+        loss_target : float, optional (default=None)
+            If provided, training will stop when test loss reaches this target
         lr : float, optional (default=0.001)
             The learning rate, by default 0.001. Lower values will result in
         batch_size: int, optional (default=None)
@@ -576,6 +579,14 @@ class Neural(nn.Module):
                     )
                     pbar.close()
                     break
+
+            # stop when the test loss reaches the target
+            if loss_target is not None and test_loss_value <= loss_target:
+                logger.info(
+                    f"loss target `{loss_target}` reached at epoch: {epoch + 1}."
+                )
+                pbar.close()
+                break
 
             pbar.set_postfix(
                 {
