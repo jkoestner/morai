@@ -6,7 +6,7 @@
 
 **Enhancements**
 - add claude skills (model-review, nn-review, mortality-table-build)
-- cdc analytic enhancements (weekly, flu, cod refinements)
+- cdc analytic enhancements (weekly, flu, cod refinements, new data check)
 - create experience study calcs (variance, credibility, ci, summarize data)
 - enhance the neural model including
   - new methods (score, rebalance_ae, set_deterministic, _loss)
