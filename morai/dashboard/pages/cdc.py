@@ -902,10 +902,21 @@ def update_cdc_data_async(n_clicks):
 
     def background_task():
         try:
-            last_updated = pd.to_datetime(cdc.get_last_updated()["last_updated"])
+            last_update_meta = cdc.get_last_updated()
+            last_updated = pd.to_datetime(last_update_meta["last_updated"])
             days_since_update = (pd.Timestamp.now().date() - last_updated.date()).days
+            # check if data was updated recently
             if days_since_update < DAYS_SINCE_LAST_UPDATE:
                 return "recent", None
+            # check if data is newer than the last update
+            data_through = pd.to_datetime(last_update_meta["data_through"])
+            new_data_through = cdc.get_cdc_data_xml(xml_filename="mcd18_check.xml")[
+                "data_through"
+            ].unique()
+            if new_data_through <= data_through:
+                return "no_update", None
+            # get new data and update the database
+            time.sleep(CDC_WAIT_TIME_SECONDS)
             refresh_cdc_data()
             new_last_updated = cdc.get_last_updated()["last_updated"]
             with thread_lock:
@@ -922,6 +933,14 @@ def update_cdc_data_async(n_clicks):
             f"Data was recently updated. Please wait {DAYS_SINCE_LAST_UPDATE} days before updating again.",
             "warning",
             "Warning",
+            dash.no_update,
+        )
+    elif status == "no_update":
+        return (
+            True,
+            "No new data available. Please check back later.",
+            "warning",
+            "warning",
             dash.no_update,
         )
     elif status == "success":
