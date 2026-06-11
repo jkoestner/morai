@@ -150,7 +150,7 @@ class Neural(nn.Module):
         """
         # get input size
         num_cols = [col for col in X_train.columns if col not in self.embedding_cols]
-        self.feature_names = X_train.columns
+        self.feature_names = list(X_train.columns)
         self.num_cols = num_cols
         logger.info(f"non-embedding columns: {self.num_cols}")
         logger.info(f"embedding columns: {self.embedding_cols}")
@@ -233,11 +233,8 @@ class Neural(nn.Module):
         if X_torch_num is not None:
             x = torch.cat([x, X_torch_num], dim=1)
 
-        # copy input for wide linear
-        x_clone = x.clone()
-
         # forward pass
-        x_wide = self.wide_linear(x_clone).squeeze(-1)
+        x_wide = self.wide_linear(x).squeeze(-1)
 
         x = self.relu1(self.fc1(x))
         x = self.dropout1(x)
@@ -269,7 +266,7 @@ class Neural(nn.Module):
         min_delta: float = 0.0,
         ae_interval: int = 10,
         seed: int | None = None,
-    ) -> None:
+    ) -> go.Figure:
         """
         Fit the model.
 
@@ -293,9 +290,9 @@ class Neural(nn.Module):
             If provided, training will stop when test loss reaches this target
         lr : float, optional (default=0.001)
             The learning rate, by default 0.001. Lower values will result in
+            slower learning, higher values will result in faster learning
         batch_size: int, optional (default=None)
             The batch size for mini-batch training. If None, use full-batch training
-            slower learning, higher values will result in faster learning
         dropout : float, optional (default=0.0)
             Dropout rate for the model
         weight_decay : float, optional (default=0.0)
@@ -315,6 +312,12 @@ class Neural(nn.Module):
             Seed will not be deterministic on it's own and would need the
             set_deterministic() function to be called before creating the model.
 
+        Returns
+        -------
+        fig : go.Figure
+            A plotly figure with training and test loss curves,
+            learning rate, and A/E ratios
+
         """
         # defaults
         best_loss = float("inf")
@@ -328,20 +331,8 @@ class Neural(nn.Module):
             torch.manual_seed(seed)
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(seed)
-                torch.backends.cudnn.deterministic = True
-                torch.backends.cudnn.benchmark = False
 
         # validations
-        if self.fc1 is None:
-            self.setup_model(X_train=X, dropout=dropout)
-            self.to(self.device)
-        else:
-            logger.warning(
-                "model has already been set up and calling fit again"
-                "will update existing weights."
-            )
-        if self.wide_linear is None or self.output is None:
-            raise RuntimeError("Model not initialized.")
         if self.task not in ("poisson", "binomial"):
             raise ValueError("task must be 'poisson' or 'binomial'")
         if not (X.index.equals(y.index) and X.index.equals(weights.index)):
@@ -369,6 +360,18 @@ class Neural(nn.Module):
             X_test = X_test.loc[~bad_test]
             y_test = y_test.loc[~bad_test]
             weights_test = weights_test.loc[~bad_test]
+
+        # setup model
+        if self.fc1 is None:
+            self.setup_model(X_train=X, dropout=dropout)
+            self.to(self.device)
+        else:
+            logger.warning(
+                "model has already been set up and calling fit again"
+                "will update existing weights."
+            )
+        if self.wide_linear is None or self.output is None:
+            raise RuntimeError("Model not initialized.")
 
         # convert y_train from rate to deaths
         y = y * weights
@@ -465,7 +468,7 @@ class Neural(nn.Module):
             # training forward pass
             self.train()
             epoch_loss = 0.0
-            num_batches = 0
+            epoch_rows = 0
 
             if use_mini_batch and batch_size is not None:
                 # shuffle
@@ -497,8 +500,9 @@ class Neural(nn.Module):
                     torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
                     opt.step()
 
-                    epoch_loss += loss.detach().item()
-                    num_batches += 1
+                    batch_n = batch_y.size(0)
+                    epoch_loss += loss.detach().item() * batch_n
+                    epoch_rows += batch_n
 
             # full-batch training
             else:
@@ -518,10 +522,10 @@ class Neural(nn.Module):
                 torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=MAX_NORM)
                 opt.step()
 
-                epoch_loss = loss.detach().item()
-                num_batches = 1
+                epoch_loss = loss.detach().item() * y_torch_length
+                epoch_rows = y_torch_length
 
-            train_loss_value = epoch_loss / num_batches
+            train_loss_value = epoch_loss / epoch_rows
 
             # test loss - no gradients needed
             with torch.no_grad():
@@ -781,6 +785,7 @@ class Neural(nn.Module):
         # convert array to DataFrame if needed
         if isinstance(X, np.ndarray):
             X = pd.DataFrame(X, columns=self.feature_names)
+        X = X.copy()
 
         # ensure non-embedding columns are numeric
         for col in self.num_cols:
@@ -937,7 +942,7 @@ class Neural(nn.Module):
         # reduce dimensions
         if method == "pca":
             reducer = PCA(n_components=2)
-        else:
+        else:  # t-SNE
             perplexity = min(30, max(5, len(weights_df) - 1))
             reducer = TSNE(n_components=2, perplexity=perplexity, random_state=42)
 
@@ -1085,7 +1090,7 @@ class Neural(nn.Module):
             # warn if embeddings may not be appropriate (e.g. <=10 unique values)
             if vocab_size <= 3:
                 raise ValueError(
-                    f"embedding feature '{embed_feature}' has only 2 unique values "
+                    f"embedding feature '{embed_feature}' has <=2 unique values "
                     f"and not suitable for embedding; consider ordinal or "
                     f"one-hot encoding instead"
                 )
@@ -1107,7 +1112,7 @@ class Neural(nn.Module):
             total_embedding_dim += embed_dim
 
             # initialize embeddings
-            nn.init.xavier_uniform_(self.embeddings[embed_feature].weight)
+            nn.init.normal_(self.embeddings[embed_feature].weight, mean=0.0, std=0.05)
 
         if total_embedding_dim > 0:
             logger.info(f"created embeddings for `{self.embedding_dims}`")
@@ -1271,7 +1276,7 @@ class Shap:
     def compute_values(
         self,
         explain_df: pd.DataFrame,
-        n_samples: int = 100,
+        n_samples: int | None = 100,
         seed: int | None = None,
     ) -> shap.Explanation:
         """
@@ -1302,6 +1307,7 @@ class Shap:
         if n_samples is None:
             sample_explain_df = explain_df.copy()
         else:
+            n_samples = min(n_samples, len(explain_df))
             sample_explain_df = explain_df.sample(n=n_samples, random_state=seed).copy()
 
         # compute shap values and create explanation object
