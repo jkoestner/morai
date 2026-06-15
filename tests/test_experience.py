@@ -1337,3 +1337,45 @@ def test_exposure_exact_calendar() -> None:
         ]["exposure_cnt"].iloc[0]
         == 31 / 365
     ), "Expected exposure to be from bos to eos"
+
+
+def test_date_from_parts() -> None:
+    """Tests the date from parts calculation."""
+    test_dates = experience._date_from_parts(
+        year=pd.Series([2018, 2019]),
+        month=pd.Series([2, 2]),
+        day=pd.Series([29, 29]),
+    )
+
+    expected_dates = pd.Series([pd.Timestamp("2018-02-28"), pd.Timestamp("2019-02-28")])
+
+    pd.testing.assert_series_equal(
+        test_dates.reset_index(drop=True),
+        expected_dates,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+def test_get_study_periods() -> None:
+    """Tests the study period generation."""
+    study_periods = experience._get_study_periods(
+        pd.Timestamp("01-15-2025"), pd.Timestamp("12-31-2025"), "monthly"
+    )
+
+    expected_periods = [
+        (pd.Timestamp("2025-01-15"), pd.Timestamp("2025-01-31")),
+        (pd.Timestamp("2025-02-01"), pd.Timestamp("2025-02-28")),
+        (pd.Timestamp("2025-03-01"), pd.Timestamp("2025-03-31")),
+        (pd.Timestamp("2025-04-01"), pd.Timestamp("2025-04-30")),
+        (pd.Timestamp("2025-05-01"), pd.Timestamp("2025-05-31")),
+        (pd.Timestamp("2025-06-01"), pd.Timestamp("2025-06-30")),
+        (pd.Timestamp("2025-07-01"), pd.Timestamp("2025-07-31")),
+        (pd.Timestamp("2025-08-01"), pd.Timestamp("2025-08-31")),
+        (pd.Timestamp("2025-09-01"), pd.Timestamp("2025-09-30")),
+        (pd.Timestamp("2025-10-01"), pd.Timestamp("2025-10-31")),
+        (pd.Timestamp("2025-11-01"), pd.Timestamp("2025-11-30")),
+        (pd.Timestamp("2025-12-01"), pd.Timestamp("2025-12-31")),
+    ]
+
+    assert study_periods == expected_periods, "Expected monthly study periods to match"

@@ -8,6 +8,7 @@ to run (can take up to 150 seconds). Timeout is setup in compose file.
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
@@ -913,12 +914,12 @@ def update_cdc_data_async(n_clicks):
             new_data_through = cdc.get_cdc_data_xml(xml_filename="mcd18_check.xml")[
                 "data_through"
             ].unique()
+            new_last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if new_data_through <= data_through:
                 return "no_update", None
             # get new data and update the database
             time.sleep(CDC_WAIT_TIME_SECONDS)
             refresh_cdc_data()
-            new_last_updated = cdc.get_last_updated()["last_updated"]
             with thread_lock:
                 return "success", new_last_updated
         except Exception as e:

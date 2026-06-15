@@ -181,6 +181,7 @@ def format_study_df(
 
     """
     shape_before = df.shape
+    df = df.copy()
     # default column names
     termination_date_col = "termination_date"
     termination_reason_col = "termination_reason"
@@ -251,13 +252,10 @@ def format_study_df(
         # create new columns
         _df_period[bos_date_col] = study_period[0]
         _df_period[eos_date_col] = study_period[1]
-        _df_period[anniversary_date_col] = pd.to_datetime(
-            {
-                "year": _df_period[bos_date_col].dt.year,
-                "month": _df_period[issue_date_col].dt.month,
-                "day": _df_period[issue_date_col].dt.day,
-            },
-            errors="coerce",
+        _df_period[anniversary_date_col] = _date_from_parts(
+            _df_period[bos_date_col].dt.year,
+            _df_period[issue_date_col].dt.month,
+            _df_period[issue_date_col].dt.day,
         )
 
         # remove policies that will have zero exposure for the year
@@ -440,21 +438,16 @@ def calc_exposures(
     logger.info(f"study decrement: `{study_decrement}`")
 
     # creating temporary series for calculations
-    next_anniversary = pd.to_datetime(
-        {
-            "year": study_df[anniversary_date_col].dt.year + 1,
-            "month": study_df[issue_date_col].dt.month,
-            "day": study_df[issue_date_col].dt.day,
-        },
-        errors="coerce",
+    next_anniversary = _date_from_parts(
+        study_df[anniversary_date_col].dt.year + 1,
+        study_df[issue_date_col].dt.month,
+        study_df[issue_date_col].dt.day,
     )
-    prior_anniversary = pd.to_datetime(
-        {
-            "year": study_df[anniversary_date_col].dt.year - 1,
-            "month": study_df[issue_date_col].dt.month,
-            "day": study_df[issue_date_col].dt.day,
-        },
-        errors="coerce",
+
+    prior_anniversary = _date_from_parts(
+        study_df[anniversary_date_col].dt.year - 1,
+        study_df[issue_date_col].dt.month,
+        study_df[issue_date_col].dt.day,
     )
     is_before = study_df["anniversary_position"] == "before"
     is_decrement = study_df[termination_reason_col] == study_decrement
@@ -624,7 +617,7 @@ def calc_exposures(
     if idx_col:
         grouped_exposure = (
             study_df.assign(exposure=exposures.values)
-            .groupby(["id", "policy_dur"], observed=True, sort=False)["exposure"]
+            .groupby([idx_col, "policy_dur"], observed=True, sort=False)["exposure"]
             .sum()
             .reset_index()
         )
@@ -860,7 +853,8 @@ def summarize_study(
         List of ratios to calculate
         for example ["ae", "ao"]
     ci : bool, optional default=True
-        Whether to calculate confidence intervals for the rates.
+        Whether to calculate confidence intervals for the ae ratio. The interval
+        is around the expected ae ratio (AE=1).
     mapping : dict, optional default=None
         Mapping for the column names if they differ from the expected column names.
 
@@ -967,7 +961,7 @@ def summarize_study(
 
 
 def normalize(
-    df: pd.DataFrame,
+    df: pd.DataFrame | pl.LazyFrame,
     features: list[str],
     normalize_col: list[str] | str,
     weight_col: list[str] | str | None = None,
@@ -1012,7 +1006,7 @@ def normalize(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : pd.DataFrame | pl.LazyFrame
         DataFrame to normalize.
     features : list
         List of columns to group by.
@@ -1270,10 +1264,14 @@ def calc_relative_risk(
                         / pl.col("weight_sum").sum()
                     ).alias("fallback")
                 )
-            grouped_df = grouped_df.with_columns(
-                pl.col("baseline_ratio")
-                .fill_null(fallback.collect().item())
-                .alias("baseline_ratio")
+            grouped_df = (
+                grouped_df.join(fallback, how="cross")
+                .with_columns(
+                    pl.col("baseline_ratio")
+                    .fill_null(pl.col("fallback"))
+                    .alias("baseline_ratio")
+                )
+                .drop("fallback")
             )
 
         # calculate relative risk
@@ -1290,9 +1288,11 @@ def calc_relative_risk(
         )
 
         if relative_to == "reference":
-            reference_risks = grouped_df.group_by(
-                relative_cols, maintain_order=True
-            ).agg(pl.col("relative_risk").min().alias("reference_risk"))
+            reference_risks = (
+                grouped_df.sort([*relative_cols, *features])
+                .group_by(relative_cols, maintain_order=True)
+                .agg(pl.col("relative_risk").first().alias("reference_risk"))
+            )
 
             grouped_df = grouped_df.join(reference_risks, on=relative_cols, how="left")
             grouped_df = grouped_df.with_columns(
@@ -1381,9 +1381,8 @@ def calc_relative_risk(
 
         if relative_to == "reference":
             reference_risks = (
-                grouped_df.groupby(relative_cols, observed=True, sort=False)[
-                    "relative_risk"
-                ]
+                grouped_df.sort_values([*relative_cols, *features])
+                .groupby(relative_cols, observed=True, sort=False)["relative_risk"]
                 .first()
                 .reset_index()
                 .rename(columns={"relative_risk": "reference_risk"})
@@ -1443,14 +1442,14 @@ def calc_moments(
 
     mean = moment_1
     variance = (moment_2_p1 - moment_2_p2)
-    skewness = -(moment_3_p1 - 3 * moment_3_p2 + 2 * moment_3_p3) / variance ** 1.5
+    skewness = (moment_3_p1 - 3 * moment_3_p2 + 2 * moment_3_p3) / variance ** 1.5
 
     Notes
     -----
     Needs to be based on seriatim data and not aggregated data.
 
-    skewnes can also be calculated as:
-    skewness = (2 * rate - 1) / (amount^2 * exposure * rate * (1 - rate)) ^ 0.5
+    skewness can also be calculated as:
+    skewness = (1 - 2 * rate) / (exposure * rate * (1 - rate)) ^ 0.5
 
     Reference
     ---------
@@ -1552,7 +1551,7 @@ def calc_qx_exp_ae(
         0,
         np.where(
             model_data[f"exp_amt_{model_name}"] == 0,
-            1,
+            np.nan,
             model_data[actual_col] / model_data[f"exp_amt_{model_name}"],
         ),
     )
@@ -1583,6 +1582,8 @@ def _get_study_periods(
     -------
     periods : list
         list of (bos, eos) tuples for each period.
+        options include "annually", "semi-annually", "quarterly", "monthly",
+        "weekly", and "daily".
 
     """
     freq_map = {
@@ -1612,14 +1613,66 @@ def _get_study_periods(
         return [(d, d) for d in pd.date_range(bos_date, eos_date, freq="D")]
 
     starts = pd.date_range(bos_date, eos_date, freq=freq_map[study_frequency])
-    periods = []
-    for start in starts:
-        end = min(
-            start
-            + pd.tseries.offsets.DateOffset(**date_offset_kwargs[study_frequency])
-            - pd.Timedelta(days=1),
-            eos_date,
+
+    # date_range won't include the bos_date if it is in the middle of a period.
+    # for example, 01-15-2025 with monthly frequency will generate 02-01-2025 as
+    # the first period start date,
+    # this captures the partial exposure.
+    if len(starts) == 0 or starts[0] > bos_date:
+        logger.warning(
+            f"bos_date `{bos_date}` does not begin on a frequency boundary, "
+            f"but will be included."
         )
+        starts = starts.insert(0, bos_date)
+
+    periods = []
+    for i, start in enumerate(starts):
+        if i + 1 < len(starts):
+            end = starts[i + 1] - pd.Timedelta(days=1)
+        else:
+            end = (
+                start
+                + pd.tseries.offsets.DateOffset(**date_offset_kwargs[study_frequency])
+                - pd.Timedelta(days=1)
+            )
+        end = min(end, eos_date)
         periods.append((start, end))
 
     return periods
+
+
+def _date_from_parts(year: pd.Series, month: pd.Series, day: pd.Series) -> pd.Series:
+    """
+    Build dates from "year", "month", and "day" columns.
+
+    Notes
+    -----
+    Feb 29 to Feb 28 in non-leap years.
+
+    Parameters
+    ----------
+    year : pd.Series
+        Series with the year values.
+    month : pd.Series
+        Series with the month values.
+    day : pd.Series
+        Series with the day values.
+
+    Returns
+    -------
+    dates : pd.Series
+        Series with the built dates.
+
+    """
+    dates = pd.to_datetime({"year": year, "month": month, "day": day}, errors="coerce")
+    mask = dates.isna() & year.notna() & month.notna() & day.notna()
+    if mask.any():
+        dates = dates.copy()
+        dates[mask] = pd.to_datetime(
+            {
+                "year": year[mask],
+                "month": month[mask],
+                "day": pd.Series(28, index=year[mask].index),
+            },
+        )
+    return dates
