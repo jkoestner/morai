@@ -6,7 +6,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import polars as pl
 import pytest
-from pytest import approx
 from sklearn import linear_model
 
 from morai.experience import charters, experience
@@ -453,18 +452,14 @@ def test_frequency():
 
 
 def test_pdp():
-    """Tests the pdp functionality."""
-    # expected df
-    expected_df = pd.DataFrame(
-        {
-            "sex": ["F", "F", "M", "M"],
-            "smoker_status": ["NS", "S", "NS", "S"],
-            "pred": [0.07, 0.09, 0.11, 0.13],
-            "%_diff": [0.7, 0.9, 1.1, 1.3],
-            "exposed": [100, 100, 200, 200],
-        }
-    )
+    """
+    Tests the pdp functionality.
 
+    Using 'global' centering method the pdp should calculate the relative ratios
+    of the predicted values to the overall mean of the predicted values.
+
+    In this example F=.8, M=1.2, NS=.9, S=1.1
+    """
     # setup data
     feature_dict = {
         "target": ["rate"],
@@ -503,8 +498,83 @@ def test_pdp():
         center="global",
         display=False,
     )
+
+    # expected df
+    expected_df = pd.DataFrame(
+        {
+            "sex": ["F", "F", "M", "M"],
+            "smoker_status": ["NS", "S", "NS", "S"],
+            "pred": [0.07, 0.09, 0.11, 0.13],
+            "%_diff": [0.7, 0.9, 1.1, 1.3],
+            "exposed": [100, 100, 200, 200],
+        }
+    )
     pd.testing.assert_frame_equal(
         pdp.sort_values(by=["sex", "smoker_status"]).reset_index(drop=True),
+        expected_df.sort_values(by=["sex", "smoker_status"]).reset_index(drop=True),
+        check_dtype=False,
+    )
+
+
+def test_ale():
+    """
+    Tests the ale functionality.
+
+    Using 'global' centering method the pdp should calculate the relative ratios
+    of the predicted values to the overall mean of the predicted values.
+
+    In this example F=.8, M=1.2, NS=.9, S=1.1
+    """
+    # setup data
+    feature_dict = {
+        "target": ["rate"],
+        "passthrough": ["year"],
+        "ordinal": [
+            "sex",
+            "smoker_status",
+        ],
+        "ohe": [],
+        "nominal": [],
+    }
+    preprocess_dict = preprocessors.preprocess_data(
+        experience_df,
+        feature_dict=feature_dict,
+        standardize=False,
+    )
+    X = preprocess_dict["X"]
+    y = preprocess_dict["y"]
+    mapping = preprocess_dict["mapping"]
+    md_encoded = preprocess_dict["md_encoded"]
+
+    # setup model
+    model = linear_model.LinearRegression()
+    model.fit(X=X, y=y)
+
+    # test ale
+    ale = charters.ale(
+        model=model,
+        df=md_encoded,
+        x_axis="sex",
+        line_color="smoker_status",
+        mapping=mapping,
+        secondary="exposed",
+        center="global",
+        multiplicative=False,
+        display=False,
+    )
+
+    # expected df
+    expected_df = pd.DataFrame(
+        {
+            "sex": ["F", "F", "M", "M"],
+            "smoker_status": ["NS", "S", "NS", "S"],
+            "effect": [-0.02, -0.02, 0.02, 0.02],
+            "%_diff": [0.8, 0.8, 1.2, 1.2],
+            "exposed": [100, 100, 200, 200],
+        }
+    )
+    pd.testing.assert_frame_equal(
+        ale.sort_values(by=["sex", "smoker_status"]).reset_index(drop=True),
         expected_df.sort_values(by=["sex", "smoker_status"]).reset_index(drop=True),
         check_dtype=False,
     )

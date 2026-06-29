@@ -1543,16 +1543,16 @@ def calc_qx_exp_ae(
 
     """
     model_data[f"qx_{model_name}"] = predictions
-    model_data[f"exp_amt_{model_name}"] = (
+    model_data[f"exp_{model_name}"] = (
         model_data[f"qx_{model_name}"] * model_data[exposure_col]
     )
     model_data[f"ae_{model_name}"] = np.where(
         model_data[exposure_col] == 0,
         0,
         np.where(
-            model_data[f"exp_amt_{model_name}"] == 0,
+            model_data[f"exp_{model_name}"] == 0,
             np.nan,
-            model_data[actual_col] / model_data[f"exp_amt_{model_name}"],
+            model_data[actual_col] / model_data[f"exp_{model_name}"],
         ),
     )
     return model_data

@@ -948,7 +948,7 @@ def pdp(
         )
 
     # weight processing (for exposure-weighted binning)
-    if weight and x_bins:
+    if weight:
         weight_df = (
             df.groupby(grouped_features, observed=True)[weight].sum().reset_index()
         )
@@ -1049,7 +1049,7 @@ def pdp(
     if secondary:
         pdp_df = pdp_df.merge(secondary_df, on=grouped_features, how="left")
 
-    if weight and x_bins:
+    if weight:
         pdp_df = pdp_df.merge(weight_df, on=grouped_features, how="left")
         pdp_df[weight] = pdp_df[weight].fillna(0)
 
@@ -1152,6 +1152,359 @@ def pdp(
 
     if not display:
         fig = pdp_df
+
+    return fig
+
+
+def ale(
+    model: Any,
+    df: pd.DataFrame,
+    x_axis: str,
+    line_color: str | None = None,
+    weight: str | None = None,
+    secondary: str | None = None,
+    mapping: dict[str, Any] | None = None,
+    x_bins: int = 20,
+    discrete: bool | None = None,
+    multiplicative: bool = True,
+    center: str = "global",
+    n_jobs: int | None = None,
+    display: bool = True,
+) -> go.Figure | pd.DataFrame:
+    """
+    Create a 1-D accumulated local effects (ALE) plot.
+
+    The ALE will generate groups of the x_axis and the line_color (if applicable).
+    The ALE will then calculate the local effect of each group by predicting the
+    upper and lower bounds of the x_axis in the group and then calculating the
+    difference. This difference is then accumulated to get the overall effect
+    of the feature on the prediction.
+
+    When features are correlated, ALE is a better alternative to PDP as it looks
+    at the local effect of a feature on the prediction rather than the global effect.
+
+    Reference:
+    ----------
+    https://christophm.github.io/interpretable-ml-book/ale.html
+
+    Parameters
+    ----------
+    model : model
+        The model to use that will be predicting.
+    df : pd.DataFrame
+        The features in the model as well as the weights if applicable.
+    x_axis : str
+        The feature to create the ALE for.
+    line_color : str, optional (default=None)
+        The feature to use for the line plot.
+    weight : str, optional (default=None)
+        The name of the column to use for the weights.
+    secondary : str, optional (default=None)
+        The name of the column to use for the secondary y-axis.
+    mapping : dict, optional (default=None)
+        A mapping dictionary that will lookup an encoded features original
+        values.
+    x_bins : int, optional (default=20)
+        The number of bins to use for the x-axis, which is used for continuous
+        x-axis with more than 25 unique values.
+    discrete : bool, optional (default=None)
+        Force the x_axis to be treated as discrete or continuous.
+        When None it is auto-detected:
+          non-numeric, mapped, or <=25 unique values -> discrete.
+          otherwise -> continuous with x_bins
+    multiplicative : bool, optional (default=True)
+        Accumulate local effects in log space. This produces multiplicative
+        relativities (e.g. 1.12 = +12%).Recommended for multiplicative
+        models.
+    center : str, optional (default='global')
+        The centering method to use for the ALE.
+        - 'global': the mean of the predictions is used as the center.
+        - 'raw': the accumulated effect is used as is.
+    n_jobs : int, optional
+        Number of parallel jobs to run. If None, the computation is sequential.
+        n_jobs=-1 means using all processors.
+    display : bool, optional (default=True)
+        Whether to display figure or not.
+
+    Returns
+    -------
+    fig : go.Figure | pd.DataFrame
+
+    """
+    df = df.copy()
+    # make sure model has prediction function
+    models.core.ModelWrapper(model).check_predict()
+    logger.info(f"Model: [{type(model).__name__}] for ALE plot.")
+
+    grouped_features = [x_axis]
+    weights = None
+    if weight:
+        weights = df[weight]
+        logger.info(f"Weights: [{weight}]")
+
+    # get the feature names from the model to create X
+    model_features = models.core.ModelWrapper(model).get_features()
+    logger.debug(f"Model features for ale: {model_features}")
+
+    # check df is not empty
+    if df[model_features].empty:
+        raise ValueError("DataFrame is empty.")
+
+    # x_axis processing
+    if mapping and x_axis in mapping and mapping[x_axis]["type"] == "ohe":
+        raise NotImplementedError(
+            f"ALE x_axis [{x_axis}] is one-hot encoded. ALE needs a single "
+            "ordered column"
+        )
+
+    # auto-detect discrete vs continuous for x_axis
+    is_numeric = pd.api.types.is_numeric_dtype(df[x_axis].dtype)
+    is_mapped = bool(mapping and x_axis in mapping)
+    if discrete is None:
+        discrete = (not is_numeric) or is_mapped or (df[x_axis].nunique() <= 25)
+    if discrete:
+        bin_edges = np.sort(df[x_axis].unique())
+        if len(bin_edges) < 2:
+            raise ValueError(f"x_axis [{x_axis}] needs >=2 distinct values for ALE.")
+    else:
+        if pd.api.types.is_integer_dtype(df[x_axis].dtype):
+            df[x_axis] = df[x_axis].astype(float)
+        x_bins = x_bins or 20
+        quantiles = np.linspace(0, 1, x_bins + 1)
+        bin_edges = np.unique(np.quantile(df[x_axis].to_numpy(), quantiles))
+    logger.info(
+        f"x_axis: [{x_axis}] discrete: [{discrete} with {len(bin_edges) - 1} bins] "
+        f"multiplicative: [{multiplicative}] center: [{center}]"
+    )
+    X = df[model_features]
+
+    # line_color processing
+    if line_color:
+        if mapping and line_color in mapping:
+            line_color_type = mapping[line_color]["type"]
+            if line_color_type == "ohe":
+                df[line_color] = _reconstruct_col_from_ohe_expanded(
+                    df, line_color, mapping
+                )
+                line_color_values = df[line_color].unique()
+            else:
+                line_color_values = df[line_color].unique()
+        else:
+            line_color_values = df[line_color].unique()
+        logger.info(f"Line feature: [{line_color}]")
+    else:
+        line_color = "Overall"
+        df[line_color] = "Overall"
+        line_color_values = df[line_color].unique()
+    grouped_features.append(line_color)
+
+    # bucket each x_axis value into the appropriate bin
+    if discrete:
+        df["_bin_edge"] = df[x_axis]
+    else:
+        pos = np.clip(
+            np.searchsorted(bin_edges, df[x_axis].to_numpy(), side="left"),
+            1,
+            len(bin_edges) - 1,
+        )
+        df["_bin_edge"] = bin_edges[pos]
+
+    # secondary processing
+    if secondary:
+        secondary_df = (
+            df.groupby(["_bin_edge", line_color], observed=True)[secondary]
+            .sum()
+            .reset_index()
+            .rename(columns={"_bin_edge": x_axis})
+        )
+
+    # weight processing (for exposure-weighted binning)
+    if weight:
+        weight_df = (
+            df.groupby(["_bin_edge", line_color], observed=True)[weight]
+            .sum()
+            .reset_index()
+            .rename(columns={"_bin_edge": x_axis})
+        )
+
+    # create the group slices for each line_color_value and bin
+    # includes the X features, x_axis values, and weights for each group
+    n_bins = len(bin_edges) - 1
+    combos = list(itertools.product(line_color_values, range(n_bins)))
+    logger.info(f"Creating {len(combos)} local-effect predictions.")
+
+    group_slices = {
+        line_value: (
+            X[df[line_color] == line_value],
+            df.loc[df[line_color] == line_value, x_axis].to_numpy(),
+            (
+                df.loc[df[line_color] == line_value, weight].to_numpy(dtype=float)
+                if weight
+                else np.ones((df[line_color] == line_value).sum(), dtype=float)
+            ),
+        )
+        for line_value in line_color_values
+    }
+
+    # calculate the predictions for each group
+    # an upper and lower prediction is calculated for each bin to get the local effect
+    if n_jobs:
+        if n_jobs == -1:
+            n_jobs = cpu_count()
+        logger.info(f"Running '{n_jobs}' cores for parallel processing.")
+        verbose = 10 if custom_logger.get_log_level() == "DEBUG" else 0
+        local_effect_tuples = Parallel(n_jobs=n_jobs, verbose=verbose)(
+            delayed(_ale_make_prediction)(
+                model,
+                group_slices[line_value][0],
+                x_axis,
+                group_slices[line_value][1],
+                group_slices[line_value][2],
+                bin_edges[bin],
+                bin_edges[bin + 1],
+                discrete,
+                bin == 0,
+                multiplicative,
+            )
+            for line_value, bin in tqdm(combos, desc="Processing", unit="combo")
+        )
+    else:
+        local_effect_tuples = [
+            _ale_make_prediction(
+                model,
+                group_slices[line_value][0],
+                x_axis,
+                group_slices[line_value][1],
+                group_slices[line_value][2],
+                bin_edges[bin],
+                bin_edges[bin + 1],
+                discrete,
+                bin == 0,
+                multiplicative,
+            )
+            for line_value, bin in tqdm(combos, desc="Processing", unit="combo")
+        ]
+
+    # accumulate the effects per group
+    effects_dfs = []
+    for group_idx, line_value in enumerate(line_color_values):
+        local_effects = np.array(
+            [
+                local_effect_tuples[group_idx * n_bins + bin_idx][0]
+                for bin_idx in range(n_bins)
+            ]
+        )
+        interval_weights = np.array(
+            [
+                local_effect_tuples[group_idx * n_bins + bin_idx][1]
+                for bin_idx in range(n_bins)
+            ]
+        )
+        accumulated_effect = np.concatenate([[0.0], np.cumsum(local_effects)])
+
+        # center so the exposure-weighted mean of the piecewise-linear ALE is 0
+        interval_midpoint = 0.5 * (accumulated_effect[:-1] + accumulated_effect[1:])
+        centering_constant = (
+            np.average(interval_midpoint, weights=interval_weights)
+            if interval_weights.sum() > 0
+            else accumulated_effect.mean()
+        )
+        effects_dfs.append(
+            pd.DataFrame(
+                {
+                    x_axis: bin_edges,
+                    line_color: line_value,
+                    "effect": accumulated_effect - centering_constant,
+                }
+            )
+        )
+    ale_df = pd.concat(effects_dfs, ignore_index=True)
+
+    # calculate the %_diff based on the centering method
+    if center == "global":
+        if multiplicative:
+            ale_df["%_diff"] = np.exp(ale_df["effect"])
+        else:
+            w_all = (
+                weights.to_numpy(dtype=float)
+                if weights is not None
+                else np.ones(len(df))
+            )
+            base = np.average(model.predict(X), weights=w_all)
+            ale_df["%_diff"] = (base + ale_df["effect"]) / base
+    elif center == "raw":
+        ale_df["%_diff"] = ale_df["effect"]
+    else:
+        raise ValueError(f"Invalid center value: {center}, must be 'global' or 'raw'")
+
+    # merge the secondary / weight
+    if secondary:
+        ale_df = ale_df.merge(secondary_df, on=grouped_features, how="left")
+        ale_df[secondary] = ale_df[secondary].fillna(0)
+    if weight:
+        ale_df = ale_df.merge(weight_df, on=grouped_features, how="left")
+        ale_df[weight] = ale_df[weight].fillna(0)
+
+    # use mapping to get the original x_axis / line_color values
+    if mapping and x_axis in mapping:
+        ale_df[x_axis] = preprocessors.remap_values(ale_df[x_axis], mapping)
+    if mapping and line_color in mapping:
+        ale_df[line_color] = preprocessors.remap_values(ale_df[line_color], mapping)
+
+    ale_df = ale_df.sort_values(
+        by=grouped_features,
+        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
+    )
+
+    if not display:
+        return ale_df
+
+    # create the plots
+    colorscale = px.colors.qualitative.Light24
+    num_colors = len(colorscale)
+    rows = 2 if secondary else 1
+    fig = make_subplots(rows=rows, cols=1)
+
+    for index, line_color_value in enumerate(ale_df[line_color].unique()):
+        color_index = index % num_colors
+        df_subset = ale_df[ale_df[line_color] == line_color_value]
+        fig.add_trace(
+            go.Scatter(
+                x=df_subset[x_axis],
+                y=df_subset["%_diff"],
+                mode="lines",
+                name=str(line_color_value),
+                line={"color": colorscale[color_index]},
+            ),
+            row=1,
+            col=1,
+        )
+    fig.update_layout(
+        title="Accumulated Local Effects",
+        yaxis_title=f"%_diff ({center}{', multiplicative' if multiplicative else ''})",
+        yaxis_tickformat=".1%",
+        legend_title=line_color if line_color else "overall",
+        height=400 * rows,
+        width=chart_width,
+    )
+
+    if secondary:
+        logger.info(f"Adding secondary to chart: [{secondary}]")
+        for index, line_color_value in enumerate(ale_df[line_color].unique()):
+            color_index = index % num_colors
+            df_subset = ale_df[ale_df[line_color] == line_color_value]
+            fig.add_trace(
+                go.Bar(
+                    x=df_subset[x_axis],
+                    y=df_subset[secondary],
+                    name=str(line_color_value),
+                    marker={"color": colorscale[color_index]},
+                    showlegend=False,
+                ),
+                row=2,
+                col=1,
+            )
+        fig.update_layout(yaxis2_title=secondary, yaxis2_tickformat=",")
 
     return fig
 
@@ -2039,348 +2392,6 @@ def get_category_orders(
     return category_orders
 
 
-def ale(
-    model: Any,
-    df: pd.DataFrame,
-    x_axis: str,
-    line_color: str | None = None,
-    weight: str | None = None,
-    secondary: str | None = None,
-    mapping: dict[str, Any] | None = None,
-    x_bins: int | None = None,
-    discrete: bool | None = None,
-    log: bool = False,
-    center: str = "global",
-    n_jobs: int | None = None,
-    display: bool = True,
-) -> go.Figure | pd.DataFrame:
-    """
-    Create a 1-D accumulated local effects (ALE) plot.
-
-    When features are correlated, ALE is a better alternative to PDP as it looks
-    at the local effect of a feature on the prediction rather than the global effect.
-
-    Reference:
-    ----------
-    https://christophm.github.io/interpretable-ml-book/ale.html
-
-    Parameters
-    ----------
-    model : model
-        The model to use that will be predicting.
-    df : pd.DataFrame
-        The features in the model as well as the weights if applicable.
-    x_axis : str
-        The feature to create the ALE for.
-    line_color : str, optional (default=None)
-        The feature to use for the line plot.
-    weight : str, optional (default=None)
-        The name of the column to use for the weights.
-    secondary : str, optional (default=None)
-        The name of the column to use for the secondary y-axis.
-    mapping : dict, optional (default=None)
-        A mapping dictionary that will lookup an encoded features original
-        values.
-    x_bins : int, optional (default=None)
-        The number of bins to use for the x-axis.
-    discrete : bool, optional (default=None)
-        Force discrete handling (adjacent-value local effects).
-        When None it is auto-detected:
-          non-numeric, mapped, or <=25 unique values -> discrete.
-          otherwise -> continuous
-    log : bool, optional (default=False)
-        Accumulate local effects in log space. Recommended for multiplicative
-        models.
-    center : str, optional (default='global')
-        The centering method to use for the ALE.
-        - 'global': the mean of the predictions is used as the center.
-        - 'raw': the accumulated effect is used as is.
-    n_jobs : int, optional
-        Number of parallel jobs to run. If None, the computation is sequential.
-        n_jobs=-1 means using all processors.
-    display : bool, optional (default=True)
-        Whether to display figure or not.
-
-    Returns
-    -------
-    fig : go.Figure | pd.DataFrame
-
-    """
-    df = df.copy()
-    # make sure model has prediction function
-    models.core.ModelWrapper(model).check_predict()
-    logger.info(f"Model: [{type(model).__name__}] for ALE plot.")
-
-    grouped_features = [x_axis]
-    weights = None
-    if weight:
-        weights = df[weight]
-        logger.info(f"Weights: [{weight}]")
-
-    # get the feature names from the model to create X
-    model_features = models.core.ModelWrapper(model).get_features()
-    logger.debug(f"Model features for ale: {model_features}")
-
-    # check df is not empty
-    if df[model_features].empty:
-        raise ValueError("DataFrame is empty.")
-
-    # x_axis processing
-    if mapping and x_axis in mapping and mapping[x_axis]["type"] == "ohe":
-        raise NotImplementedError(
-            f"ALE x_axis [{x_axis}] is one-hot encoded. ALE needs a single "
-            "ordered column"
-        )
-
-    # auto-detect discrete vs continuous for x_axis
-    is_numeric = pd.api.types.is_numeric_dtype(df[x_axis].dtype)
-    is_mapped = bool(mapping and x_axis in mapping)
-    if discrete is None:
-        discrete = (not is_numeric) or is_mapped or (df[x_axis].nunique() <= 25)
-    if discrete:
-        bin_edges = np.sort(df[x_axis].unique())
-        if len(bin_edges) < 2:
-            raise ValueError(f"x_axis [{x_axis}] needs >=2 distinct values for ALE.")
-    else:
-        if pd.api.types.is_integer_dtype(df[x_axis].dtype):
-            df[x_axis] = df[x_axis].astype(float)
-        qs = np.linspace(0, 1, (x_bins or 20) + 1)
-        bin_edges = np.unique(np.quantile(df[x_axis].to_numpy(), qs))
-    logger.info(
-        f"x_axis: [{x_axis}] discrete: [{discrete}] log: [{log}] center: [{center}]"
-    )
-    X = df[model_features]
-
-    # line_color processing
-    if line_color:
-        if mapping and line_color in mapping:
-            line_color_type = mapping[line_color]["type"]
-            if line_color_type == "ohe":
-                df[line_color] = _reconstruct_col_from_ohe_expanded(
-                    df, line_color, mapping
-                )
-                line_color_values = df[line_color].unique()
-            else:
-                line_color_values = df[line_color].unique()
-        else:
-            line_color_values = df[line_color].unique()
-        logger.info(f"Line feature: [{line_color}]")
-    else:
-        line_color = "Overall"
-        df[line_color] = "Overall"
-        line_color_values = df[line_color].unique()
-    grouped_features.append(line_color)
-
-    # bucket each x_axis value into the appropriate bin
-    if discrete:
-        df["_bin_edge"] = df[x_axis]
-    else:
-        pos = np.clip(
-            np.searchsorted(bin_edges, df[x_axis].to_numpy(), side="left"),
-            1,
-            len(bin_edges) - 1,
-        )
-        df["_bin_edge"] = bin_edges[pos]
-
-    # secondary processing
-    if secondary:
-        secondary_df = (
-            df.groupby(["_bin_edge", line_color], observed=True)[secondary]
-            .sum()
-            .reset_index()
-            .rename(columns={"_bin_edge": x_axis})
-        )
-
-    # weight processing (for exposure-weighted binning)
-    if weight:
-        weight_df = (
-            df.groupby(["_bin_edge", line_color], observed=True)[weight]
-            .sum()
-            .reset_index()
-            .rename(columns={"_bin_edge": x_axis})
-        )
-
-    # create the group slices for each line_color_value and bin
-    # includes the X features, x_axis values, and weights for each group
-    n_int = len(bin_edges) - 1
-    combos = list(itertools.product(line_color_values, range(n_int)))
-    logger.info(f"Creating {len(combos)} local-effect predictions.")
-
-    group_slices = {
-        line_value: (
-            X[df[line_color] == line_value],
-            df.loc[df[line_color] == line_value, x_axis].to_numpy(),
-            (
-                df.loc[df[line_color] == line_value, weight].to_numpy(dtype=float)
-                if weight
-                else np.ones((df[line_color] == line_value).sum(), dtype=float)
-            ),
-        )
-        for line_value in line_color_values
-    }
-
-    # calculate the predictions for each line_color_value and bin
-    if n_jobs:
-        if n_jobs == -1:
-            n_jobs = cpu_count()
-        logger.info(f"Running '{n_jobs}' cores for parallel processing.")
-        verbose = 10 if custom_logger.get_log_level() == "DEBUG" else 0
-        local_effect_tuples = Parallel(n_jobs=n_jobs, verbose=verbose)(
-            delayed(_ale_make_prediction)(
-                model,
-                group_slices[line_value][0],
-                x_axis,
-                group_slices[line_value][1],
-                group_slices[line_value][2],
-                bin_edges[bin],
-                bin_edges[bin + 1],
-                discrete,
-                bin == 0,
-                log,
-            )
-            for line_value, bin in tqdm(combos, desc="Processing", unit="combo")
-        )
-    else:
-        local_effect_tuples = [
-            _ale_make_prediction(
-                model,
-                group_slices[line_value][0],
-                x_axis,
-                group_slices[line_value][1],
-                group_slices[line_value][2],
-                bin_edges[bin],
-                bin_edges[bin + 1],
-                discrete,
-                bin == 0,
-                log,
-            )
-            for line_value, bin in tqdm(combos, desc="Processing", unit="combo")
-        ]
-
-    # accumulate per group
-    effects_dfs = []
-    for group_idx, line_value in enumerate(line_color_values):
-        local_effects = np.array(
-            [
-                local_effect_tuples[group_idx * n_int + int_idx][0]
-                for int_idx in range(n_int)
-            ]
-        )
-        interval_weights = np.array(
-            [
-                local_effect_tuples[group_idx * n_int + int_idx][1]
-                for int_idx in range(n_int)
-            ]
-        )
-        accumulated_effect = np.concatenate([[0.0], np.cumsum(local_effects)])
-
-        # center so the exposure-weighted mean of the piecewise-linear ALE is 0
-        interval_midpoint = 0.5 * (accumulated_effect[:-1] + accumulated_effect[1:])
-        centering_constant = (
-            np.average(interval_midpoint, weights=interval_weights)
-            if interval_weights.sum() > 0
-            else accumulated_effect.mean()
-        )
-        effects_dfs.append(
-            pd.DataFrame(
-                {
-                    x_axis: bin_edges,
-                    line_color: line_value,
-                    "effect": accumulated_effect - centering_constant,
-                }
-            )
-        )
-    ale_df = pd.concat(effects_dfs, ignore_index=True)
-
-    # calculate the %_diff based on the centering method
-    if center == "global":
-        if log:
-            ale_df["%_diff"] = np.exp(ale_df["effect"])
-        else:
-            w_all = (
-                weights.to_numpy(dtype=float)
-                if weights is not None
-                else np.ones(len(df))
-            )
-            base = np.average(model.predict(X), weights=w_all)
-            ale_df["%_diff"] = (base + ale_df["effect"]) / base
-    elif center == "raw":
-        ale_df["%_diff"] = ale_df["effect"]
-    else:
-        raise ValueError(f"Invalid center value: {center}, must be 'global' or 'raw'")
-
-    # merge the secondary / weight
-    if secondary:
-        ale_df = ale_df.merge(secondary_df, on=grouped_features, how="left")
-        ale_df[secondary] = ale_df[secondary].fillna(0)
-    if weight:
-        ale_df = ale_df.merge(weight_df, on=grouped_features, how="left")
-        ale_df[weight] = ale_df[weight].fillna(0)
-
-    # use mapping to get the original x_axis / line_color values
-    if mapping and x_axis in mapping:
-        ale_df[x_axis] = preprocessors.remap_values(ale_df[x_axis], mapping)
-    if mapping and line_color in mapping:
-        ale_df[line_color] = preprocessors.remap_values(ale_df[line_color], mapping)
-
-    ale_df = ale_df.sort_values(
-        by=grouped_features,
-        key=lambda x: x.astype(str) if isinstance(x.dtype, CategoricalDtype) else x,
-    )
-
-    if not display:
-        return ale_df
-
-    # create the plots
-    colorscale = px.colors.qualitative.Light24
-    num_colors = len(colorscale)
-    rows = 2 if secondary else 1
-    fig = make_subplots(rows=rows, cols=1)
-
-    for index, line_color_value in enumerate(ale_df[line_color].unique()):
-        color_index = index % num_colors
-        df_subset = ale_df[ale_df[line_color] == line_color_value]
-        fig.add_trace(
-            go.Scatter(
-                x=df_subset[x_axis],
-                y=df_subset["%_diff"],
-                mode="lines",
-                name=str(line_color_value),
-                line={"color": colorscale[color_index]},
-            ),
-            row=1,
-            col=1,
-        )
-    fig.update_layout(
-        title="Accumulated Local Effects",
-        yaxis_title=f"%_diff ({center}{', log' if log else ''})",
-        yaxis_tickformat=".1%",
-        legend_title=line_color if line_color else "overall",
-        height=400 * rows,
-        width=chart_width,
-    )
-
-    if secondary:
-        logger.info(f"Adding secondary to chart: [{secondary}]")
-        for index, line_color_value in enumerate(ale_df[line_color].unique()):
-            color_index = index % num_colors
-            df_subset = ale_df[ale_df[line_color] == line_color_value]
-            fig.add_trace(
-                go.Bar(
-                    x=df_subset[x_axis],
-                    y=df_subset[secondary],
-                    name=str(line_color_value),
-                    marker={"color": colorscale[color_index]},
-                    showlegend=False,
-                ),
-                row=2,
-                col=1,
-            )
-        fig.update_layout(yaxis2_title=secondary, yaxis2_tickformat=",")
-
-    return fig
-
-
 def _get_numeric_axis_values(series: pd.Series, max_points: int = 100) -> np.ndarray:
     """
     Get axis values for numeric features in PDP.
@@ -2490,7 +2501,7 @@ def _ale_make_prediction(
     upper_value: float,
     discrete: bool,
     is_first_interval: bool,
-    log: bool,
+    multiplicative: bool,
 ) -> tuple[float, float]:
     """Local effect for a single interval of a single line_color group."""
     # subset X to the current interval
@@ -2518,7 +2529,7 @@ def _ale_make_prediction(
     X_upper[x_axis] = upper_value
     pred_lower = model.predict(X_lower)
     pred_upper = model.predict(X_upper)
-    if log:
+    if multiplicative:
         pred_lower, pred_upper = np.log(pred_lower), np.log(pred_upper)
 
     # calculate the local effect as the weighted average of the differences
