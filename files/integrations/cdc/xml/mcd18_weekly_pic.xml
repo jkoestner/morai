@@ -138,6 +138,10 @@ U00-U99 (Codes for special purposes)
 		<value>false</value>
 	</parameter>
 	<parameter>
+		<name>O_PR</name>
+		<value>false</value>
+	</parameter>
+	<parameter>
 		<name>O_V100_fmode</name>
 		<value>freg</value>
 	</parameter>

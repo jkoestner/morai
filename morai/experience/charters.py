@@ -1258,10 +1258,10 @@ def ale(
         )
 
     # auto-detect discrete vs continuous for x_axis
+    # discrete = character or <=25 unique values
     is_numeric = pd.api.types.is_numeric_dtype(df[x_axis].dtype)
-    is_mapped = bool(mapping and x_axis in mapping)
     if discrete is None:
-        discrete = (not is_numeric) or is_mapped or (df[x_axis].nunique() <= 25)
+        discrete = (not is_numeric) or (df[x_axis].nunique() <= 25)
     if discrete:
         bin_edges = np.sort(df[x_axis].unique())
         if len(bin_edges) < 2:
