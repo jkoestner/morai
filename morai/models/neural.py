@@ -825,9 +825,10 @@ class Neural(nn.Module):
         # convert to rate
         if self.task == "poisson":
             q = np.exp(z_torch)
+            predictions = np.clip(q, 1e-9, None)
         else:  # binomial
             q = 1.0 / (1.0 + np.exp(-z_torch))
-        predictions = np.clip(q, 1e-9, 1 - 1e-9)
+            predictions = np.clip(q, 1e-9, 1 - 1e-9)
 
         return predictions
 

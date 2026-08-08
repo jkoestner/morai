@@ -711,11 +711,14 @@ def calc_variance(
     rate_col: str,
     exposure_col: str,
     amount_col: str | None = None,
+    distribution: str = "binomial",
+    dispersion: float = 1.0,
 ) -> pd.Series:
     """
     Calculate the variance of a binomial distribution.
 
-    variance = amount^2 * exposure * rate * (1 - rate)
+    binomial: variance = dispersion * amount^2 * exposure * rate * (1 - rate)
+    poisson:  variance = dispersion * amount^2 * exposure * rate
 
     Notes
     -----
@@ -736,6 +739,10 @@ def calc_variance(
         Column name of the exposure, should be between 0 and 1.
     amount_col : str, optional
         Column name of the face amount.
+    distribution : str, default "binomial"
+        Process distribution: "binomial" or "poisson".
+    dispersion : float, default 1.0
+        Overdispersion multiplier
 
     Returns
     -------
@@ -757,13 +764,36 @@ def calc_variance(
     if not ((seriatim_df[exposure_col] >= 0) & (seriatim_df[exposure_col] <= 1)).all():
         logger.warning(f"Exposure column '{exposure_col}' has values outside of [0, 1]")
 
+    # dispersion should be greater than or equal to 1
+    if dispersion < 1:
+        raise ValueError(
+            f"dispersion `{dispersion}` < 1 implies underdispersion, which is "
+            f"rarely used"
+        )
+
     # calculate the variance
     amount = 1 if amount_col is None else seriatim_df[amount_col]
-    variance = (
-        amount**2
-        * seriatim_df[exposure_col]
-        * seriatim_df[rate_col]
-        * (1 - seriatim_df[rate_col])
+    if distribution == "binomial":
+        variance = (
+            amount**2
+            * seriatim_df[exposure_col]
+            * seriatim_df[rate_col]
+            * (1 - seriatim_df[rate_col])
+        )
+    elif distribution == "poisson":
+        variance = amount**2 * seriatim_df[exposure_col] * seriatim_df[rate_col]
+    else:
+        raise ValueError(
+            f"distribution must be one of ['binomial', 'poisson'], "
+            f"got `{distribution}`."
+        )
+
+    # apply dispersion
+    variance = variance * dispersion
+
+    logger.info(
+        f"variance calculated using distribution: `{distribution}` "
+        f"with dispersion: `{dispersion}`"
     )
 
     return variance
@@ -1556,6 +1586,183 @@ def calc_qx_exp_ae(
         ),
     )
     return model_data
+
+
+def estimate_sigma(
+    df: pd.DataFrame,
+    actual_col: str,
+    expected_col: str,
+    variance_col: str,
+    group_col: str,
+    method: str = "phi",
+    detrend: bool = False,
+    conf_level: float = 0.95,
+) -> dict:
+    """
+    Estimate sigma using a "phi" or "subtraction" method.
+
+    Sigma can be used in a component formula to calculate total_variance
+    (similar to the negative binomial variance). One caveat with using this is
+    that the expected^2 will have to be grouped and cannot be added at a
+    seriatim level.
+
+    total_variance = process_variance + sigma^2 * expected^2
+
+    subtraction method - same as (total_variance - process_variance)/ expecteds^2
+    total_variance = [(actuals - expecteds)^2 * (rows / degrees_of_freedom)]
+    phi = total_variance / process_variance
+    mu_bar = expecteds^2 / process_variance
+
+    phi method:
+    phi = ((actuals - expecteds)^2 / variance) / degrees_of_freedom
+        = pearson_chi / degrees_of_freedom
+    mu_bar = (expecteds^2 / variance)
+
+    sigma squared:
+    sigma^2 = (phi - 1) / mu_bar
+
+    Notes
+    -----
+    - the ae_total scalar centers the expecteds to get variance (assuming estimate
+      was accurate in total). Excluding the scalar would bucket the "miss" in
+      variance, inflating sigma^2 by roughly (ae_total - 1)^2.
+    - the two methods differ only in weighting, and "phi" is peferred due to
+      weighting more evenly, when sizes are different. "subtraction" weights
+      groups by size. "phi" weights each group's deviation by that group's own
+      process variance, so groups of very different size contribute more evenly.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe at any level
+    actual_col : str
+        Column with actuals
+    expected_col : str
+        Column with expecteds
+    variance_col : str
+        Column with variances
+    group_col : str
+        Column to group on
+    method : str default "phi"
+        Method to estimate sigma
+        Options include "subtraction" or "phi"
+    detrend : bool, default False
+        Remove a fitted linear trend across groups before measuring
+        dispersion.
+    conf_level : float, default 0.95
+        Confidence level for the interval on phi / sigma.
+
+    Returns
+    -------
+    dict
+        sigma : float
+            Sigma of the `group_col`
+        sigma_ci : tuple
+            Confidence intervals of sigma
+        phi : float
+            Phi of the `group_col`
+
+    References
+    ----------
+    - https://en.wikipedia.org/wiki/Negative_binomial_distribution (section
+      Alternative parameterizations)
+      shows the variance formula for NB (u + alpha * u^2) in
+    - https://www.soa.org/globalassets/assets/files/edu/c-21-01.pdf (section 8-36)
+      total variance formula where total_variance = mean_of_process_variance +
+      variance_of_hypothetical_mean
+    - https://en.wikipedia.org/wiki/Law_of_total_variance
+      law of total variance
+    - https://grodri.github.io/glms/notes/overdispersion
+
+    """
+    # validations
+    required_cols = [actual_col, expected_col, variance_col, group_col]
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
+        )
+    if conf_level is not None and not 0 < conf_level < 1:
+        raise ValueError(f"conf_level must be between 0 and 1, got {conf_level}.")
+    if method not in ("subtraction", "phi"):
+        raise ValueError(
+            f"Method `{method}` is not one of the options 'subtraction' or 'phi'."
+        )
+
+    # group data
+    cols = list(dict.fromkeys([actual_col, expected_col, variance_col]))
+    grouped_data = df.groupby(group_col, observed=True)[cols].sum().sort_index()
+    actuals = grouped_data[actual_col]
+    expecteds = grouped_data[expected_col]
+    variances = grouped_data[variance_col]
+    rows = len(grouped_data)
+
+    # degrees of freedom
+    # ae_total is estimated and a slope if detrending
+    degrees_of_freedom = rows - 2 if detrend else rows - 1
+    if degrees_of_freedom < 2:
+        raise ValueError(
+            f"degrees_of_freedom: `{degrees_of_freedom}`, need at least 2."
+        )
+    if (expecteds <= 0).any():
+        raise ValueError(f"Column '{expected_col}' has non-positive group totals.")
+
+    # calculate ae
+    ae_total = actuals.sum() / expecteds.sum()
+    trend_slope = None
+    if detrend:
+        x = np.arange(rows)
+        slope, intercept = np.polyfit(x, actuals / expecteds, deg=1)
+        trend_slope = slope
+        ae_fit = intercept + slope * x
+    else:
+        ae_fit = np.full(rows, ae_total)
+    expecteds_scaled = ae_fit * expecteds
+    variances_scaled = ae_fit * variances
+    process_variance_scaled = variances_scaled.sum()
+    sum_expecteds_squared = (expecteds_scaled**2).sum()
+
+    # calculate phi
+    if method == "subtraction":
+        total_variance = ((actuals - expecteds_scaled) ** 2).sum() * (
+            rows / (degrees_of_freedom)
+        )  # adjust for degrees of freedom
+        phi = total_variance / process_variance_scaled
+        mu_bar = sum_expecteds_squared / process_variance_scaled  # size-weighted
+    else:
+        phi = (
+            (actuals - expecteds_scaled) ** 2 / variances_scaled
+        ).sum() / degrees_of_freedom
+        mu_bar = (expecteds_scaled**2 / variances_scaled).mean()  # mean
+
+    # calculate sigma
+    def phi_to_sigma_squared(p: float) -> float:
+        return max(0.0, (p - 1) / mu_bar)
+
+    sigma_squared = phi_to_sigma_squared(phi)
+    sigma = np.sqrt(sigma_squared)
+    if sigma == 0.0:
+        logger.info("Estimated sigma floored at 0 (no excess over process variance)")
+    if trend_slope is not None:
+        logger.info(f"Removed a trend of {trend_slope:.4f} A/E per group step.")
+
+    # calculate confidence intervals
+    alpha = 1 - conf_level
+    phi_ci = (
+        degrees_of_freedom * phi / stats.chi2.ppf(1 - alpha / 2, degrees_of_freedom),
+        degrees_of_freedom * phi / stats.chi2.ppf(alpha / 2, degrees_of_freedom),
+    )
+    sigma_ci = (
+        np.sqrt(phi_to_sigma_squared(phi_ci[0])),
+        np.sqrt(phi_to_sigma_squared(phi_ci[1])),
+    )
+
+    return {
+        "sigma": sigma,
+        "sigma_ci": sigma_ci,
+        "phi": phi,
+        "degrees_of_freedom": degrees_of_freedom,
+    }
 
 
 def _get_study_periods(

@@ -1056,7 +1056,7 @@ def pdp(
     # use mapping to get the original x_axis values
     if mapping and x_axis in mapping and x_axis_type != "ohe":
         pdp_df[x_axis] = preprocessors.remap_values(pdp_df[x_axis], mapping)
-    if mapping and line_color and line_color in mapping and line_color != "ohe":
+    if mapping and line_color and line_color in mapping and line_color_type != "ohe":
         pdp_df[line_color] = preprocessors.remap_values(pdp_df[line_color], mapping)
 
     pdp_df = pdp_df.sort_values(

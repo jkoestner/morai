@@ -431,12 +431,16 @@ class GLM(BaseEstimator, RegressorMixin):
             if is_regularized:
                 # calculate pearson residuals manually for regularized model
                 fitted_values = self.model.predict(self.model.model.exog)
-                if isinstance(self.model.model.family, sm.families.Binomial):
-                    mu = fitted_values
-                    var = mu * (1 - mu)
-                    residuals = (self.model.model.endog - mu) / np.sqrt(var)
+                actual_values = self.model.model.endog
+                family = self.model.model.family
+                if isinstance(family, sm.families.Binomial):
+                    var = fitted_values * (1 - fitted_values)
+                elif isinstance(family, sm.families.Poisson):
+                    var = fitted_values
                 else:
-                    residuals = self.model.model.endog - fitted_values
+                    # fall back
+                    var = family.variance(fitted_values)
+                residuals = (actual_values - fitted_values) / np.sqrt(var)
             else:
                 residuals = self.model.resid_pearson
 
@@ -1747,9 +1751,7 @@ class GAMStats(BaseEstimator, RegressorMixin):
 
         return unfit_model
 
-    def create_smoother(
-        self, X: pd.DataFrame, spline_dict: dict | None = None
-    ) -> Any:
+    def create_smoother(self, X: pd.DataFrame, spline_dict: dict | None = None) -> Any:
         """
         Create the smoother for the GAM model.
 
