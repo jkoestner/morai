@@ -50,6 +50,7 @@ CDC_WAIT_TIME_SECONDS = 16
 FILTER_MI_PREFIX = "cdc-mi"
 FILTER_COD_PREFIX = "cdc-cod"
 FILTER_COD_TRENDS_PREFIX = "cdc-cod-trends"
+FILTER_POP_TRENDS_PREFIX = "cdc-pop-trends"
 FILTER_MONTHLY_PREFIX = "cdc-monthly"
 # provides when to use data from 18 dataset as there is overlap in 99 dataset
 # the 99 dataset ends in 2020 and the 18 dataset starts in 2018
@@ -584,18 +585,65 @@ def layout():
                                 className="py-2 mb-3 small",
                             ),
                             dbc.Row(
-                                common_build._build_tabbed_content(
-                                    tabs=[
-                                        common_build.TabSpec(
-                                            label="Excess Chart", tab_id="excess-chart"
+                                [
+                                    dbc.Col(
+                                        common_build._build_tabbed_content(
+                                            tabs=[
+                                                common_build.TabSpec(
+                                                    label="Excess Chart",
+                                                    tab_id="excess-chart",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Excess Table",
+                                                    tab_id="excess-table",
+                                                ),
+                                            ],
+                                            prefix=FILTER_POP_TRENDS_PREFIX,
                                         ),
-                                        common_build.TabSpec(
-                                            label="Excess Table",
-                                            tab_id="excess-table",
+                                        width=10,
+                                    ),
+                                    dbc.Col(
+                                        dbc.Card(
+                                            [
+                                                dbc.CardHeader(
+                                                    html.H5(
+                                                        [
+                                                            html.I(
+                                                                className="fas fa-filter me-2"
+                                                            ),
+                                                            "Filters",
+                                                        ],
+                                                        className="mb-0",
+                                                    ),
+                                                    className="bg-light",
+                                                ),
+                                                dbc.CardBody(
+                                                    html.Div(
+                                                        [
+                                                            html.Label(
+                                                                "Age Group",
+                                                                className="fw-bold",
+                                                            ),
+                                                            dcc.Dropdown(
+                                                                id={
+                                                                    "type": "filter-str",
+                                                                    "prefix": FILTER_POP_TRENDS_PREFIX,
+                                                                    "index": "age_groups",
+                                                                },
+                                                                options=[],
+                                                                multi=True,
+                                                                clearable=True,
+                                                                className="ms-2",
+                                                            ),
+                                                        ],
+                                                    ),
+                                                ),
+                                            ],
+                                            className="shadow-sm h-100",
                                         ),
-                                    ],
-                                    prefix="cdc-pop-trends",
-                                ),
+                                        width=2,
+                                    ),
+                                ],
                             ),
                         ],
                         title=[
@@ -1471,16 +1519,32 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
 
 @callback(
     [
-        Output("cdc-pop-trends-tab-content", "children"),
+        Output(f"{FILTER_POP_TRENDS_PREFIX}-tab-content", "children"),
+        Output(
+            {
+                "type": "filter-str",
+                "prefix": FILTER_POP_TRENDS_PREFIX,
+                "index": "age_groups",
+            },
+            "options",
+        ),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
     ],
     [
         Input("button-pop-trends", "n_clicks"),
-        Input("cdc-pop-trends-tabs", "active_tab"),
+        Input(f"{FILTER_POP_TRENDS_PREFIX}-tabs", "active_tab"),
     ],
+    State(
+        {
+            "type": "filter-str",
+            "prefix": FILTER_POP_TRENDS_PREFIX,
+            "index": "age_groups",
+        },
+        "value",
+    ),
 )
-def display_cdc_pop_trends(n_clicks, active_tab):
+def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
     """Create cdc pop trends."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
@@ -1494,7 +1558,7 @@ def display_cdc_pop_trends(n_clicks, active_tab):
         mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
     except Exception as e:
         logger.error(f"Failed to load table: {e}")
-        return dash.no_update, True, f"Failed to load data: {e}"
+        return dash.no_update, dash.no_update, True, f"Failed to load data: {e}"
 
     # filter and concat
     mcd18_mi = mcd18_mi[mcd18_mi["year"] >= NEW_DATASET_START_YEAR]
@@ -1507,6 +1571,26 @@ def display_cdc_pop_trends(n_clicks, active_tab):
         category="bin_age_int",
     )
     excess = excess.rename(columns={"value": "mapped_age"})
+
+    # get age group options
+    age_group_options = [
+        {"label": str(v), "value": v}
+        for v in excess.loc[excess["mapped_age"].notna(), "age_groups"]
+        .dropna()
+        .unique()
+    ]
+
+    # filter the age groups
+    include_age_groups = age_group_value if age_group_value else cdc.AGE_GROUP_ORDER
+    excess = excess[excess["age_groups"].isin(include_age_groups)]
+    if excess.empty:
+        logger.error("No data for the selected age groups.")
+        return (
+            dash.no_update,
+            age_group_options,
+            True,
+            "No data for the selected age groups.",
+        )
 
     # normalize the partial deaths
     excess["deaths"] = excess["deaths"].astype(float)
@@ -1611,7 +1695,7 @@ def display_cdc_pop_trends(n_clicks, active_tab):
     result["crude_rt_lc"] = result["deaths_lc"] / result["population"] * 100000
 
     # chart
-    if active_tab == "cdc-pop-trends-tab-excess-chart":
+    if active_tab == f"{FILTER_POP_TRENDS_PREFIX}-tab-excess-chart":
         chart = charters.compare_rates(
             result,
             x_axis="year",
@@ -1619,21 +1703,25 @@ def display_cdc_pop_trends(n_clicks, active_tab):
         )
         tab_content = html.Div([dcc.Graph(figure=chart)])
     # table
-    elif active_tab == "cdc-pop-trends-tab-excess-table":
+    elif active_tab == f"{FILTER_POP_TRENDS_PREFIX}-tab-excess-table":
         columnDefs = dash_formats.get_column_defs(result)
         grid = dag.AgGrid(
-            id={"type": "data-table", "tab": "excess-table", "page": "cdc-pop-trends"},
+            id={
+                "type": "data-table",
+                "tab": "excess-table",
+                "page": FILTER_POP_TRENDS_PREFIX,
+            },
             rowData=result.to_dict("records"),
             columnDefs=columnDefs,
         )
         export_button = common_build._build_export_button(
-            "excess-table", "cdc-pop-trends"
+            "excess-table", FILTER_POP_TRENDS_PREFIX
         )
         tab_content = html.Div([export_button, grid])
     else:
         tab_content = dash.no_update
 
-    return tab_content, False, ""
+    return tab_content, age_group_options, False, ""
 
 
 @callback(

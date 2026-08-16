@@ -1357,7 +1357,7 @@ def summarize_study(
     if confidence_level is not None and "ae" in ratios:
         z_score = stats.norm.ppf(1 - (1 - confidence_level) / 2)
         logger.info(
-            f"calculating confidence intervals around A/E - normal dist, "
+            f"calculating confidence intervals around 1.0 - normal dist, "
             f"`{confidence_level:.0%}` (`{z_score:.2f}`)"
         )
 
