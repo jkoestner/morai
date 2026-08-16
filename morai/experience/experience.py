@@ -715,7 +715,7 @@ def calc_variance(
     dispersion: float = 1.0,
 ) -> pd.Series:
     """
-    Calculate the variance of a binomial distribution.
+    Calculate the process variance of a distribution.
 
     binomial: variance = dispersion * amount^2 * exposure * rate * (1 - rate)
     poisson:  variance = dispersion * amount^2 * exposure * rate
@@ -764,6 +764,13 @@ def calc_variance(
     if not ((seriatim_df[exposure_col] >= 0) & (seriatim_df[exposure_col] <= 1)).all():
         logger.warning(f"Exposure column '{exposure_col}' has values outside of [0, 1]")
 
+    # rate should be between 0 and 1
+    if not ((seriatim_df[rate_col] >= 0) & (seriatim_df[rate_col] <= 1)).all():
+        raise ValueError(
+            f"Rate column '{rate_col}' has values outside of [0, 1]. "
+            f"Please check the rate column and ensure it is between 0 and 1."
+        )
+
     # dispersion should be greater than or equal to 1
     if dispersion < 1:
         raise ValueError(
@@ -792,11 +799,367 @@ def calc_variance(
     variance = variance * dispersion
 
     logger.info(
-        f"variance calculated using distribution: `{distribution}` "
-        f"with dispersion: `{dispersion}`"
+        f"calculated process_variance using distribution: `{distribution}`, "
+        f"dispersion: `{dispersion}`"
     )
 
     return variance
+
+
+def estimate_sigma(
+    df: pd.DataFrame,
+    assumption: str,
+    suffix: str,
+    group_col: str,
+    method: str = "phi",
+    detrend: bool = False,
+    conf_level: float = 0.95,
+) -> dict:
+    """
+    Estimate sigma using a "phi" or "subtraction" method.
+
+    Sigma can be used in a component formula to calculate total_variance
+    (similar to the negative binomial variance). One caveat with using this is
+    that the expected^2 will have to be grouped and cannot be added at a
+    seriatim level.
+
+    total_variance = process_variance + sigma^2 * expected^2
+
+    subtraction method - same as (total_variance - process_variance)/ expecteds^2
+    total_variance = [(actuals - expecteds)^2 * (rows / degrees_of_freedom)]
+    phi = total_variance / process_variance
+    mu_bar = expecteds^2 / process_variance
+
+    phi method:
+    phi = ((actuals - expecteds)^2 / process_variance) / degrees_of_freedom
+        = pearson_chi / degrees_of_freedom
+    mu_bar = (expecteds^2 / process_variance)
+
+    sigma squared:
+    sigma^2 = (phi - 1) / mu_bar
+
+    It is expected that there will be a naming convention for
+    actuals, exposures, expecteds, and variances.
+      - naming convention:
+        - actual_<suffix>
+        - expected_<assumption>_<suffix>
+        - variance_<assumption>_<suffix>
+
+
+    Notes
+    -----
+    - the ae_total scalar centers the expecteds to get variance (assuming estimate
+      was accurate in total). Excluding the scalar would bucket the "miss" in
+      variance, inflating sigma^2 by roughly (ae_total - 1)^2 which would be
+      additive.
+    - the two methods differ only in weighting, and "phi" is peferred due to
+      weighting more evenly, when sizes are different. "subtraction" weights
+      groups by size. "phi" weights each group's deviation by that group's own
+      process variance, so groups of very different size contribute more evenly.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe at any level
+    assumption : str
+        Assumption of the expected to use for the calculation
+    suffix : str
+        Suffix of columns to use for the calculation
+    group_col : str
+        Column to group on
+    method : str default "phi"
+        Method to estimate sigma
+        Options include "subtraction" or "phi"
+    detrend : bool, default False
+        Remove a fitted linear trend across groups before measuring
+        dispersion.
+    conf_level : float, default 0.95
+        Confidence level for the interval on phi / sigma.
+
+    Returns
+    -------
+    dict
+        sigma : float
+            Sigma of the `group_col`
+        sigma_ci : tuple
+            Confidence intervals of sigma
+        phi : float
+            Phi of the `group_col`
+
+    References
+    ----------
+    - https://en.wikipedia.org/wiki/Negative_binomial_distribution (section
+      Alternative parameterizations)
+      shows the variance formula for NB (u + alpha * u^2) in
+    - https://www.soa.org/globalassets/assets/files/edu/c-21-01.pdf (section 8-36)
+      total variance formula where total_variance = mean_of_process_variance +
+      variance_of_hypothetical_mean
+    - https://en.wikipedia.org/wiki/Law_of_total_variance
+      law of total variance
+    - https://grodri.github.io/glms/notes/overdispersion
+
+    """
+    # default columns
+    actual_col = f"actual_{suffix}"
+    expected_col = f"expected_{assumption}_{suffix}"
+    variance_col = f"variance_{assumption}_{suffix}"
+
+    # validations
+    required_cols = [actual_col, expected_col, variance_col, group_col]
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
+        )
+    if conf_level is not None and not 0 < conf_level < 1:
+        raise ValueError(f"conf_level must be between 0 and 1, got {conf_level}.")
+    if method not in ("subtraction", "phi"):
+        raise ValueError(
+            f"Method `{method}` is not one of the options 'subtraction' or 'phi'."
+        )
+
+    # group data
+    cols = list(dict.fromkeys([actual_col, expected_col, variance_col]))
+    grouped_data = df.groupby(group_col, observed=True)[cols].sum().sort_index()
+    actuals = grouped_data[actual_col]
+    expecteds = grouped_data[expected_col]
+    variances = grouped_data[variance_col]
+    rows = len(grouped_data)
+
+    # degrees of freedom
+    # ae_total is estimated and a slope if detrending
+    degrees_of_freedom = rows - 2 if detrend else rows - 1
+    if degrees_of_freedom < 2:
+        raise ValueError(
+            f"degrees_of_freedom: `{degrees_of_freedom}`, need at least 2."
+        )
+    if (expecteds <= 0).any():
+        raise ValueError(f"Column '{expected_col}' has non-positive group totals.")
+
+    # calculate ae
+    ae_total = actuals.sum() / expecteds.sum()
+    trend_slope = None
+    if detrend:
+        x = np.arange(rows)
+        slope, intercept = np.polyfit(x, actuals / expecteds, deg=1)
+        trend_slope = slope
+        ae_fit = intercept + slope * x
+    else:
+        ae_fit = np.full(rows, ae_total)
+    expecteds_scaled = ae_fit * expecteds
+    variances_scaled = ae_fit * variances
+    process_variance_scaled = variances_scaled.sum()
+    sum_expecteds_squared = (expecteds_scaled**2).sum()
+
+    # calculate phi
+    if method == "subtraction":
+        total_variance = ((actuals - expecteds_scaled) ** 2).sum() * (
+            rows / (degrees_of_freedom)
+        )  # adjust for degrees of freedom
+        phi = total_variance / process_variance_scaled
+        mu_bar = sum_expecteds_squared / process_variance_scaled  # size-weighted
+    else:
+        phi = (
+            (actuals - expecteds_scaled) ** 2 / variances_scaled
+        ).sum() / degrees_of_freedom
+        mu_bar = (expecteds_scaled**2 / variances_scaled).mean()  # mean
+
+    # calculate sigma
+    def phi_to_sigma_squared(p: float) -> float:
+        return max(0.0, (p - 1) / mu_bar)
+
+    sigma_squared = phi_to_sigma_squared(phi)
+    sigma = np.sqrt(sigma_squared)
+
+    # calculate confidence intervals
+    alpha = 1 - conf_level
+    phi_ci = (
+        degrees_of_freedom * phi / stats.chi2.ppf(1 - alpha / 2, degrees_of_freedom),
+        degrees_of_freedom * phi / stats.chi2.ppf(alpha / 2, degrees_of_freedom),
+    )
+    sigma_ci = (
+        np.sqrt(phi_to_sigma_squared(phi_ci[0])),
+        np.sqrt(phi_to_sigma_squared(phi_ci[1])),
+    )
+
+    # logging
+    logger.info(f"estimated sigma using: `{method}`")
+    logger.info(f"estimated sigma: (`{sigma:.4f}`)")
+    logger.info(
+        f"`{conf_level:.0%}` confidence intervals "
+        f"[`{sigma_ci[0]:.4f}`, `{sigma_ci[1]:.4f}`]"
+    )
+    if trend_slope is not None:
+        logger.info(f"removed a trend of {trend_slope:.4f} A/E per group step.")
+    if sigma == 0.0:
+        logger.warning("estimated sigma floored at 0 (no excess over process variance)")
+    elif sigma_ci[0] == 0.0:
+        logger.warning(
+            "estimated sigma confidence interval crosses 0, suggesting possibly "
+            "no excess over process variance"
+        )
+    return {
+        "sigma": sigma,
+        "sigma_ci": sigma_ci,
+        "phi": phi,
+        "phi_ci": phi_ci,
+        "degrees_of_freedom": degrees_of_freedom,
+        "ae_total": ae_total,
+        "trend_slope": trend_slope,
+        "group_cols": group_col,
+    }
+
+
+def calc_component_variance(
+    seriatim_df: pd.DataFrame,
+    assumption: str,
+    suffix: str,
+    groupby_cols: list[str],
+    component_dict: dict,
+) -> pd.DataFrame:
+    """
+    Calculate the component variance for a rate based on the process variance and sigma.
+
+    total_variance = (process_variance * A/E)
+                    + Σ_shock_components [(sigma^2 * (expected * A/E)^2)]
+
+    It is expected that there will be a naming convention for
+    actuals, expecteds, and variances.
+      - naming convention:
+        - actual_<suffix>
+        - expected_<assumption>_<suffix>
+        - variance_<assumption>_<suffix>
+
+    Notes
+    -----
+    - Data needs to be aggregated at the level of the groupby_cols and shock_components
+      groupby_cols.
+    - variance_total is valid per row, but the variance cannot be summed
+      across rows, as it may underestimate if there is a shared shock.
+    - ae_total is used to match the units that were used to estimate sigma.
+
+    Parameters
+    ----------
+    seriatim_df : pd.DataFrame
+        DataFrame with the data.
+    assumption : str
+        Assumption for the expected values.
+    suffix : str
+        Suffix for the actuals and exposures columns.
+    groupby_cols : list[str]
+        List of columns to group by
+    component_dict : dict
+        Dict of extra variance components.
+            {
+                "ae_total": <ae_total>,
+                "components": {
+                    "<component_name>": {
+                            "sigma": <sigma> # estimated sigma
+                            "group_cols": <group_cols> # columns forthe component grain
+                        }
+                }
+            }
+
+    Returns
+    -------
+    variance_df : pd.DataFrame
+        DataFrame with the variance calculations, including:
+            - expected_col, variance_process, actual_col
+            - variance_total
+            - variance_component_<name> for every component
+
+    """
+    # default columns
+    actual_col = f"actual_{suffix}"
+    expected_col = f"expected_{assumption}_{suffix}"
+    variance_col = f"variance_{assumption}_{suffix}"
+
+    # initialize
+    required_sum_cols = [expected_col, variance_col, actual_col]
+    cols_to_check = required_sum_cols + groupby_cols
+    ae_total = component_dict.get("ae_total", {}).get("ae_total", 1.0)
+    shock_components = component_dict.get("components", {})
+
+    # get shock columns
+    for name, component in shock_components.items():
+        required_keys = ["sigma", "group_cols"]
+        missing_keys = [key for key in required_keys if key not in component]
+        if missing_keys:
+            raise ValueError(
+                f"Component '{name}' is missing required keys: {missing_keys}."
+            )
+        component_group_cols = component["group_cols"]
+        component_group_cols = (
+            [component_group_cols]
+            if isinstance(component_group_cols, str)
+            else list(component_group_cols)
+        )
+        cols_to_check += component_group_cols
+
+    # validate columns exist
+    cols_to_check = list(dict.fromkeys(cols_to_check))
+    missing_cols = [col for col in cols_to_check if col not in seriatim_df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
+        )
+
+    # groupby and sum
+    variance_df = seriatim_df.groupby(groupby_cols, observed=True)[
+        required_sum_cols
+    ].sum()
+    variance_df[f"variance_process_{suffix}"] = variance_df[variance_col]
+
+    logger.info(f"calculated component_variance, grouped by: `{groupby_cols}`")
+    logger.info(f"shock_components: `{list(shock_components.keys())}`")
+
+    # scale variance by A/E total
+    logger.info(f"scaling variance by A/E total: `{ae_total:.2f}`")
+    variance_df[f"variance_total_{suffix}"] = variance_df[variance_col] * ae_total
+
+    # calculate total variance by computing each component variance and
+    # adding to the total variance
+    for name, component in shock_components.items():
+        sigma = component["sigma"]
+
+        component_group_cols = component["group_cols"]
+        component_group_cols = (
+            [component_group_cols]
+            if isinstance(component_group_cols, str)
+            else list(component_group_cols)
+        )
+
+        means = (
+            seriatim_df.groupby(groupby_cols + component_group_cols, observed=True)[
+                expected_col
+            ].sum()
+            * ae_total
+        )
+
+        component_variance = (means**2).groupby(
+            level=list(range(len(groupby_cols)))
+        ).sum() * sigma**2
+
+        col_name = f"variance_component_{name}_{suffix}"
+        variance_df[col_name] = component_variance
+        variance_df[f"variance_total_{suffix}"] = (
+            variance_df[f"variance_total_{suffix}"] + variance_df[col_name]
+        )
+
+    # calculate sd
+    variance_df[f"sd_process_{suffix}"] = np.sqrt(
+        variance_df[f"variance_process_{suffix}"]
+    )
+    variance_df[f"sd_total_{suffix}"] = np.sqrt(variance_df[f"variance_total_{suffix}"])
+
+    # reorder columns
+    variance_df = variance_df[
+        [actual_col, expected_col, f"variance_process_{suffix}"]
+        + [f"variance_component_{name}_{suffix}" for name in shock_components.keys()]
+        + [f"variance_total_{suffix}", f"sd_process_{suffix}", f"sd_total_{suffix}"]
+    ]
+
+    return variance_df
 
 
 def calc_confidence_intervals(
@@ -807,6 +1170,9 @@ def calc_confidence_intervals(
 ) -> tuple[pd.Series, pd.Series]:
     """
     Calculate the confidence intervals for a rate based on the variance.
+
+    Assumes a normal distribution for the rate.
+    The confidence intervals are calculated as:
 
     confidence_interval = z_score * sqrt(variance)
 
@@ -838,7 +1204,7 @@ def calc_confidence_intervals(
     # calculate the confidence intervals
     z_score = stats.norm.ppf(1 - (1 - confidence_level) / 2)
     logger.info(
-        f"Confidence Intervals - z-score: {z_score:.2f}, "
+        f"Confidence Intervals, normal dist - z-score: {z_score:.2f}, "
         f"confidence level: {confidence_level:.0%}"
     )
     margin_of_error = z_score * np.sqrt(summary_df[variance_col])
@@ -851,10 +1217,11 @@ def calc_confidence_intervals(
 def summarize_study(
     study_df: pd.DataFrame,
     groupby_cols: list,
-    expecteds: list,
+    assumptions: list,
     suffixes: list,
     ratios: list,
-    ci: bool = False,
+    confidence_level: float | None = None,
+    component_dicts: dict | None = None,
     mapping: dict | None = None,
 ) -> pd.DataFrame:
     """
@@ -863,10 +1230,10 @@ def summarize_study(
     It is expected that there will be a naming convention for
     actuals, exposures, expecteds, and variances.
       - naming convention:
-        - actuals_<suffix>
+        - actual_<suffix>
         - exposures_<suffix>
-        - expected_<version>_<suffix>
-        - variance_<version>_<suffix>
+        - expected_<assumption>_<suffix>
+        - variance_<assumption>_<suffix>
 
     Parameters
     ----------
@@ -874,17 +1241,20 @@ def summarize_study(
         DataFrame with the data.
     groupby_cols : list
         List of columns to group by.
-    expecteds : list
-        List of expected versions to calculate rates for.
+    assumptions : list
+        List of assumptions to calculate rates for.
     suffixes : list
         List of suffixes for the actuals and exposures columns
         for example ["cnt", "amt"]
     ratios : list
         List of ratios to calculate
         for example ["ae", "ao"]
-    ci : bool, optional default=True
-        Whether to calculate confidence intervals for the ae ratio. The interval
-        is around the expected ae ratio (AE=1).
+    confidence_level : float, optional default=None
+        Confidence level for the intervals
+        default None (no confidence intervals calculated).
+    component_dicts : dict, optional default=None
+        Dict of "variance components" to calculate component variance.
+        see `calc_component_variance` for details on dict structure.
     mapping : dict, optional default=None
         Mapping for the column names if they differ from the expected column names.
 
@@ -895,6 +1265,7 @@ def summarize_study(
 
     """
     # default column names
+    logger.info("creating summarized study")
     actuals_prefix = "actual"
     exposures_prefix = "exposure"
     expecteds_prefix = "expected"
@@ -911,21 +1282,19 @@ def summarize_study(
     actual_cols = [f"{actuals_prefix}_{suffix}" for suffix in suffixes]
     exposure_cols = [f"{exposures_prefix}_{suffix}" for suffix in suffixes]
     expected_cols = [
-        f"{expecteds_prefix}_{version}_{suffix}"
-        for version in expecteds
+        f"{expecteds_prefix}_{assumption}_{suffix}"
+        for assumption in assumptions
         for suffix in suffixes
     ]
     variance_cols = [
-        f"{variance_prefix}_{version}_{suffix}"
-        for version in expecteds
+        f"{variance_prefix}_{assumption}_{suffix}"
+        for assumption in assumptions
         for suffix in suffixes
     ]
 
     # validations
     # columns exist
-    required_cols = actual_cols + exposure_cols + expected_cols
-    if ci and "ae" in ratios:
-        required_cols += variance_cols
+    required_cols = actual_cols + exposure_cols + expected_cols + variance_cols
     missing_cols = [col for col in required_cols if col not in study_df.columns]
     if missing_cols:
         raise ValueError(
@@ -941,8 +1310,43 @@ def summarize_study(
             f"Valid options are 'ae' and 'ao'."
         )
 
+    # component_dicts are valid
+    assumption_pairs = [(a, s) for a in assumptions for s in suffixes]
+    if component_dicts is not None:
+        logger.info("variance is based on component variance")
+        # check lengths and use same component if only one is provided
+        if len(assumption_pairs) != len(component_dicts):
+            if len(component_dicts) == 1:
+                original_component = next(iter(component_dicts.keys()))
+                component_dicts = {
+                    f"component_{assumption}_{suffix}": next(
+                        iter(component_dicts.values())
+                    )
+                    for assumption in assumptions
+                    for suffix in suffixes
+                }
+                logger.info(
+                    f"using component: `{original_component}` "
+                    f"for all assumption pairs: `{assumption_pairs}`"
+                )
+            else:
+                raise ValueError(
+                    f"length of components: `{len(component_dicts)}` does not "
+                    f"match the number of assumptions: `{len(assumption_pairs)}`"
+                )
+        # ensure there is a component for each assumption
+        missing_components = [
+            f"component_{assumption}_{suffix}"
+            for assumption in assumptions
+            for suffix in suffixes
+            if f"component_{assumption}_{suffix}" not in component_dicts
+        ]
+        if missing_components:
+            raise ValueError(
+                f"Missing components for assumptions: {', '.join(missing_components)}"
+            )
+
     # summarize data
-    logger.info("creating summarized study")
     logger.info(f"summing: `{', '.join(required_cols)}`")
     logger.info(f"calculating ratios: `{', '.join(ratios)}`")
     summary_df = (
@@ -950,23 +1354,52 @@ def summarize_study(
         .agg(dict.fromkeys(required_cols, "sum"))
         .reset_index()
     )
+    if confidence_level is not None and "ae" in ratios:
+        z_score = stats.norm.ppf(1 - (1 - confidence_level) / 2)
+        logger.info(
+            f"calculating confidence intervals around A/E - normal dist, "
+            f"`{confidence_level:.0%}` (`{z_score:.2f}`)"
+        )
 
     # calculate ratios
     for ratio in ratios:
-        for version in expecteds:
+        for assumption in assumptions:
             for suffix in suffixes:
-                expected_col = f"{expecteds_prefix}_{version}_{suffix}"
+                expected_col = f"{expecteds_prefix}_{assumption}_{suffix}"
                 actual_col = f"{actuals_prefix}_{suffix}"
                 exposure_col = f"{exposures_prefix}_{suffix}"
+                variance_col = f"{variance_prefix}_{assumption}_{suffix}"
+
+                if component_dicts is not None:
+                    component_dict = component_dicts.get(
+                        f"component_{assumption}_{suffix}", {}
+                    )
+                    component_variance_df = suppress_logs(calc_component_variance)(
+                        seriatim_df=study_df,
+                        assumption=assumption,
+                        suffix=suffix,
+                        groupby_cols=groupby_cols,
+                        component_dict=component_dict,
+                    )
+                    summary_df = summary_df.merge(
+                        component_variance_df[
+                            [
+                                f"variance_total_{suffix}",
+                            ]
+                        ],
+                        on=groupby_cols,
+                        how="left",
+                    )
+                    summary_df[variance_col] = summary_df[f"variance_total_{suffix}"]
+                    summary_df = summary_df.drop(columns=[f"variance_total_{suffix}"])
                 if ratio == "ae":
-                    ratio_col = f"{ratio}_{version}_{suffix}"
+                    ratio_col = f"{ratio}_{assumption}_{suffix}"
                     summary_df[ratio_col] = (
                         summary_df[actual_col] / summary_df[expected_col]
                     )
-                    if ci:
-                        variance_col = f"{variance_prefix}_{version}_{suffix}"
-                        lower_col = f"ci_lower_ae_{version}_{suffix}"
-                        upper_col = f"ci_upper_ae_{version}_{suffix}"
+                    if confidence_level is not None:
+                        lower_col = f"ci_lower_ae_{assumption}_{suffix}"
+                        upper_col = f"ci_upper_ae_{assumption}_{suffix}"
 
                         expected_lower, expected_upper = suppress_logs(
                             calc_confidence_intervals
@@ -974,6 +1407,7 @@ def summarize_study(
                             summary_df=summary_df,
                             estimate_col=expected_col,
                             variance_col=variance_col,
+                            confidence_level=confidence_level,
                         )
                         summary_df[lower_col] = (
                             expected_lower / summary_df[expected_col]
@@ -1586,183 +2020,6 @@ def calc_qx_exp_ae(
         ),
     )
     return model_data
-
-
-def estimate_sigma(
-    df: pd.DataFrame,
-    actual_col: str,
-    expected_col: str,
-    variance_col: str,
-    group_col: str,
-    method: str = "phi",
-    detrend: bool = False,
-    conf_level: float = 0.95,
-) -> dict:
-    """
-    Estimate sigma using a "phi" or "subtraction" method.
-
-    Sigma can be used in a component formula to calculate total_variance
-    (similar to the negative binomial variance). One caveat with using this is
-    that the expected^2 will have to be grouped and cannot be added at a
-    seriatim level.
-
-    total_variance = process_variance + sigma^2 * expected^2
-
-    subtraction method - same as (total_variance - process_variance)/ expecteds^2
-    total_variance = [(actuals - expecteds)^2 * (rows / degrees_of_freedom)]
-    phi = total_variance / process_variance
-    mu_bar = expecteds^2 / process_variance
-
-    phi method:
-    phi = ((actuals - expecteds)^2 / variance) / degrees_of_freedom
-        = pearson_chi / degrees_of_freedom
-    mu_bar = (expecteds^2 / variance)
-
-    sigma squared:
-    sigma^2 = (phi - 1) / mu_bar
-
-    Notes
-    -----
-    - the ae_total scalar centers the expecteds to get variance (assuming estimate
-      was accurate in total). Excluding the scalar would bucket the "miss" in
-      variance, inflating sigma^2 by roughly (ae_total - 1)^2.
-    - the two methods differ only in weighting, and "phi" is peferred due to
-      weighting more evenly, when sizes are different. "subtraction" weights
-      groups by size. "phi" weights each group's deviation by that group's own
-      process variance, so groups of very different size contribute more evenly.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataframe at any level
-    actual_col : str
-        Column with actuals
-    expected_col : str
-        Column with expecteds
-    variance_col : str
-        Column with variances
-    group_col : str
-        Column to group on
-    method : str default "phi"
-        Method to estimate sigma
-        Options include "subtraction" or "phi"
-    detrend : bool, default False
-        Remove a fitted linear trend across groups before measuring
-        dispersion.
-    conf_level : float, default 0.95
-        Confidence level for the interval on phi / sigma.
-
-    Returns
-    -------
-    dict
-        sigma : float
-            Sigma of the `group_col`
-        sigma_ci : tuple
-            Confidence intervals of sigma
-        phi : float
-            Phi of the `group_col`
-
-    References
-    ----------
-    - https://en.wikipedia.org/wiki/Negative_binomial_distribution (section
-      Alternative parameterizations)
-      shows the variance formula for NB (u + alpha * u^2) in
-    - https://www.soa.org/globalassets/assets/files/edu/c-21-01.pdf (section 8-36)
-      total variance formula where total_variance = mean_of_process_variance +
-      variance_of_hypothetical_mean
-    - https://en.wikipedia.org/wiki/Law_of_total_variance
-      law of total variance
-    - https://grodri.github.io/glms/notes/overdispersion
-
-    """
-    # validations
-    required_cols = [actual_col, expected_col, variance_col, group_col]
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        raise ValueError(
-            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
-        )
-    if conf_level is not None and not 0 < conf_level < 1:
-        raise ValueError(f"conf_level must be between 0 and 1, got {conf_level}.")
-    if method not in ("subtraction", "phi"):
-        raise ValueError(
-            f"Method `{method}` is not one of the options 'subtraction' or 'phi'."
-        )
-
-    # group data
-    cols = list(dict.fromkeys([actual_col, expected_col, variance_col]))
-    grouped_data = df.groupby(group_col, observed=True)[cols].sum().sort_index()
-    actuals = grouped_data[actual_col]
-    expecteds = grouped_data[expected_col]
-    variances = grouped_data[variance_col]
-    rows = len(grouped_data)
-
-    # degrees of freedom
-    # ae_total is estimated and a slope if detrending
-    degrees_of_freedom = rows - 2 if detrend else rows - 1
-    if degrees_of_freedom < 2:
-        raise ValueError(
-            f"degrees_of_freedom: `{degrees_of_freedom}`, need at least 2."
-        )
-    if (expecteds <= 0).any():
-        raise ValueError(f"Column '{expected_col}' has non-positive group totals.")
-
-    # calculate ae
-    ae_total = actuals.sum() / expecteds.sum()
-    trend_slope = None
-    if detrend:
-        x = np.arange(rows)
-        slope, intercept = np.polyfit(x, actuals / expecteds, deg=1)
-        trend_slope = slope
-        ae_fit = intercept + slope * x
-    else:
-        ae_fit = np.full(rows, ae_total)
-    expecteds_scaled = ae_fit * expecteds
-    variances_scaled = ae_fit * variances
-    process_variance_scaled = variances_scaled.sum()
-    sum_expecteds_squared = (expecteds_scaled**2).sum()
-
-    # calculate phi
-    if method == "subtraction":
-        total_variance = ((actuals - expecteds_scaled) ** 2).sum() * (
-            rows / (degrees_of_freedom)
-        )  # adjust for degrees of freedom
-        phi = total_variance / process_variance_scaled
-        mu_bar = sum_expecteds_squared / process_variance_scaled  # size-weighted
-    else:
-        phi = (
-            (actuals - expecteds_scaled) ** 2 / variances_scaled
-        ).sum() / degrees_of_freedom
-        mu_bar = (expecteds_scaled**2 / variances_scaled).mean()  # mean
-
-    # calculate sigma
-    def phi_to_sigma_squared(p: float) -> float:
-        return max(0.0, (p - 1) / mu_bar)
-
-    sigma_squared = phi_to_sigma_squared(phi)
-    sigma = np.sqrt(sigma_squared)
-    if sigma == 0.0:
-        logger.info("Estimated sigma floored at 0 (no excess over process variance)")
-    if trend_slope is not None:
-        logger.info(f"Removed a trend of {trend_slope:.4f} A/E per group step.")
-
-    # calculate confidence intervals
-    alpha = 1 - conf_level
-    phi_ci = (
-        degrees_of_freedom * phi / stats.chi2.ppf(1 - alpha / 2, degrees_of_freedom),
-        degrees_of_freedom * phi / stats.chi2.ppf(alpha / 2, degrees_of_freedom),
-    )
-    sigma_ci = (
-        np.sqrt(phi_to_sigma_squared(phi_ci[0])),
-        np.sqrt(phi_to_sigma_squared(phi_ci[1])),
-    )
-
-    return {
-        "sigma": sigma,
-        "sigma_ci": sigma_ci,
-        "phi": phi,
-        "degrees_of_freedom": degrees_of_freedom,
-    }
 
 
 def _get_study_periods(
