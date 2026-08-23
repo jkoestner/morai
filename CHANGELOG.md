@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.6](https://github.com/jkoestner/morai/tree/v0.3.6)
+
+[Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.5...v0.3.6)
+
+**Enhancements**
+- add variance functions in `experience` which includes
+  - component variance
+  - estimate sigma
+  - dispersion and distribution parameters for `calculate_variance`
+- add a accumulated local effects (ALE) function in `charters`
+
+**Documentation**
+- update tests
+- minor docstring edits
+- bump packages
+
+**Bugs**
+- minor neural fix when using batch parameter.
+  mean to be overall mean instead of mean of batches in `neural`
+
 ## [0.3.5](https://github.com/jkoestner/morai/tree/v0.3.5)
 
 [Full Changelog](https://github.com/jkoestner/morai/compare/v0.3.4...v0.3.5)

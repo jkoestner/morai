@@ -1051,7 +1051,7 @@ def calc_component_variance(
     component_dict : dict
         Dict of extra variance components.
             {
-                "ae_total": <ae_total>,
+                "ae_total": {"ae_total": <ae_total> # estimated A/E total},
                 "components": {
                     "<component_name>": {
                             "sigma": <sigma> # estimated sigma
@@ -1231,7 +1231,7 @@ def summarize_study(
     actuals, exposures, expecteds, and variances.
       - naming convention:
         - actual_<suffix>
-        - exposures_<suffix>
+        - exposure_<suffix>
         - expected_<assumption>_<suffix>
         - variance_<assumption>_<suffix>
 
@@ -1293,15 +1293,6 @@ def summarize_study(
     ]
 
     # validations
-    # columns exist
-    required_cols = actual_cols + exposure_cols + expected_cols + variance_cols
-    missing_cols = [col for col in required_cols if col not in study_df.columns]
-    if missing_cols:
-        raise ValueError(
-            f"Missing columns: {', '.join(missing_cols)} in the DataFrame. "
-            f"Please check the column names and the mapping provided."
-        )
-
     # ratios are valid
     invalid_ratios = [ratio for ratio in ratios if ratio not in ["ae", "ao"]]
     if invalid_ratios:
@@ -1310,116 +1301,155 @@ def summarize_study(
             f"Valid options are 'ae' and 'ao'."
         )
 
+    # columns exist
+    required_cols = list(actual_cols)
+    if "ao" in ratios:
+        required_cols += exposure_cols
+        n_zero_exposure = study_df[exposure_cols].eq(0).any(axis=1).sum()
+        if n_zero_exposure > 0:
+            logger.warning(
+                f"There are `{n_zero_exposure}` rows with zero exposure, these "
+                f"will result in NaN for a/o."
+            )
+    if "ae" in ratios:
+        required_cols += expected_cols
+        n_zero_expected = study_df[expected_cols].eq(0).any(axis=1).sum()
+        if n_zero_expected > 0:
+            logger.warning(
+                f"There are `{n_zero_expected}` rows with zero expected, these "
+                f"will result in NaN for a/e and ci."
+            )
+    if component_dicts is not None or confidence_level is not None:
+        required_cols += variance_cols
+    missing_cols = [col for col in required_cols if col not in study_df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Missing columns: {', '.join(missing_cols)} in the DataFrame. "
+            f"Please check the column names and the mapping provided."
+        )
+
+    # confidence level is valid
+    if confidence_level is not None and not 0 < confidence_level < 1:
+        raise ValueError(
+            f"confidence_level: `{confidence_level}`, must be strictly between 0 and 1."
+        )
+
     # component_dicts are valid
     assumption_pairs = [(a, s) for a in assumptions for s in suffixes]
     if component_dicts is not None:
         logger.info("variance is based on component variance")
+        expected_components = {f"component_{a}_{s}" for a, s in assumption_pairs}
         # check lengths and use same component if only one is provided
-        if len(assumption_pairs) != len(component_dicts):
-            if len(component_dicts) == 1:
-                original_component = next(iter(component_dicts.keys()))
-                component_dicts = {
-                    f"component_{assumption}_{suffix}": next(
-                        iter(component_dicts.values())
-                    )
-                    for assumption in assumptions
-                    for suffix in suffixes
-                }
-                logger.info(
-                    f"using component: `{original_component}` "
-                    f"for all assumption pairs: `{assumption_pairs}`"
-                )
-            else:
-                raise ValueError(
-                    f"length of components: `{len(component_dicts)}` does not "
-                    f"match the number of assumptions: `{len(assumption_pairs)}`"
-                )
+        if len(component_dicts) == 1 and set(component_dicts) != expected_components:
+            original_component = next(iter(component_dicts.keys()))
+            original_value = next(iter(component_dicts.values()))
+            component_dicts = dict.fromkeys(expected_components, original_value)
+            logger.info(
+                f"using component: `{original_component}` "
+                f"for all assumption pairs: `{assumption_pairs}`"
+            )
+        elif len(component_dicts) != len(assumption_pairs):
+            raise ValueError(
+                f"length of components: `{len(component_dicts)}` does not "
+                f"match the number of assumptions: `{len(assumption_pairs)}`"
+            )
+
         # ensure there is a component for each assumption
-        missing_components = [
-            f"component_{assumption}_{suffix}"
-            for assumption in assumptions
-            for suffix in suffixes
-            if f"component_{assumption}_{suffix}" not in component_dicts
-        ]
+        missing_components = sorted(expected_components - set(component_dicts))
         if missing_components:
             raise ValueError(
                 f"Missing components for assumptions: {', '.join(missing_components)}"
             )
 
-    # summarize data
-    logger.info(f"summing: `{', '.join(required_cols)}`")
+    # summarize data in groupby
+    sum_cols = [
+        col
+        for col in dict.fromkeys(
+            actual_cols + exposure_cols + expected_cols + variance_cols
+        )
+        if col in study_df.columns
+    ]
+    logger.info(f"summing: `{', '.join(sum_cols)}`")
     logger.info(f"calculating ratios: `{', '.join(ratios)}`")
     summary_df = (
         study_df.groupby(groupby_cols, observed=True, sort=False)
-        .agg(dict.fromkeys(required_cols, "sum"))
+        .agg(dict.fromkeys(sum_cols, "sum"))
         .reset_index()
     )
     if confidence_level is not None and "ae" in ratios:
         z_score = stats.norm.ppf(1 - (1 - confidence_level) / 2)
         logger.info(
-            f"calculating confidence intervals around A/E - normal dist, "
+            f"calculating confidence intervals around 1.0 - normal dist, "
             f"`{confidence_level:.0%}` (`{z_score:.2f}`)"
         )
 
+    # calculate component variance
+    if component_dicts is not None:
+        for assumption in assumptions:
+            for suffix in suffixes:
+                variance_col = f"{variance_prefix}_{assumption}_{suffix}"
+                temp_col = f"variance_total_{suffix}"
+                component_dict = component_dicts.get(
+                    f"component_{assumption}_{suffix}", {}
+                )
+                component_variance_df = suppress_logs(calc_component_variance)(
+                    seriatim_df=study_df,
+                    assumption=assumption,
+                    suffix=suffix,
+                    groupby_cols=groupby_cols,
+                    component_dict=component_dict,
+                )
+                component_variance_df = component_variance_df.reset_index()[
+                    [*groupby_cols, temp_col]
+                ]
+                summary_df = summary_df.merge(
+                    component_variance_df,
+                    on=groupby_cols,
+                    how="left",
+                    validate="one_to_one",
+                )
+                summary_df[variance_col] = summary_df[temp_col]
+                summary_df = summary_df.drop(columns=[temp_col])
+
     # calculate ratios
-    for ratio in ratios:
+    if "ao" in ratios:
+        for suffix in suffixes:
+            ratio_col = f"ao_{suffix}"
+            actual_col = f"{actuals_prefix}_{suffix}"
+            exposure_col = f"{exposures_prefix}_{suffix}"
+            summary_df[ratio_col] = summary_df[actual_col] / summary_df[
+                exposure_col
+            ].replace(0, np.nan)
+
+    if "ae" in ratios:
         for assumption in assumptions:
             for suffix in suffixes:
                 expected_col = f"{expecteds_prefix}_{assumption}_{suffix}"
                 actual_col = f"{actuals_prefix}_{suffix}"
-                exposure_col = f"{exposures_prefix}_{suffix}"
                 variance_col = f"{variance_prefix}_{assumption}_{suffix}"
 
-                if component_dicts is not None:
-                    component_dict = component_dicts.get(
-                        f"component_{assumption}_{suffix}", {}
-                    )
-                    component_variance_df = suppress_logs(calc_component_variance)(
-                        seriatim_df=study_df,
-                        assumption=assumption,
-                        suffix=suffix,
-                        groupby_cols=groupby_cols,
-                        component_dict=component_dict,
-                    )
-                    summary_df = summary_df.merge(
-                        component_variance_df[
-                            [
-                                f"variance_total_{suffix}",
-                            ]
-                        ],
-                        on=groupby_cols,
-                        how="left",
-                    )
-                    summary_df[variance_col] = summary_df[f"variance_total_{suffix}"]
-                    summary_df = summary_df.drop(columns=[f"variance_total_{suffix}"])
-                if ratio == "ae":
-                    ratio_col = f"{ratio}_{assumption}_{suffix}"
-                    summary_df[ratio_col] = (
-                        summary_df[actual_col] / summary_df[expected_col]
-                    )
-                    if confidence_level is not None:
-                        lower_col = f"ci_lower_ae_{assumption}_{suffix}"
-                        upper_col = f"ci_upper_ae_{assumption}_{suffix}"
+                ratio_col = f"ae_{assumption}_{suffix}"
+                summary_df[ratio_col] = summary_df[actual_col] / summary_df[
+                    expected_col
+                ].replace(0, np.nan)
+                if confidence_level is not None:
+                    lower_col = f"ci_lower_ae_{assumption}_{suffix}"
+                    upper_col = f"ci_upper_ae_{assumption}_{suffix}"
 
-                        expected_lower, expected_upper = suppress_logs(
-                            calc_confidence_intervals
-                        )(
-                            summary_df=summary_df,
-                            estimate_col=expected_col,
-                            variance_col=variance_col,
-                            confidence_level=confidence_level,
-                        )
-                        summary_df[lower_col] = (
-                            expected_lower / summary_df[expected_col]
-                        )
-                        summary_df[upper_col] = (
-                            expected_upper / summary_df[expected_col]
-                        )
-                elif ratio == "ao":
-                    ratio_col = f"{ratio}_{suffix}"
-                    summary_df[ratio_col] = (
-                        summary_df[actual_col] / summary_df[exposure_col]
+                    expected_lower, expected_upper = suppress_logs(
+                        calc_confidence_intervals
+                    )(
+                        summary_df=summary_df,
+                        estimate_col=expected_col,
+                        variance_col=variance_col,
+                        confidence_level=confidence_level,
                     )
+                    summary_df[lower_col] = expected_lower / summary_df[
+                        expected_col
+                    ].replace(0, np.nan)
+                    summary_df[upper_col] = expected_upper / summary_df[
+                        expected_col
+                    ].replace(0, np.nan)
 
     return summary_df
 
