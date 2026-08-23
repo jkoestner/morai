@@ -14,32 +14,32 @@ requires-python = '>=3.12'
 dependencies = [
     "arrow>=1.4.0",
     "colorama>=0.4.6",
-    "duckdb>=1.5.1",
-    "fastexcel>=0.19.0",                # only for polars
+    "duckdb>=1.5.5",
+    "fastexcel>=0.20.2",                # only for polars
     "ipywidgets>=8.1.8",
     "joblib>=1.5.3",
-    "jupyterlab>=4.5.4",
-    "numpy>=2.4.2",
+    "jupyterlab>=4.6.3",
+    "numpy>=2.5.2",
     "openpyxl>=3.1.5",
-    "pandas>=3.0.1",
-    "plotly>=6.5.2",
-    "polars>=1.38.1",
-    "pyarrow>=23.0.1",
+    "pandas>=3.0.5",
+    "plotly>=6.9.0",
+    "polars>=1.43.2",
+    "pyarrow>=25.0.1",
     "pymort>=2.0.1",
-    "scikit-learn>=1.8.0",              # h-statistic available in https://github.com/scikit-learn/scikit-learn/pull/28375
+    "scikit-learn>=1.9.0",              # h-statistic available in https://github.com/scikit-learn/scikit-learn/pull/28375
     "seaborn>=0.13.2",
-    "shap>=0.50.0",
+    "shap>=0.52.0",
     "statsmodels>=0.14.6",
-    "tqdm>=4.67.3",
+    "tqdm>=4.70.0",
 
     # dashboard
-    "dash>=3.3.0",                      # only for dash
-    "dash-ag-grid>=33.3.3",             # only for dash
+    "dash>=4.4.1",                      # only for dash
+    "dash-ag-grid>=35.3.0",             # only for dash
     "dash-bootstrap-components>=2.0.4", # only for dash
     # dash-extensions relies on dash 3.3.0 until Wildcard is fixed
     # https://github.com/emilhe/dash-extensions/issues/400
-    "dash-extensions>=2.0.4",           # only for dash
-    "dash-mantine-components>=2.6.0",   # only for dash
+    "dash-extensions>=2.0.6",           # only for dash
+    "dash-mantine-components>=2.8.0",   # only for dash
     "gunicorn>=25.1.0",                 # only for dash
     "psutil>=6.0.0",                    # only for analytics page
 
