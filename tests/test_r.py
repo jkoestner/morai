@@ -1,7 +1,14 @@
 """Tests the r models."""
 
 import pandas as pd
+import pytest
 from pytest import approx
+
+# skip tests if rpy2 is not available
+try:
+    import rpy2.robjects as ro  # noqa: F401
+except (ImportError, ValueError):
+    pytest.skip("rpy2/R not available on this machine", allow_module_level=True)
 
 from morai.forecast import preprocessors
 from morai.models import r

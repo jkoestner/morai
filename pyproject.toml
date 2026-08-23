@@ -67,8 +67,10 @@ neural = [
     "torch>=2.10.0",                    # only for neural network class
 ]
 
+# only for mgcv (gam) and keeping it fixed to not change docker
+# r does need to installed for this to be used
 r = [
-    "rpy2==3.5.17",                      # only for mgcv (gam) and keeping it fixed to not change docker
+    "rpy2==3.5.17",                      
 ]
 
 [project.scripts]
