@@ -482,7 +482,9 @@ class ModelResults:
         # saving the results
         # ensure path is a string
         self.model["data_path"] = self.model["data_path"].astype(str)
-        model_json = std_json.loads(self.model.to_json(orient="split", index=False))
+        model_json = std_json.loads(
+            self.model.to_json(orient="split", index=False, date_format="iso")
+        )
         scorecard_json = std_json.loads(
             self.scorecard.to_json(orient="split", index=False)
         )
