@@ -1379,3 +1379,129 @@ def test_get_study_periods() -> None:
     ]
 
     assert study_periods == expected_periods, "Expected monthly study periods to match"
+
+
+def test_actuals() -> None:
+    """Tests the actuals calculation."""
+    # create test dataframe
+    bos_date = pd.Timestamp("2024-01-01")
+    eos_date = pd.Timestamp("2024-12-31")
+    columns = [
+        "termination_reason",
+        "termination_date",
+        "anniversary_date",
+        "anniversary_position",
+        "bos_date",
+        "eos_date",
+    ]
+    rows = [
+        (
+            "death",
+            "2024-03-01",
+            "2024-06-01",
+            "before",
+            bos_date,
+            eos_date,
+        ),
+        (
+            "death",
+            "2024-07-01",
+            "2024-06-01",
+            "on_after",
+            bos_date,
+            eos_date,
+        ),
+        (
+            "lapse",
+            "2024-03-01",
+            "2024-06-01",
+            "before",
+            bos_date,
+            eos_date,
+        ),
+        (
+            "death",
+            "2025-02-01",
+            "2025-06-01",
+            "before",
+            bos_date,
+            eos_date,
+        ),
+    ]
+    test_df = pd.DataFrame(rows, columns=columns)
+    date_cols = ["termination_date", "anniversary_date", "bos_date", "eos_date"]
+    test_df[date_cols] = test_df[date_cols].apply(pd.to_datetime)
+
+    # calculate actuals
+    actuals = experience.calc_actuals(
+        study_df=test_df,
+        study_decrement="death",
+    )
+
+    assert actuals.tolist() == [
+        1,
+        1,
+        0,
+        0,
+    ]
+    assert actuals.sum() == 2
+
+
+def test_variance() -> None:
+    """Tests the variance calculation."""
+    # create test dataframe
+    columns = ["rate", "exposure", "amount"]
+    rows = [
+        # rate, exposure, amount
+        (0.10, 1.0, 100.0),
+        (0.20, 0.5, 200.0),
+        (0.30, 1.0, 50.0),
+    ]
+    test_df = pd.DataFrame(rows, columns=columns)
+
+    # calculate variance
+    variance_binomial = experience.calc_variance(
+        seriatim_df=test_df,
+        rate_col="rate",
+        exposure_col="exposure",
+        amount_col="amount",
+        distribution="binomial",
+    )
+    variance_poisson = experience.calc_variance(
+        seriatim_df=test_df,
+        rate_col="rate",
+        exposure_col="exposure",
+        amount_col="amount",
+        distribution="poisson",
+    )
+    variance_binomial_dispersion = experience.calc_variance(
+        seriatim_df=test_df,
+        rate_col="rate",
+        exposure_col="exposure",
+        amount_col="amount",
+        distribution="binomial",
+        dispersion=2.0,
+    )
+
+    # calculate expected variance
+    check_binomial = pd.Series(
+        [
+            100**2 * 1.0 * 0.10 * 0.90,
+            200**2 * 0.5 * 0.20 * 0.80,
+            50**2 * 1.0 * 0.30 * 0.70,
+        ]
+    )
+    check_poisson = pd.Series(
+        [
+            100**2 * 1.0 * 0.10,
+            200**2 * 0.5 * 0.20,
+            50**2 * 1.0 * 0.30,
+        ]
+    )
+    check_binomial_dispersion = check_binomial * 2.0
+
+    pd.testing.assert_series_equal(variance_binomial, check_binomial, check_names=False)
+    pd.testing.assert_series_equal(variance_poisson, check_poisson, check_names=False)
+    pd.testing.assert_series_equal(
+        variance_binomial_dispersion, check_binomial_dispersion, check_names=False
+    )

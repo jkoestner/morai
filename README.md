@@ -66,11 +66,11 @@ uv pip install morai[dev][neural][r]
 
 ### Local Install
 To install, download this repository and run the following command in 
-the environment of choice. Optional dependencies can be installed by adding
-`[dev][neural][r]` to the end of the command.
+the environment of choice.
 
 ```
-uv pip install -e .
+uv sync
+uv sync --extra dev --extra neural
 ```
 
 ### Docker Install
@@ -127,6 +127,7 @@ This is also discussed more in this issue: [Plotly Issue](https://github.com/plo
 If wanting to get more detail in output of messages the logging can increased
 ```python
 from morai.utils import custom_logger
+
 custom_logger.set_log_level("DEBUG")
 ```
 

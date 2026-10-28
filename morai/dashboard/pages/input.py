@@ -26,7 +26,16 @@ logger = custom_logger.setup_logging(__name__)
 # `enable_string_cache` helps with categorical type values
 pl.enable_string_cache()
 
-dash.register_page(__name__, path="/", title="morai - Input", order=0)
+dash.register_page(
+    __name__,
+    path="/",
+    title="morai - Input",
+    description=(
+        "Morai: open-source actuarial analytics for mortality and long-term care "
+        "experience studies, statistical modeling, credibility, and rate tables."
+    ),
+    order=0,
+)
 
 
 #   _                            _

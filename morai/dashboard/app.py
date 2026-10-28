@@ -58,6 +58,13 @@ app.index_string = """
         {%css%}
     </head>
     <body>
+        <noscript>
+            <h1>Morai - Actuarial Mortality Analytics</h1>
+            <p>Dashboard for the open-source morai Python library: mortality and
+            long-term care experience studies, statistical modeling, credibility
+            analysis, and mortality rate tables.
+            Source: <a href="https://github.com/jkoestner/morai">github.com/jkoestner/morai</a></p>
+        </noscript>
         {%app_entry%}
         <footer>
             {%config%}

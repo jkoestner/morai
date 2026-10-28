@@ -655,6 +655,8 @@ def calc_actuals(
         Decrement under study, for example "death".
     mapping : dict, optional default=None
         Mapping for the column names if they differ from the expected column names.
+        expected names are [termination_date, termination_reason,
+        anniversary_date, bos_date, eos_date].
 
     Returns
     -------
@@ -670,6 +672,7 @@ def calc_actuals(
     anniversary_date_col = "anniversary_date"
     bos_date_col = "bos_date"
     eos_date_col = "eos_date"
+    anniversary_position_col = "anniversary_position"
 
     # handle mapping
     if mapping:
@@ -680,6 +683,25 @@ def calc_actuals(
         anniversary_date_col = mapping.get("anniversary_date", anniversary_date_col)
         bos_date_col = mapping.get("bos_date", bos_date_col)
         eos_date_col = mapping.get("eos_date", eos_date_col)
+        anniversary_position_col = mapping.get(
+            "anniversary_position", anniversary_position_col
+        )
+
+    # check required columns exist
+    required_cols = {
+        termination_date_col,
+        termination_reason_col,
+        anniversary_date_col,
+        bos_date_col,
+        eos_date_col,
+        anniversary_position_col,
+    }
+    missing_cols = [col for col in required_cols if col not in study_df.columns]
+    if missing_cols:
+        raise KeyError(
+            f"calc_actuals missing required columns: {missing_cols}. "
+            f"Dataframe has columns: {list(study_df.columns)}"
+        )
 
     logger.info("getting actuals...")
 
@@ -691,11 +713,11 @@ def calc_actuals(
         & (study_df[termination_date_col] <= study_df[eos_date_col])
         & (
             (
-                (study_df["anniversary_position"] == "before")
+                (study_df[anniversary_position_col] == "before")
                 & (study_df[termination_date_col] < study_df[anniversary_date_col])
             )
             | (
-                (study_df["anniversary_position"] == "on_after")
+                (study_df[anniversary_position_col] == "on_after")
                 & (study_df[termination_date_col] >= study_df[anniversary_date_col])
             )
         )
@@ -716,6 +738,9 @@ def calc_variance(
 ) -> pd.Series:
     """
     Calculate the process variance of a distribution.
+
+    The variance is calculated based on the distribution type (binomial or poisson)
+    and the provided rate, exposure, and amount.
 
     binomial: variance = dispersion * amount^2 * exposure * rate * (1 - rate)
     poisson:  variance = dispersion * amount^2 * exposure * rate
@@ -757,9 +782,8 @@ def calc_variance(
         required_cols.append(amount_col)
     missing_cols = [col for col in required_cols if col not in seriatim_df.columns]
     if missing_cols:
-        raise ValueError(
-            f"Missing columns: {', '.join(missing_cols)} in the DataFrame."
-        )
+        raise ValueError(f"Missing columns: {missing_cols} in the DataFrame.")
+
     # exposure should be between 0 and 1
     if not ((seriatim_df[exposure_col] >= 0) & (seriatim_df[exposure_col] <= 1)).all():
         logger.warning(f"Exposure column '{exposure_col}' has values outside of [0, 1]")
