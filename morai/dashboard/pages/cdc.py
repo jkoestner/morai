@@ -100,6 +100,7 @@ def layout():
         [
             dcc.Store(id="store-cdc-results", storage_type="session"),
             dcc.Download(id="download-dataframe-csv"),
+            dcc.Download(id="download-cdc-reference"),
             # Header section with gradient background
             html.Div(
                 [
@@ -183,6 +184,26 @@ def layout():
                                                                 "2018-present (ICD-10)",
                                                                 href="https://wonder.cdc.gov/mcd-icd10-provisional.html",
                                                                 target="_blank",
+                                                            ),
+                                                        ]
+                                                    ),
+                                                ],
+                                            ),
+                                            "CDC Reference workbook: ",
+                                            html.Ul(
+                                                [
+                                                    html.Li(
+                                                        [
+                                                            html.A(
+                                                                [
+                                                                    html.I(
+                                                                        className="fas fa-file-excel me-1"
+                                                                    ),
+                                                                    "cdc_reference.xlsx",
+                                                                ],
+                                                                id="link-download-cdc-reference",
+                                                                href="#",
+                                                                n_clicks=0,
                                                             ),
                                                         ]
                                                     ),
@@ -931,6 +952,22 @@ def layout():
 #  | |   / _` | | | '_ \ / _` |/ __| |/ / __|
 #  | |__| (_| | | | |_) | (_| | (__|   <\__ \
 #   \____\__,_|_|_|_.__/ \__,_|\___|_|\_\___/
+
+
+@callback(
+    Output("download-cdc-reference", "data"),
+    Input("link-download-cdc-reference", "n_clicks"),
+    prevent_initial_call=True,
+)
+def download_cdc_reference(n_clicks: int) -> dict:
+    """Download the CDC reference workbook used for the simple grouping mapping."""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc_reference.xlsx"
+    if not filepath.exists():
+        logger.error(f"The reference file was not found here: {filepath}")
+        raise dash.exceptions.PreventUpdate
+    return dcc.send_file(str(filepath))
 
 
 @callback(
