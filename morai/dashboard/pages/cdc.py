@@ -485,7 +485,12 @@ def layout():
                                         common_build._build_tabbed_content(
                                             tabs=[
                                                 common_build.TabSpec(
-                                                    label="Trends", tab_id="trends"
+                                                    label="Excess Trend - Rate",
+                                                    tab_id="trends",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Excess Trend - Pct",
+                                                    tab_id="trends-pct",
                                                 ),
                                                 common_build.TabSpec(
                                                     label="Actuals",
@@ -611,8 +616,12 @@ def layout():
                                         common_build._build_tabbed_content(
                                             tabs=[
                                                 common_build.TabSpec(
-                                                    label="Excess Chart",
+                                                    label="Excess Trend - Rate",
                                                     tab_id="excess-chart",
+                                                ),
+                                                common_build.TabSpec(
+                                                    label="Excess Trend - Pct",
+                                                    tab_id="excess-chart-pct",
                                                 ),
                                                 common_build.TabSpec(
                                                     label="Excess Table",
@@ -952,6 +961,44 @@ def layout():
 #  | |   / _` | | | '_ \ / _` |/ __| |/ / __|
 #  | |__| (_| | | | |_) | (_| | (__|   <\__ \
 #   \____\__,_|_|_|_.__/ \__,_|\___|_|\_\___/
+
+
+def _excess_pct_chart(x: pd.Series, pct: pd.Series, title: str) -> go.Figure:
+    """
+    Create a single-line chart of the excess percent (actual / expected - 1).
+
+    Parameters
+    ----------
+    x : pd.Series
+        The x-axis values (year).
+    pct : pd.Series
+        The excess percent values.
+    title : str
+        The chart title.
+
+    Returns
+    -------
+    fig : go.Figure
+        The excess percent chart.
+
+    """
+    fig = go.Figure(
+        go.Scatter(
+            x=x,
+            y=pct,
+            mode="lines+markers",
+            name="excess %",
+            hovertemplate="%{x}: %{y:.1%}<extra></extra>",
+        )
+    )
+    fig.add_hline(y=0, line_dash="dash", line_color="gray")
+    fig.update_layout(
+        title=title,
+        xaxis_title="year",
+        yaxis_title="excess %",
+        yaxis_tickformat=".0%",
+    )
+    return fig
 
 
 @callback(
@@ -1447,6 +1494,15 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
             display=True,
         )
         tab_content = html.Div([dcc.Graph(figure=cdc_cod_trends_chart)])
+    # chart pct
+    elif active_tab == f"{FILTER_COD_TRENDS_PREFIX}-tab-trends-pct":
+        cod_subset = test_df[test_df[CATEGORY_COL] == option_value]
+        chart = _excess_pct_chart(
+            x=cod_subset["year"],
+            pct=cod_subset["diff_pct"],
+            title=f"Excess % (crude_adj / predictions - 1): {option_value}",
+        )
+        tab_content = html.Div([dcc.Graph(figure=chart)])
     # table amount
     elif active_tab == f"{FILTER_COD_TRENDS_PREFIX}-tab-actuals":
         cdc_cod_trends_chart = charters.chart(
@@ -1727,7 +1783,7 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
         .sum(numeric_only=True)
         .reset_index()
     )
-    result["excess_lc"] = result["deaths"] / result["deaths_lc"]
+    result["excess_lc_pct"] = result["deaths"] / result["deaths_lc"]
     result["crude_rt"] = result["deaths"] / result["population"] * 100000
     result["crude_rt_lc"] = result["deaths_lc"] / result["population"] * 100000
 
@@ -1737,6 +1793,14 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
             result,
             x_axis="year",
             rates=["crude_rt", "crude_rt_lc"],
+        )
+        tab_content = html.Div([dcc.Graph(figure=chart)])
+    # chart pct
+    elif active_tab == f"{FILTER_POP_TRENDS_PREFIX}-tab-excess-chart-pct":
+        chart = _excess_pct_chart(
+            x=result["year"],
+            pct=result["crude_rt"] / result["crude_rt_lc"] - 1,
+            title="Excess % (crude_rt / crude_rt_lc - 1)",
         )
         tab_content = html.Div([dcc.Graph(figure=chart)])
     # table
