@@ -32,7 +32,7 @@ from sklearn.linear_model import LinearRegression
 from morai.dashboard.components import common_build, dash_formats
 from morai.dashboard.utils import dashboard_helper as dh
 from morai.experience import charters
-from morai.integrations import cdc
+from morai.integrations import cdc, hmd
 from morai.models import core
 from morai.utils import custom_logger, helpers, sql
 
@@ -55,9 +55,12 @@ FILTER_MONTHLY_PREFIX = "cdc-monthly"
 # provides when to use data from 18 dataset as there is overlap in 99 dataset
 # the 99 dataset ends in 2020 and the 18 dataset starts in 2018
 NEW_DATASET_START_YEAR = 2021
-# training for cod trend and population trend
-TRAIN_START_YEAR = 2010
-TRAIN_END_YEAR = 2019
+# training years for the death trend (cod linear baseline and Lee-Carter)
+DEATH_TRAIN_START_YEAR = 2010
+DEATH_TRAIN_END_YEAR = 2019
+# training years for the population trend used to fill the ~2-year population lag
+POP_TRAIN_START_YEAR = 2023
+POP_TRAIN_END_YEAR = 2024
 # grouping for cod analysis
 CATEGORY_COL = "simple_grouping"
 # ibnr adjustment factors for the lag week
@@ -85,6 +88,7 @@ ROLLING_MI_YEARS = 10
 def layout():
     """CDC layout."""
     last_updated_meta = cdc.get_last_updated()
+    hmd_meta = hmd.get_last_updated()
     recent_week = last_updated_meta["recent_week"]
     ibnr_factors_included = {
         recent_week - k: v
@@ -150,7 +154,7 @@ def layout():
                                             "Requires a local database at ",
                                             html.Code("files/integrations/cdc/cdc.sql"),
                                             html.Br(),
-                                            "Data sourced from ",
+                                            "Death data sourced from ",
                                             html.A(
                                                 "wonder.cdc.gov",
                                                 href="https://wonder.cdc.gov/",
@@ -189,6 +193,14 @@ def layout():
                                                     ),
                                                 ],
                                             ),
+                                            "Population data sourced from ",
+                                            html.A(
+                                                "https://www.mortality.org/",
+                                                href="https://www.mortality.org/Country/Country?cntr=USA",
+                                                target="_blank",
+                                            ),
+                                            html.Br(),
+                                            html.Br(),
                                             "CDC Reference workbook: ",
                                             html.Ul(
                                                 [
@@ -235,6 +247,12 @@ def layout():
                                                             ),
                                                         ]
                                                     ),
+                                                    html.Li(
+                                                        [
+                                                            "HMD population data has better accuracy than CDC population data, "
+                                                            "especially for older ages."
+                                                        ]
+                                                    ),
                                                 ]
                                             ),
                                         ],
@@ -275,13 +293,24 @@ def layout():
                                                 className="fas fa-clock me-1 text-muted"
                                             ),
                                             html.Label(
-                                                "Data Through: ",
+                                                "CDC Data Through: ",
                                             ),
                                             html.Span(
                                                 last_updated_meta[
                                                     "data_through"
                                                 ].date(),
                                                 id="data-through-text",
+                                            ),
+                                            html.Br(),
+                                            html.I(
+                                                className="fas fa-clock me-1 text-muted"
+                                            ),
+                                            html.Label(
+                                                "HMD Data Through: ",
+                                            ),
+                                            html.Span(
+                                                hmd_meta["data_through"],
+                                                id="hmd-data-through-text",
                                             ),
                                         ],
                                         className="text-center small text-muted",
@@ -416,7 +445,9 @@ def layout():
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
                                     "Standardized mortality rate compared to a linear regression baseline trained on "
-                                    f"{TRAIN_START_YEAR}-{TRAIN_END_YEAR}. ",
+                                    f"{DEATH_TRAIN_START_YEAR}-{DEATH_TRAIN_END_YEAR}. ",
+                                    html.Br(),
+                                    f"Note: population stats have a ~2-year lag; {POP_TRAIN_START_YEAR}-{POP_TRAIN_END_YEAR} population trend is extrapolated to fill the gap.",
                                     html.Br(),
                                     "The 'cause of death excess' won't match the 'population excess' as the 'cause of death' "
                                     "uses standardized deaths while the 'population' uses crude deaths. As the population gets "
@@ -603,9 +634,9 @@ def layout():
                             dbc.Alert(
                                 [
                                     html.I(className="fas fa-info-circle me-2"),
-                                    f"Lee-Carter population model trained on {TRAIN_START_YEAR}-{TRAIN_END_YEAR}, extrapolated through the current year. ",
+                                    f"Lee-Carter population model trained on {DEATH_TRAIN_START_YEAR}-{DEATH_TRAIN_END_YEAR}, extrapolated through the current year. ",
                                     html.Br(),
-                                    f"Note: population stats have a ~2-year lag; {TRAIN_START_YEAR}-{TRAIN_END_YEAR} trend is extrapolated to fill the gap.",
+                                    f"Note: population stats have a ~2-year lag; {POP_TRAIN_START_YEAR}-{POP_TRAIN_END_YEAR} population trend is extrapolated to fill the gap.",
                                 ],
                                 color="info",
                                 className="py-2 mb-3 small",
@@ -1052,6 +1083,19 @@ def update_cdc_data_async(n_clicks):
             # get new data and update the database
             time.sleep(CDC_WAIT_TIME_SECONDS)
             refresh_cdc_data()
+
+            # get hmd data if the last update was more than a year ago
+            hmd_data_through = pd.to_datetime(hmd.get_last_updated()["data_through"])
+            if (pd.Timestamp.now().date() - hmd_data_through.date()).days > 365:
+                logger.info("updating HMD data")
+                hmd_df = hmd.get_hmd_dataframe()
+                sql.export_to_sql(
+                    df=hmd_df,
+                    db_filepath=helpers.FILES_PATH / "integrations" / "hmd" / "hmd.sql",
+                    table_name="hmd",
+                    if_exists="replace",
+                )
+
             with thread_lock:
                 return "success", new_last_updated
         except Exception as e:
@@ -1346,6 +1390,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+    hmd_db_filepath = helpers.FILES_PATH / "integrations" / "hmd" / "hmd.sql"
 
     # get the data
     try:
@@ -1355,6 +1400,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
         mcd18_cod = cdc.get_cdc_data_sql(
             db_filepath=db_filepath, table_name="mcd18_cod"
         )
+        hmd_df = hmd.get_hmd_data_sql(db_filepath=hmd_db_filepath, table_name="hmd")
     except Exception as e:
         logger.error(f"Failed to load table: {e}")
         return (
@@ -1375,6 +1421,35 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
     cod_all = pd.concat([mcd99_cod, mcd18_cod], ignore_index=True)
     include_age_groups = age_group_value if age_group_value else cdc.AGE_GROUP_ORDER
     cod_all = cod_all[cod_all["age_groups"].isin(include_age_groups)]
+
+    # merge in HMD population in place of CDC population
+    # HMD population has more dynamic population data and
+    # adjusts older age groups to be more accurate than CDC population data
+    labels = [o["value"] for o in age_group_options if o["value"] != "Not Stated"]
+    bins = [
+        0 if v.startswith("<") else int(v.split("-")[0].split("+")[0].split()[0])
+        for v in labels
+    ] + [np.inf]
+
+    hmd_grouped = (
+        hmd_df.assign(
+            age_groups=pd.cut(hmd_df["age"], bins=bins, labels=labels, right=False)
+        )
+        .groupby(["year", "age_groups"], observed=True, as_index=False)[
+            "total_population"
+        ]
+        .sum()
+    )
+    hmd_grouped["age_groups"] = hmd_grouped["age_groups"].astype(str)
+    cod_all = cod_all.merge(
+        hmd_grouped,
+        on=["year", "age_groups"],
+        how="left",
+        validate="many_to_one",
+    )
+    cod_all["population"] = cod_all.pop("total_population").combine_first(
+        cod_all["population"]
+    )
 
     # map category_col and add every combo of [year, age_groups, category_col]
     cod_all = cdc.map_reference(
@@ -1403,6 +1478,13 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
     cod_all["population"] = cod_all.groupby(["year", "age_groups"])[
         "population"
     ].transform("first")
+
+    # update population for provision years using trend
+    pop_df = cod_all.groupby(["year", "age_groups"])["population"].first().reset_index()
+    pop_df = _trend_population(pop_df=pop_df, group_col="age_groups")
+    cod_all = cod_all.drop(columns="population").merge(
+        pop_df, on=["year", "age_groups"], how="left"
+    )
 
     # normalize the partial deaths
     cod_all["deaths"] = cod_all["deaths"].astype(float)
@@ -1443,7 +1525,8 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
 
     # train the data based on year and the category using linear regression
     train_df = cod_all[
-        (cod_all["year"] >= TRAIN_START_YEAR) & (cod_all["year"] <= TRAIN_END_YEAR)
+        (cod_all["year"] >= DEATH_TRAIN_START_YEAR)
+        & (cod_all["year"] <= DEATH_TRAIN_END_YEAR)
     ]
     train_df = (
         train_df.groupby(["year", CATEGORY_COL])[["crude_adj"]].sum().reset_index()
@@ -1453,7 +1536,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
     models = {}
     for cod in train_df[CATEGORY_COL].unique():
         cod_subset = train_df[train_df[CATEGORY_COL] == cod]
-        X = (cod_subset["year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
+        X = (cod_subset["year"] - DEATH_TRAIN_START_YEAR).values.reshape(-1, 1)
         y = cod_subset["crude_adj"].values
         model = LinearRegression().fit(X, y)
         models[cod] = {
@@ -1463,7 +1546,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
         }
 
     # make the predictions
-    test_df = cod_all[(cod_all["year"] >= TRAIN_START_YEAR)]
+    test_df = cod_all[(cod_all["year"] >= DEATH_TRAIN_START_YEAR)]
     test_df = (
         test_df.groupby(["year", CATEGORY_COL])[["crude_adj", "deaths", "population"]]
         .sum()
@@ -1472,7 +1555,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
 
     for cod, model in models.items():
         mask = test_df[CATEGORY_COL] == cod
-        X = (test_df.loc[mask, "year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
+        X = (test_df.loc[mask, "year"] - DEATH_TRAIN_START_YEAR).values.reshape(-1, 1)
         test_df.loc[mask, "predictions"] = model["model"].predict(X)
 
     test_df["diff_pct"] = (test_df["crude_adj"] - test_df["predictions"]) / test_df[
@@ -1644,11 +1727,13 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
 
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+    hmd_db_filepath = helpers.FILES_PATH / "integrations" / "hmd" / "hmd.sql"
 
     # get the data
     try:
         mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
         mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
+        hmd_df = hmd.get_hmd_data_sql(db_filepath=hmd_db_filepath, table_name="hmd")
     except Exception as e:
         logger.error(f"Failed to load table: {e}")
         return dash.no_update, dash.no_update, True, f"Failed to load data: {e}"
@@ -1696,63 +1781,53 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
 
     # group by year and mapped age
     excess_grouped = (
-        excess.groupby(["year", "mapped_age"], observed=True)
+        excess.groupby(["year", "mapped_age", "age_groups"], observed=True)
         .sum(numeric_only=True)
         .reset_index()
     )
-    excess_grouped = excess_grouped[(excess_grouped["year"] >= TRAIN_START_YEAR)]
     max_year = excess_grouped["year"].max()
-    base_year = max_year - 2
+
+    # merge in HMD population in place of CDC population
+    # HMD population has more dynamic population data and
+    # adjusts older age groups to be more accurate than CDC population data
+    labels = [o["value"] for o in age_group_options if o["value"] != "Not Stated"]
+    bins = [
+        0 if v.startswith("<") else int(v.split("-")[0].split("+")[0].split()[0])
+        for v in labels
+    ] + [np.inf]
+
+    hmd_grouped = (
+        hmd_df.assign(
+            age_groups=pd.cut(hmd_df["age"], bins=bins, labels=labels, right=False)
+        )
+        .groupby(["year", "age_groups"], observed=True, as_index=False)[
+            "total_population"
+        ]
+        .sum()
+    )
+    hmd_grouped["age_groups"] = hmd_grouped["age_groups"].astype(str)
+    excess_grouped = excess_grouped.merge(
+        hmd_grouped,
+        on=["year", "age_groups"],
+        how="left",
+        validate="many_to_one",
+    )
+    excess_grouped["population"] = excess_grouped.pop("total_population").combine_first(
+        excess_grouped["population"]
+    )
 
     # update population for provision years using trend
-    train_df = excess_grouped[
-        (excess_grouped["year"] >= TRAIN_START_YEAR)
-        & (excess_grouped["year"] <= TRAIN_END_YEAR)
-    ]
-    train_df = (
-        train_df.groupby(["year", "mapped_age"])["population"].sum().reset_index()
-    )
-
-    # create the linear age models
-    models = {}
-    for age in train_df["mapped_age"].unique():
-        age_subset = train_df[train_df["mapped_age"] == age]
-        X = (age_subset["year"] - TRAIN_START_YEAR).values.reshape(-1, 1)
-        y = age_subset["population"].values
-        model = LinearRegression().fit(X, y)
-        models[age] = {
-            "model": model,
-            "coef": model.coef_[0],
-            "intercept": model.intercept_,
-        }
-    bases = (
-        excess_grouped[excess_grouped["year"] == base_year]
-        .set_index("mapped_age")["population"]
-        .to_dict()
-    )
-    coefs = {age: m["coef"] / m["intercept"] for age, m in models.items()}
-
-    # update population for provision years
-    for year in [base_year + 1, base_year + 2]:
-        mask = excess_grouped["year"] == year
-        for age in excess_grouped.loc[mask, "mapped_age"].unique():
-            coef = coefs.get(age, 0)
-            base = bases.get(age, 0)
-            idx = (excess_grouped["year"] == year) & (
-                excess_grouped["mapped_age"] == age
-            )
-            excess_grouped.loc[idx, "population"] = (1 + coef) ** (
-                year - base_year
-            ) * base
+    excess_grouped = _trend_population(pop_df=excess_grouped, group_col="mapped_age")
+    excess_grouped = excess_grouped[(excess_grouped["year"] >= DEATH_TRAIN_START_YEAR)]
 
     # calculate qx_raw
     excess_grouped["qx_raw"] = excess_grouped["deaths"] / excess_grouped["population"]
-    forecast_years = max_year - TRAIN_END_YEAR
+    forecast_years = max_year - DEATH_TRAIN_END_YEAR
 
     # model using Lee-Carter
     train_df = excess_grouped[
-        (excess_grouped["year"] >= TRAIN_START_YEAR)
-        & (excess_grouped["year"] <= TRAIN_END_YEAR)
+        (excess_grouped["year"] >= DEATH_TRAIN_START_YEAR)
+        & (excess_grouped["year"] <= DEATH_TRAIN_END_YEAR)
     ]
     model = core.LeeCarter(
         age_col="mapped_age",
@@ -2285,6 +2360,72 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
 #  | |_ | | | | '_ \ / __| __| |/ _ \| '_ \/ __|
 #  |  _|| |_| | | | | (__| |_| | (_) | | | \__ \
 #  |_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
+
+
+def _trend_population(pop_df: pd.DataFrame, group_col: str) -> pd.DataFrame:
+    """
+    Extrapolate population for the provisional years using a linear trend.
+
+    Population stats have a ~2-year lag, so the last 2 years are replaced by
+    the base year (max year - 2) population grown at the trended rate fit on
+    POP_TRAIN_START_YEAR-POP_TRAIN_END_YEAR for each group.
+
+    Parameters
+    ----------
+    pop_df : pd.DataFrame
+        DataFrame with "year", group_col, and "population" columns, with one
+        row per year and group.
+    group_col : str
+        The column to fit a separate population trend for (e.g. age group).
+
+    Returns
+    -------
+    pop_df : pd.DataFrame
+        DataFrame with the population updated for the provisional years.
+
+    """
+    pop_df = pop_df.copy()
+    max_year = pop_df["year"].max()
+    base_year = max_year - 2
+
+    # train the population trend
+    train_df = pop_df[
+        (pop_df["year"] >= POP_TRAIN_START_YEAR)
+        & (pop_df["year"] <= POP_TRAIN_END_YEAR)
+    ]
+    train_df = (
+        train_df.groupby(["year", group_col], observed=True)["population"]
+        .sum()
+        .reset_index()
+    )
+
+    # create the linear group models
+    models = {}
+    for group in train_df[group_col].unique():
+        group_subset = train_df[train_df[group_col] == group]
+        X = (group_subset["year"] - POP_TRAIN_START_YEAR).values.reshape(-1, 1)
+        y = group_subset["population"].values
+        model = LinearRegression().fit(X, y)
+        models[group] = {
+            "model": model,
+            "coef": model.coef_[0],
+            "intercept": model.intercept_,
+        }
+    bases = (
+        pop_df[pop_df["year"] == base_year].set_index(group_col)["population"].to_dict()
+    )
+    coefs = {group: m["coef"] / m["intercept"] for group, m in models.items()}
+
+    # update population for provision years
+    for year in [base_year + 1, base_year + 2]:
+        mask = pop_df["year"] == year
+        for group in pop_df.loc[mask, group_col].unique():
+            coef = coefs.get(group, 0)
+            base = bases.get(group, 0)
+            idx = mask & (pop_df[group_col] == group)
+            pop_df.loc[idx, "population"] = (1 + coef) ** (year - base_year) * base
+
+    return pop_df
 
 
 def refresh_cdc_data() -> None:

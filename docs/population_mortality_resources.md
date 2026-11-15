@@ -51,7 +51,8 @@ The Human Mortality Database is a collaborative project between University of Ca
 - Mortality Data is provided by NCHS
 - For the years 1933–1969, deaths in the HMD cover both residents and nonresidents (i.e., the de facto population), and for the period starting in 1970, they only cover residents.
 - Based on 50 states and District of Columbia. Nonresidents (e.g. nonresident aliens, nationals living abroad, residents of Puerto Rico, Guam, the Virgin Islands, and other territories of the U.S.) and fetal deaths are excluded.
-- The population estimates are U.S. Census Bureau estimates of U.S. national, state, and county resident populations.
+- The population estimates are U.S. Census Bureau estimates of U.S. national, state, and county resident populations. After age 80 the database does
+use 2 other techniques to better estimate the population including survivor-ratio and extinct cohorts (https://www.mortality.org/File/GetDocument/Public/Docs/MethodsProtocolV6.pdf)
 
 ---
 

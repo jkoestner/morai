@@ -179,6 +179,8 @@ ignore = [
     "G004",
     # ignore f-string in logging statement
     "ISC001",
+    #ignore implicit string concatenation
+    "ISC004",
     # ruff too many branches and too many statements
     "PLR0912",
     "PLR0913",
