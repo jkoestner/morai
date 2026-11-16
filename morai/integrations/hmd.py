@@ -291,7 +291,7 @@ def get_last_updated(table_name: str | None = None) -> dict:
     # query the table
     query = f"SELECT MAX(last_modified_death) as data_through FROM {table_name}"
     try:
-        result = sql.read_sql(db_filepath, query)
+        result = sql.read_sql(db_filepath, query, parse_dates=["data_through"])
     except Exception:
         logger.error(
             f"Error querying table `{table_name}` for last updated date: {db_filepath}"

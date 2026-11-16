@@ -316,7 +316,7 @@ def layout():
                                                 "HMD Data Through: ",
                                             ),
                                             html.Span(
-                                                hmd_meta["data_through"],
+                                                hmd_meta["data_through"].date(),
                                                 id="hmd-data-through-text",
                                             ),
                                         ],
@@ -1587,6 +1587,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
             df=test_df[test_df[CATEGORY_COL] == option_value],
             x_axis="year",
             rates=["crude_adj", "predictions"],
+            secondary="population",
             display=True,
         )
         tab_content = html.Div([dcc.Graph(figure=cdc_cod_trends_chart)])
@@ -1889,6 +1890,7 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
             result,
             x_axis="year",
             rates=["crude_rt", "crude_rt_lc"],
+            secondary="population",
         )
         tab_content = html.Div([dcc.Graph(figure=chart)])
     # chart pct
@@ -2447,7 +2449,7 @@ def _trend_population(
         }
     bases = (
         pop_df[pop_df["year"] == base_year]
-        .groupby("mapped_age")["population"]
+        .groupby(group_col)["population"]
         .sum()
         .to_dict()
     )
@@ -2459,7 +2461,7 @@ def _trend_population(
             idx = (
                 (pop_df["age_groups"] != "Not Stated")
                 & (pop_df["year"] == year)
-                & (pop_df["mapped_age"] == age)
+                & (pop_df[group_col] == age)
             )
             pop_df.loc[idx, "population"] = (1 + coefs.get(age, 0)) ** (
                 year - base_year
