@@ -19,6 +19,7 @@ import dash_extensions.enrich as dash
 import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, ServersideOutputTransform, dcc, html
 
+from morai import __version__
 from morai.dashboard.components import common_build
 from morai.utils import custom_logger
 
@@ -104,6 +105,11 @@ navbar = dbc.Navbar(
                                 href="https://github.com/jkoestner/morai",
                                 target="_blank",
                                 className="ms-2",
+                            ),
+                            html.Span(
+                                f"v{__version__}",
+                                title="morai version",
+                                className="ms-2 small text-white-50",
                             ),
                         ],
                         style={

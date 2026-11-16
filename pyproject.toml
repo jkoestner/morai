@@ -50,6 +50,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "isort>=9.0.2",
     "jupyter-resource-usage>=1.2.0",
     "jupyterlab-code-formatter>=3.0.3",
     "mypy>=1.19.1",

@@ -193,14 +193,21 @@ def layout():
                                                     ),
                                                 ],
                                             ),
-                                            "Population data sourced from ",
-                                            html.A(
-                                                "https://www.mortality.org/",
-                                                href="https://www.mortality.org/Country/Country?cntr=USA",
-                                                target="_blank",
+                                            "Population data sourced from:",
+                                            html.Br(),
+                                            html.Ul(
+                                                [
+                                                    html.Li(
+                                                        [
+                                                            html.A(
+                                                                "USA Exposures (HMD)",
+                                                                href="https://www.mortality.org/Country/Country?cntr=USA",
+                                                                target="_blank",
+                                                            ),
+                                                        ]
+                                                    ),
+                                                ],
                                             ),
-                                            html.Br(),
-                                            html.Br(),
                                             "CDC Reference workbook: ",
                                             html.Ul(
                                                 [
@@ -1436,7 +1443,7 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
             age_groups=pd.cut(hmd_df["age"], bins=bins, labels=labels, right=False)
         )
         .groupby(["year", "age_groups"], observed=True, as_index=False)[
-            "total_population"
+            "total_exposure"
         ]
         .sum()
     )
@@ -1447,9 +1454,10 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
         how="left",
         validate="many_to_one",
     )
-    cod_all["population"] = cod_all.pop("total_population").combine_first(
+    cod_all["population"] = cod_all.pop("total_exposure").combine_first(
         cod_all["population"]
     )
+    cod_all.loc[(cod_all["age_groups"] == "Not Stated"), "population"] = np.nan
 
     # map category_col and add every combo of [year, age_groups, category_col]
     cod_all = cdc.map_reference(
@@ -1481,7 +1489,12 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
 
     # update population for provision years using trend
     pop_df = cod_all.groupby(["year", "age_groups"])["population"].first().reset_index()
-    pop_df = _trend_population(pop_df=pop_df, group_col="age_groups")
+    pop_df = _trend_population(
+        pop_df=pop_df,
+        group_col="age_groups",
+        train_start_year=POP_TRAIN_START_YEAR,
+        train_end_year=POP_TRAIN_END_YEAR,
+    )
     cod_all = cod_all.drop(columns="population").merge(
         pop_df, on=["year", "age_groups"], how="left"
     )
@@ -1801,7 +1814,7 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
             age_groups=pd.cut(hmd_df["age"], bins=bins, labels=labels, right=False)
         )
         .groupby(["year", "age_groups"], observed=True, as_index=False)[
-            "total_population"
+            "total_exposure"
         ]
         .sum()
     )
@@ -1812,12 +1825,20 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
         how="left",
         validate="many_to_one",
     )
-    excess_grouped["population"] = excess_grouped.pop("total_population").combine_first(
+    excess_grouped["population"] = excess_grouped.pop("total_exposure").combine_first(
         excess_grouped["population"]
+    )
+    excess_grouped.loc[(excess_grouped["age_groups"] == "Not Stated"), "population"] = (
+        np.nan
     )
 
     # update population for provision years using trend
-    excess_grouped = _trend_population(pop_df=excess_grouped, group_col="mapped_age")
+    excess_grouped = _trend_population(
+        pop_df=excess_grouped,
+        group_col="mapped_age",
+        train_start_year=POP_TRAIN_START_YEAR,
+        train_end_year=POP_TRAIN_END_YEAR,
+    )
     excess_grouped = excess_grouped[(excess_grouped["year"] >= DEATH_TRAIN_START_YEAR)]
 
     # calculate qx_raw
@@ -2362,13 +2383,19 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
 #  |_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
 
 
-def _trend_population(pop_df: pd.DataFrame, group_col: str) -> pd.DataFrame:
+def _trend_population(
+    pop_df: pd.DataFrame,
+    group_col: str,
+    train_start_year: int,
+    train_end_year: int,
+) -> pd.DataFrame:
     """
     Extrapolate population for the provisional years using a linear trend.
 
-    Population stats have a ~2-year lag, so the last 2 years are replaced by
-    the base year (max year - 2) population grown at the trended rate fit on
-    POP_TRAIN_START_YEAR-POP_TRAIN_END_YEAR for each group.
+    Population stats have a lag, so every year after `train_end_year` through
+    the current (max) year is replaced by the `train_end_year` population grown
+    at the trended rate fit on train_start_year-train_end_year for each group.
+    The number of forecast years is current year - train_end_year.
 
     Parameters
     ----------
@@ -2377,6 +2404,11 @@ def _trend_population(pop_df: pd.DataFrame, group_col: str) -> pd.DataFrame:
         row per year and group.
     group_col : str
         The column to fit a separate population trend for (e.g. age group).
+    train_start_year : int
+        The first year (inclusive) used to fit the population trend.
+    train_end_year : int
+        The last year (inclusive) used to fit the population trend. This is
+        also the base year the trend is projected from.
 
     Returns
     -------
@@ -2386,12 +2418,14 @@ def _trend_population(pop_df: pd.DataFrame, group_col: str) -> pd.DataFrame:
     """
     pop_df = pop_df.copy()
     max_year = pop_df["year"].max()
-    base_year = max_year - 2
+    forecast_years = max_year - train_end_year
+    base_year = max_year - forecast_years
 
     # train the population trend
     train_df = pop_df[
-        (pop_df["year"] >= POP_TRAIN_START_YEAR)
-        & (pop_df["year"] <= POP_TRAIN_END_YEAR)
+        (pop_df["age_groups"] != "Not Stated")
+        & (pop_df["year"] >= train_start_year)
+        & (pop_df["year"] <= train_end_year)
     ]
     train_df = (
         train_df.groupby(["year", group_col], observed=True)["population"]
@@ -2403,7 +2437,7 @@ def _trend_population(pop_df: pd.DataFrame, group_col: str) -> pd.DataFrame:
     models = {}
     for group in train_df[group_col].unique():
         group_subset = train_df[train_df[group_col] == group]
-        X = (group_subset["year"] - POP_TRAIN_START_YEAR).values.reshape(-1, 1)
+        X = (group_subset["year"] - train_start_year).values.reshape(-1, 1)
         y = group_subset["population"].values
         model = LinearRegression().fit(X, y)
         models[group] = {
@@ -2412,18 +2446,24 @@ def _trend_population(pop_df: pd.DataFrame, group_col: str) -> pd.DataFrame:
             "intercept": model.intercept_,
         }
     bases = (
-        pop_df[pop_df["year"] == base_year].set_index(group_col)["population"].to_dict()
+        pop_df[pop_df["year"] == base_year]
+        .groupby("mapped_age")["population"]
+        .sum()
+        .to_dict()
     )
     coefs = {group: m["coef"] / m["intercept"] for group, m in models.items()}
 
-    # update population for provision years
+    # prediction
     for year in [base_year + 1, base_year + 2]:
-        mask = pop_df["year"] == year
-        for group in pop_df.loc[mask, group_col].unique():
-            coef = coefs.get(group, 0)
-            base = bases.get(group, 0)
-            idx = mask & (pop_df[group_col] == group)
-            pop_df.loc[idx, "population"] = (1 + coef) ** (year - base_year) * base
+        for age, base in bases.items():
+            idx = (
+                (pop_df["age_groups"] != "Not Stated")
+                & (pop_df["year"] == year)
+                & (pop_df["mapped_age"] == age)
+            )
+            pop_df.loc[idx, "population"] = (1 + coefs.get(age, 0)) ** (
+                year - base_year
+            ) * base
 
     return pop_df
 
