@@ -151,7 +151,7 @@ def test_relative_risk_reference_by() -> None:
     )
     assert (
         round(
-            test_lf[(test_df["year"] == 2020) & (test_df["lob"] == "UL")][
+            test_lf[(test_lf["year"] == 2020) & (test_lf["lob"] == "UL")][
                 "relative_risk"
             ].iloc[0],
             3,
@@ -207,7 +207,7 @@ def test_relative_risk_subset() -> None:
     )
     assert (
         round(
-            test_lf[(test_df["year"] == 2020) & (test_df["lob"] == "UL")][
+            test_lf[(test_lf["year"] == 2020) & (test_lf["lob"] == "UL")][
                 "relative_risk"
             ].iloc[0],
             3,
