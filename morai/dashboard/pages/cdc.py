@@ -56,7 +56,7 @@ FILTER_MONTHLY_PREFIX = "cdc-monthly"
 # the 99 dataset ends in 2020 and the 18 dataset starts in 2018
 NEW_DATASET_START_YEAR = 2021
 # training years for the death trend (cod linear baseline and Lee-Carter)
-DEATH_TRAIN_START_YEAR = 2010
+DEATH_TRAIN_START_YEAR = 2015
 DEATH_TRAIN_END_YEAR = 2019
 # training years for the population trend used to fill the ~2-year population lag
 POP_TRAIN_START_YEAR = 2023
