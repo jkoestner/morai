@@ -2053,50 +2053,93 @@ def get_stats(df: pd.DataFrame | pl.LazyFrame, features: list) -> pd.DataFrame:
     Returns
     -------
     stats : pd.DataFrame
-        DataFrame containing summary statistics
+        DataFrame containing summary statistics, one row per numeric feature.
+        Non-numeric features are dropped. Percentages use the total row count
+        (including nulls) as the denominator, and quantiles use linear
+        interpolation, so pandas and polars inputs give identical output.
 
     """
-    # check if lazy
-    is_lazy = isinstance(df, pl.LazyFrame)
+    quantiles = {"25%": 0.25, "50%": 0.5, "75%": 0.75}
+    stat_order = [
+        "count",
+        "sum",
+        "null_count",
+        "null_pct",
+        "zero_count",
+        "zero_pct",
+        "mean",
+        "std",
+        "min",
+        *quantiles,
+        "max",
+    ]
 
-    if is_lazy:
-        stats = df.select(features).describe().to_pandas()
-        stats = stats.set_index("statistic")
-        stats = stats.astype(float)
-        # get numeric features
+    if isinstance(df, pl.LazyFrame):
         schema = df.collect_schema()
         num_features = [
-            feature
-            for feature in features
-            if schema[feature] in pl.datatypes.group.NUMERIC_DTYPES
+            f for f in features if schema[f] in pl.datatypes.group.NUMERIC_DTYPES
         ]
-        # add additional statistics (null and zero counts)
-        stats.loc["null_pct"] = (
-            stats.loc["null_count"] / stats.loc["count"] * 100
-        ).round(2)
-        exprs = []
-        for num_feature in num_features:
-            exprs.extend([pl.col(num_feature).eq(0).sum().alias(num_feature)])
-        zero_counts = df.select(exprs).collect().to_pandas().iloc[0].to_dict()
-        stats.loc["zero_count"] = pd.Series(zero_counts)
-        stats.loc["zero_pct"] = (
-            stats.loc["zero_count"] / stats.loc["count"] * 100
-        ).round(2)
+        exprs = [pl.len().alias("__n_rows")]
+        for f in num_features:
+            col = pl.col(f)
+            exprs.extend(
+                [
+                    col.count().alias(f"{f}__count"),
+                    col.null_count().alias(f"{f}__null_count"),
+                    col.eq(0).sum().alias(f"{f}__zero_count"),
+                    col.sum().alias(f"{f}__sum"),
+                    col.mean().alias(f"{f}__mean"),
+                    col.std().alias(f"{f}__std"),
+                    col.min().alias(f"{f}__min"),
+                    col.max().alias(f"{f}__max"),
+                    *[
+                        col.quantile(q, interpolation="linear").alias(f"{f}__{name}")
+                        for name, q in quantiles.items()
+                    ],
+                ]
+            )
+        row = df.select(exprs).collect().row(0, named=True)
+        n_rows = row["__n_rows"]
+        stats = pd.DataFrame(
+            {
+                f: {
+                    stat: row[f"{f}__{stat}"]
+                    for stat in stat_order
+                    if stat not in ("null_pct", "zero_pct")
+                }
+                for f in num_features
+            },
+            index=[s for s in stat_order if s not in ("null_pct", "zero_pct")],
+        ).transpose()
 
     else:  # pandas
-        df_stats = df[features]
-        stats = df_stats.describe()
-        # add additional statistics
-        stats.loc["null_count"] = df_stats.isnull().sum()
-        stats.loc["null_pct"] = (df_stats.isnull().sum() / len(df_stats) * 100).round(2)
-        stats.loc["zero_pct"] = (df_stats == 0).sum() / len(df_stats) * 100
+        df_stats = df[features].select_dtypes(include="number")
+        n_rows = len(df_stats)
+        stats = pd.DataFrame(
+            {
+                "count": df_stats.count(),
+                "null_count": df_stats.isnull().sum(),
+                "zero_count": (df_stats == 0).sum(),
+                "sum": df_stats.sum(),
+                "mean": df_stats.mean(),
+                "std": df_stats.std(),
+                "min": df_stats.min(),
+                "max": df_stats.max(),
+                **{
+                    name: df_stats.quantile(q, interpolation="linear")
+                    for name, q in quantiles.items()
+                },
+            }
+        )
+
+    # percentages use total rows (including nulls) as the denominator
+    stats = stats.astype(float)
+    stats["null_pct"] = stats["null_count"] / n_rows * 100 if n_rows else float("nan")
+    stats["zero_pct"] = stats["zero_count"] / n_rows * 100 if n_rows else float("nan")
 
     # format
-    stats = stats.transpose()
-    numeric_cols = stats.select_dtypes(include=["float64", "int64"]).columns
-    stats[numeric_cols] = stats[numeric_cols].round(2)
-    stats = stats.reset_index()
-    stats = stats.rename(columns={"index": "feature"})
+    stats = stats[stat_order].round(2)
+    stats = stats.rename_axis("feature").reset_index()
 
     return stats
 
