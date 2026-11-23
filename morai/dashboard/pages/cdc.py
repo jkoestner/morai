@@ -82,7 +82,7 @@ IBNR_FACTORS = {
 }
 PARTIAL_WEEKS_TO_EXCLUDE = 7
 # mi
-ROLLING_MI_YEARS = 10
+ROLLING_MI_YEARS = 5
 
 
 def layout():
@@ -697,6 +697,21 @@ def layout():
                                                                     "type": "filter-str",
                                                                     "prefix": FILTER_POP_TRENDS_PREFIX,
                                                                     "index": "age_groups",
+                                                                },
+                                                                options=[],
+                                                                multi=True,
+                                                                clearable=True,
+                                                                className="ms-2",
+                                                            ),
+                                                            html.Label(
+                                                                "Gender",
+                                                                className="fw-bold mt-3",
+                                                            ),
+                                                            dcc.Dropdown(
+                                                                id={
+                                                                    "type": "filter-str",
+                                                                    "prefix": FILTER_POP_TRENDS_PREFIX,
+                                                                    "index": "gender",
                                                                 },
                                                                 options=[],
                                                                 multi=True,
@@ -1718,6 +1733,14 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
             },
             "options",
         ),
+        Output(
+            {
+                "type": "filter-str",
+                "prefix": FILTER_POP_TRENDS_PREFIX,
+                "index": "gender",
+            },
+            "options",
+        ),
         Output("cdc-toast", "is_open", allow_duplicate=True),
         Output("cdc-toast", "children", allow_duplicate=True),
     ],
@@ -1725,16 +1748,26 @@ def display_cdc_cod_trends(n_clicks, active_tab, option_value, age_group_value):
         Input("button-pop-trends", "n_clicks"),
         Input(f"{FILTER_POP_TRENDS_PREFIX}-tabs", "active_tab"),
     ],
-    State(
-        {
-            "type": "filter-str",
-            "prefix": FILTER_POP_TRENDS_PREFIX,
-            "index": "age_groups",
-        },
-        "value",
-    ),
+    [
+        State(
+            {
+                "type": "filter-str",
+                "prefix": FILTER_POP_TRENDS_PREFIX,
+                "index": "age_groups",
+            },
+            "value",
+        ),
+        State(
+            {
+                "type": "filter-str",
+                "prefix": FILTER_POP_TRENDS_PREFIX,
+                "index": "gender",
+            },
+            "value",
+        ),
+    ],
 )
-def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
+def display_cdc_pop_trends(n_clicks, active_tab, age_group_value, gender_value):
     """Create cdc pop trends."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
@@ -1764,24 +1797,29 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
     )
     excess = excess.rename(columns={"value": "mapped_age"})
 
-    # get age group options
+    # get group options
     age_group_options = [
         {"label": str(v), "value": v}
         for v in excess.loc[excess["mapped_age"].notna(), "age_groups"]
         .dropna()
         .unique()
     ]
+    gender_options = list(excess["gender"].dropna().unique())
 
     # filter the age groups
     include_age_groups = age_group_value if age_group_value else cdc.AGE_GROUP_ORDER
     excess = excess[excess["age_groups"].isin(include_age_groups)]
+
+    # filter the genders
+    include_genders = gender_value if gender_value else gender_options
+    excess = excess[excess["gender"].isin(include_genders)]
     if excess.empty:
-        logger.error("No data for the selected age groups.")
+        logger.error("No data for the selected age groups and genders.")
         return (
             dash.no_update,
             age_group_options,
             True,
-            "No data for the selected age groups.",
+            "No data for the selected age groups and genders.",
         )
 
     # normalize the partial deaths
@@ -1793,9 +1831,9 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
     mask = excess["year"] == data_through.year
     excess.loc[mask, "deaths"] *= factor_parial_year
 
-    # group by year and mapped age
+    # group by year, mapped age, and gender
     excess_grouped = (
-        excess.groupby(["year", "mapped_age", "age_groups"], observed=True)
+        excess.groupby(["year", "mapped_age", "age_groups", "gender"], observed=True)
         .sum(numeric_only=True)
         .reset_index()
     )
@@ -1815,18 +1853,25 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
             age_groups=pd.cut(hmd_df["age"], bins=bins, labels=labels, right=False)
         )
         .groupby(["year", "age_groups"], observed=True, as_index=False)[
-            "total_exposure"
+            ["female_exposure", "male_exposure"]
         ]
         .sum()
+        .rename(columns={"female_exposure": "Female", "male_exposure": "Male"})
+        .melt(
+            id_vars=["year", "age_groups"],
+            value_vars=["Female", "Male"],
+            var_name="gender",
+            value_name="hmd_exposure",
+        )
     )
     hmd_grouped["age_groups"] = hmd_grouped["age_groups"].astype(str)
     excess_grouped = excess_grouped.merge(
         hmd_grouped,
-        on=["year", "age_groups"],
+        on=["year", "age_groups", "gender"],
         how="left",
         validate="many_to_one",
     )
-    excess_grouped["population"] = excess_grouped.pop("total_exposure").combine_first(
+    excess_grouped["population"] = excess_grouped.pop("hmd_exposure").combine_first(
         excess_grouped["population"]
     )
     excess_grouped.loc[(excess_grouped["age_groups"] == "Not Stated"), "population"] = (
@@ -1836,7 +1881,7 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
     # update population for provision years using trend
     excess_grouped = _trend_population(
         pop_df=excess_grouped,
-        group_col="mapped_age",
+        group_col=["mapped_age", "gender"],
         train_start_year=POP_TRAIN_START_YEAR,
         train_end_year=POP_TRAIN_END_YEAR,
     )
@@ -1846,30 +1891,35 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
     excess_grouped["qx_raw"] = excess_grouped["deaths"] / excess_grouped["population"]
     forecast_years = max_year - DEATH_TRAIN_END_YEAR
 
-    # model using Lee-Carter
+    # model using Lee-Carter, fit separately for each gender
     train_df = excess_grouped[
         (excess_grouped["year"] >= DEATH_TRAIN_START_YEAR)
         & (excess_grouped["year"] <= DEATH_TRAIN_END_YEAR)
     ]
-    model = core.LeeCarter(
-        age_col="mapped_age",
-        year_col="year",
-        actual_col="deaths",
-        expose_col="population",
-        interval=1,
-    )
-    fit_df = model.structure_df(train_df)
-    fit_df = model.fit(fit_df)
+    gender_forecasts = []
+    for gender, gender_train_df in train_df.groupby("gender"):
+        model = core.LeeCarter(
+            age_col="mapped_age",
+            year_col="year",
+            actual_col="deaths",
+            expose_col="population",
+            interval=1,
+        )
+        fit_df = model.structure_df(gender_train_df)
+        fit_df = model.fit(fit_df)
 
-    # forecast
-    forecast_df = model.forecast(years=forecast_years)
-    forecast_df = pd.concat(
-        [fit_df[["year", "mapped_age", "qx_lc"]], forecast_df], axis=0
-    ).reset_index()
+        # forecast
+        gender_forecast_df = model.forecast(years=forecast_years)
+        gender_forecast_df = pd.concat(
+            [fit_df[["year", "mapped_age", "qx_lc"]], gender_forecast_df], axis=0
+        )
+        gender_forecast_df["gender"] = gender
+        gender_forecasts.append(gender_forecast_df)
+    forecast_df = pd.concat(gender_forecasts, axis=0, ignore_index=True)
     excess_grouped = pd.merge(
         excess_grouped,
-        forecast_df[["mapped_age", "year", "qx_lc"]],
-        on=["mapped_age", "year"],
+        forecast_df[["mapped_age", "gender", "year", "qx_lc"]],
+        on=["mapped_age", "gender", "year"],
         how="left",
     )
     excess_grouped["deaths_lc"] = excess_grouped["population"] * excess_grouped["qx_lc"]
@@ -1920,7 +1970,7 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value):
     else:
         tab_content = dash.no_update
 
-    return tab_content, age_group_options, False, ""
+    return tab_content, age_group_options, gender_options, False, ""
 
 
 @callback(
@@ -2387,7 +2437,7 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
 
 def _trend_population(
     pop_df: pd.DataFrame,
-    group_col: str,
+    group_col: str | list,
     train_start_year: int,
     train_end_year: int,
 ) -> pd.DataFrame:
@@ -2404,8 +2454,9 @@ def _trend_population(
     pop_df : pd.DataFrame
         DataFrame with "year", group_col, and "population" columns, with one
         row per year and group.
-    group_col : str
-        The column to fit a separate population trend for (e.g. age group).
+    group_col : str | list
+        The column(s) to fit a separate population trend for
+        (e.g. "age group", or ["mapped_age", "gender"]).
     train_start_year : int
         The first year (inclusive) used to fit the population trend.
     train_end_year : int
@@ -2419,6 +2470,7 @@ def _trend_population(
 
     """
     pop_df = pop_df.copy()
+    group_cols = [group_col] if isinstance(group_col, str) else list(group_col)
     max_year = pop_df["year"].max()
     forecast_years = max_year - train_end_year
     base_year = max_year - forecast_years
@@ -2430,15 +2482,14 @@ def _trend_population(
         & (pop_df["year"] <= train_end_year)
     ]
     train_df = (
-        train_df.groupby(["year", group_col], observed=True)["population"]
+        train_df.groupby(["year", *group_cols], observed=True)["population"]
         .sum()
         .reset_index()
     )
 
     # create the linear group models
     models = {}
-    for group in train_df[group_col].unique():
-        group_subset = train_df[train_df[group_col] == group]
+    for group, group_subset in train_df.groupby(group_cols, observed=True):
         X = (group_subset["year"] - train_start_year).values.reshape(-1, 1)
         y = group_subset["population"].values
         model = LinearRegression().fit(X, y)
@@ -2449,7 +2500,7 @@ def _trend_population(
         }
     bases = (
         pop_df[pop_df["year"] == base_year]
-        .groupby(group_col)["population"]
+        .groupby(group_cols, observed=True)["population"]
         .sum()
         .to_dict()
     )
@@ -2457,13 +2508,12 @@ def _trend_population(
 
     # prediction
     for year in [base_year + 1, base_year + 2]:
-        for age, base in bases.items():
-            idx = (
-                (pop_df["age_groups"] != "Not Stated")
-                & (pop_df["year"] == year)
-                & (pop_df[group_col] == age)
-            )
-            pop_df.loc[idx, "population"] = (1 + coefs.get(age, 0)) ** (
+        for group, base in bases.items():
+            group_key = group if isinstance(group, tuple) else (group,)
+            idx = (pop_df["age_groups"] != "Not Stated") & (pop_df["year"] == year)
+            for col, val in zip(group_cols, group_key, strict=True):
+                idx &= pop_df[col] == val
+            pop_df.loc[idx, "population"] = (1 + coefs.get(group, 0)) ** (
                 year - base_year
             ) * base
 
