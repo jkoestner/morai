@@ -3,6 +3,7 @@
 import shutil
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pandas as pd
 
 from morai.integrations import cdc
@@ -179,13 +180,24 @@ def test_calc_mi():
     df = pd.DataFrame(test_data)
 
     # calculate mortality improvement
-    mi_df = cdc.calc_mi(df=df)
+    mi_df = cdc.calc_mi(df=df, rolling=5)
 
     # test calculations
     mi_2019 = mi_df.loc[mi_df["year"] == 2019, "crude_adj"].iloc[0]
     mi_2018 = mi_df.loc[mi_df["year"] == 2018, "crude_adj"].iloc[0]
+    mi_2014 = mi_df.loc[mi_df["year"] == 2014, "crude_adj"].iloc[0]
+
+    # 1-year
     mi_1_year = 1 - (mi_2019 / mi_2018)
-    mi_10_year = mi_df["1_year_mi_pct"].rolling(window=10).mean().iloc[-1]
+    # geometric
+    mi_5_year_geo = 1 - (mi_2019 / mi_2014) ** (1 / 5)
+    # log-linear
+    mi_df_5_year = mi_df.loc[mi_df["year"] >= 2014, ["year", "crude_adj"]]
+    slope = np.polyfit(mi_df_5_year["year"], np.log(mi_df_5_year["crude_adj"]), deg=1)[
+        0
+    ]
+    mi_5_year = 1 - np.exp(slope)
+
     assert isinstance(mi_df, pd.DataFrame)
     assert all(
         col in mi_df.columns
@@ -194,12 +206,14 @@ def test_calc_mi():
             "crude_adj",
             "deaths",
             "1_year_mi_pct",
-            "10_year_mi_pct",
+            "5_year_geo_mi_pct",
+            "5_year_mi_pct",
             "whl_3_pct",
         ]
     )
     assert mi_df["1_year_mi_pct"].iloc[-1] == mi_1_year
-    assert mi_df["10_year_mi_pct"].iloc[-1] == mi_10_year
+    assert mi_df["5_year_geo_mi_pct"].iloc[-1] == mi_5_year_geo
+    assert np.isclose(mi_df["5_year_mi_pct"].iloc[-1], mi_5_year, rtol=1e-5)
 
 
 def test_compare_df():

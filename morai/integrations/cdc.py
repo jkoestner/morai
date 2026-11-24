@@ -28,6 +28,7 @@ from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -365,19 +366,31 @@ def map_reference(
     return df
 
 
-def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
+def calc_mi(
+    df: pd.DataFrame, rolling: int = 10, options: list | None = None
+) -> pd.DataFrame:
     """
-    Calulate the crude mortality improvment using a standardized population.
+    Calculate the crude mortality improvement using a standardized population.
 
-    The dataframe will create a "1_year_mi" column and also an average mi column based
-    on the rolling parameter.
+    The dataframe will create mi on a 1 year lookback and {rolling} lookback
+    with different options. The rolling window is inclusive of the current year.
+    For example, `rolling=5` for observation year 2025 uses the period
+    2020-2025 (6 data points / 5 years of change).
+      - "loglin": log-linear regression
+      - "whl": whittaker-henderson-lowrie graduation
+      - "geo": geometric (multiplicative) mortality improvement
 
     Parameters
     ----------
     df : pd.DataFrame
         Dataframe that contains the deaths and the population by time period.
     rolling : int, optional
-        The rolling average time period.
+        The rolling time period.
+    options: list, optional
+        The options for the mortality improvement calculation.
+        - "loglin": log-linear regression
+        - "whl": whittaker-henderson-lowrie graduation
+        - "geo": geometric (multiplicative) mortality improvement
 
     Returns
     -------
@@ -385,12 +398,22 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
         DataFrame object.
 
     """
+    # validations
     # check if the columns exist
     columns_needed = ["year", "age_groups", "deaths", "population"]
     if not all(col in df.columns for col in columns_needed):
         logger.error(f"Columns not found: {columns_needed}")
         return None
 
+    # check rolling parameter
+    if rolling < 2:
+        logger.error("The rolling parameter must be >= 2")
+        return None
+
+    if options is None:
+        options = ["loglin", "whl", "geo"]
+
+    # start calculation
     logger.info(
         "calculating mortality improvement by using a `2000 age adjusted` crude "
         "mortality rate"
@@ -436,16 +459,31 @@ def calc_mi(df: pd.DataFrame, rolling: int = 10) -> pd.DataFrame:
             mi_df_age["crude_adj"] / mi_df_age["crude_adj"].shift(1)
         )
 
-        # rolling average MI
-        mi_df_age[f"{rolling}_year_mi_pct"] = (
-            mi_df_age["1_year_mi_pct"].rolling(window=rolling).mean()
-        )
+        if "geo" in options:
+            # geometric (multiplicative) MI
+            n_years = mi_df_age["year"] - mi_df_age["year"].shift(rolling)
+            mi_df_age[f"{rolling}_year_geo_mi_pct"] = 1 - (
+                mi_df_age["crude_adj"] / mi_df_age["crude_adj"].shift(rolling)
+            ) ** (1 / n_years)
 
-        # whittaker-henderson-lowrie (whl)
-        mi_df_age = mi_df_age[mi_df_age["1_year_mi_pct"].notna()]
-        mi_df_age["whl_3_pct"] = graduation.whl(
-            rates=mi_df_age["1_year_mi_pct"], horizontal_order=3, horizontal_lambda=400
-        )
+        if "loglin" in options:
+            # log-linear MI
+            log_rate = np.log(mi_df_age["crude_adj"])
+            year = mi_df_age["year"].astype(float)
+            window = rolling + 1
+            slope = log_rate.rolling(window).cov(year) / year.rolling(window).var()
+            mi_df_age[f"{rolling}_year_mi_pct"] = 1 - np.exp(slope)
+
+        if "whl" in options:
+            # whittaker-henderson-lowrie (whl)
+            log_rate = np.log(mi_df_age["crude_adj"])
+            smooth_log = graduation.whl(
+                rates=log_rate,
+                horizontal_order=3,
+                horizontal_lambda=400,
+            )
+            smooth_log = pd.Series(np.asarray(smooth_log), index=mi_df_age.index)
+            mi_df_age["whl_3_pct"] = 1 - np.exp(smooth_log.diff())
 
         mi_df_list.append(mi_df_age)
     mi_df = pd.concat(mi_df_list, ignore_index=True)

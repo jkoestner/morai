@@ -187,7 +187,11 @@ def whl(
         size: int, order: int, expo_rate: float = 0, axis: int = 0
     ) -> spmatrix:
         """
-        Build the difference matrix for a given order and exponential rate.
+        Build the Lowrie difference matrix: Δ^k - r * Δ^(k-1).
+
+        Uses Δ^k - r Δ^(k-1) = Δ^(k-1) (E - (1 + r)), so the coefficients are
+        the same for every difference. With r = 0 this is the ordinary kth
+        difference.
 
         Parameters
         ----------
@@ -196,7 +200,7 @@ def whl(
         order : int
             The order of differencing.
         expo_rate : float, optional
-            The exponential rate parameter (default is 0).
+            The growth rate r, where (1 + r) is the base of the exponential.
         axis : int, optional
             The axis along which to build the difference matrix (default is 0).
 
@@ -209,52 +213,38 @@ def whl(
         if order == 0:
             raise ValueError("Order must be greater than 0.")
 
-        # initialize
-        data: list[float] = []
-        row_indices: list[int] = []
-        col_indices: list[int] = []
-        indices_list: list[np.ndarray] = []
+        # coefficients on y_i ... y_{i+order}, ascending
+        base = np.array(
+            [(-1) ** (order - 1 - k) * comb(order - 1, k) for k in range(order)],
+            dtype=float,
+        )
+        coeffs = np.convolve(base, [-(1 + expo_rate), 1.0])
 
-        # 1 dimension
+        # index sets for each difference
         if rates.ndim == 1:
-            num_diffs = size - order
-            indices_list = [np.arange(i, i + order + 1) for i in range(num_diffs)]
-        # 2 dimension (horizontal)
-        elif axis == 0:
-            num_diffs = (cols - order) * rows
-            for i in range(rows):
-                for j in range(cols - order):
-                    base_idx = i * cols + j
-                    indices_list.append(base_idx + np.arange(order + 1))
-        # 2 dimension (vertical)
-        else:
-            num_diffs = (rows - order) * cols
-            indices_list = []
-            for i in range(rows - order):
-                for j in range(cols):
-                    base_idx = i * cols + j
-                    indices_list.append(
-                        base_idx + np.arange(0, (order + 1) * cols, cols)
-                    )
+            indices_list = [np.arange(i, i + order + 1) for i in range(size - order)]
+        elif axis == 0:  # horizontal: step 1 within a row
+            indices_list = [
+                i * cols + j + np.arange(order + 1)
+                for i in range(rows)
+                for j in range(cols - order)
+            ]
+        else:  # vertical: step cols down a column
+            indices_list = [
+                i * cols + j + np.arange(order + 1) * cols
+                for i in range(rows - order)
+                for j in range(cols)
+            ]
 
-        # compute expo factors
-        if expo_rate != 0:
-            exp_factors = np.exp(expo_rate * np.arange(size))
-        else:
-            exp_factors = np.ones(size)
-
-        # build the difference matrix
-        for idx, indices in enumerate(indices_list):
-            coeffs = np.array([(-1) ** k * comb(order, k) for k in range(order + 1)])
-            if expo_rate != 0:
-                coeffs *= exp_factors[indices]
-            row_indices.extend([idx] * (order + 1))
-            col_indices.extend(indices)
-            data.extend(coeffs)
+        n_diffs = len(indices_list)
+        row_indices = np.repeat(np.arange(n_diffs), order + 1)
+        col_indices = np.concatenate(indices_list) if n_diffs else np.array([], int)
+        data = np.tile(coeffs, n_diffs)
 
         diff_matrix = csr_matrix(
-            (data, (row_indices, col_indices)), shape=(len(indices_list), size)
+            (data, (row_indices, col_indices)), shape=(n_diffs, size)
         )
+
         return diff_matrix
 
     # difference matrices

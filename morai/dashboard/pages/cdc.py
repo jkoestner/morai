@@ -82,7 +82,7 @@ IBNR_FACTORS = {
 }
 PARTIAL_WEEKS_TO_EXCLUDE = 7
 # mi
-ROLLING_MI_YEARS = 5
+ROLLING_MI_YEARS = 10  # default for the rolling MI years filter
 
 
 def layout():
@@ -981,9 +981,25 @@ def layout():
                                                     className="bg-light",
                                                 ),
                                                 dbc.CardBody(
-                                                    html.Div(
-                                                        id=f"{FILTER_MI_PREFIX}-filters",
-                                                    ),
+                                                    [
+                                                        html.Label(
+                                                            "Rolling MI Years",
+                                                            className="fw-bold",
+                                                        ),
+                                                        dbc.Input(
+                                                            id=f"{FILTER_MI_PREFIX}-rolling-years",
+                                                            type="number",
+                                                            min=1,
+                                                            step=1,
+                                                            value=ROLLING_MI_YEARS,
+                                                            debounce=True,
+                                                            className="ms-2 mb-3",
+                                                            style={"width": "6rem"},
+                                                        ),
+                                                        html.Div(
+                                                            id=f"{FILTER_MI_PREFIX}-filters",
+                                                        ),
+                                                    ]
                                                 ),
                                             ],
                                             className="shadow-sm h-100",
@@ -1843,28 +1859,7 @@ def display_cdc_pop_trends(n_clicks, active_tab, age_group_value, gender_value):
     # HMD population has more dynamic population data and
     # adjusts older age groups to be more accurate than CDC population data
     labels = [o["value"] for o in age_group_options if o["value"] != "Not Stated"]
-    bins = [
-        0 if v.startswith("<") else int(v.split("-")[0].split("+")[0].split()[0])
-        for v in labels
-    ] + [np.inf]
-
-    hmd_grouped = (
-        hmd_df.assign(
-            age_groups=pd.cut(hmd_df["age"], bins=bins, labels=labels, right=False)
-        )
-        .groupby(["year", "age_groups"], observed=True, as_index=False)[
-            ["female_exposure", "male_exposure"]
-        ]
-        .sum()
-        .rename(columns={"female_exposure": "Female", "male_exposure": "Male"})
-        .melt(
-            id_vars=["year", "age_groups"],
-            value_vars=["Female", "Male"],
-            var_name="gender",
-            value_name="hmd_exposure",
-        )
-    )
-    hmd_grouped["age_groups"] = hmd_grouped["age_groups"].astype(str)
+    hmd_grouped = _hmd_exposure_by_age_gender(hmd_df=hmd_df, age_groups=labels)
     excess_grouped = excess_grouped.merge(
         hmd_grouped,
         on=["year", "age_groups", "gender"],
@@ -2314,6 +2309,7 @@ def display_cdc_weekly(n_clicks, active_tab):
     [
         Input("button-mi", "n_clicks"),
         Input(f"{FILTER_MI_PREFIX}-tabs", "active_tab"),
+        Input(f"{FILTER_MI_PREFIX}-rolling-years", "value"),
     ],
     [
         State(
@@ -2324,13 +2320,24 @@ def display_cdc_weekly(n_clicks, active_tab):
         ),
     ],
 )
-def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters):
+def display_cdc_mi(
+    n_clicks, active_tab, rolling_years, cdc_mi_str_filters, cdc_mi_num_filters
+):
     """Create cdc mi."""
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
 
+    # rolling years for the average mi (fall back to default if blank/invalid)
+    try:
+        rolling_years = int(rolling_years)
+    except (TypeError, ValueError):
+        rolling_years = ROLLING_MI_YEARS
+    if rolling_years < 1:
+        rolling_years = ROLLING_MI_YEARS
+
     # initialize
     db_filepath = helpers.FILES_PATH / "integrations" / "cdc" / "cdc.sql"
+    hmd_db_filepath = helpers.FILES_PATH / "integrations" / "hmd" / "hmd.sql"
     states_info = dh._inputs_flatten_list(callback_context.states_list)
 
     # get the data
@@ -2338,6 +2345,7 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
         mcd79_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd79_mi")
         mcd99_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd99_mi")
         mcd18_mi = cdc.get_cdc_data_sql(db_filepath=db_filepath, table_name="mcd18_mi")
+        hmd_df = hmd.get_hmd_data_sql(db_filepath=hmd_db_filepath, table_name="hmd")
     except Exception as e:
         logger.error(f"Failed to load table: {e}")
         return dash.no_update, dash.no_update, True, f"Failed to load data: {e}"
@@ -2355,6 +2363,35 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
     )
     mi = mi.drop("age_groups", axis=1)
     mi = mi.rename(columns={"value": "age_groups"})
+
+    # collapse to the remapped age groups (e.g. 5-9 and 10-14 -> 5-14) so each
+    # year / age group / gender has a single row before merging HMD exposure
+    mi = mi.groupby(["year", "age_groups", "gender"], as_index=False)[
+        ["deaths", "population"]
+    ].sum()
+
+    # merge in HMD exposure in place of CDC population
+    # HMD population has more dynamic population data and
+    # adjusts older age groups to be more accurate than CDC population data
+    labels = [v for v in mi["age_groups"].unique() if v != "Not Stated"]
+    hmd_grouped = _hmd_exposure_by_age_gender(hmd_df=hmd_df, age_groups=labels)
+    mi = mi.merge(
+        hmd_grouped,
+        on=["year", "age_groups", "gender"],
+        how="left",
+        validate="one_to_one",
+    )
+    mi["population"] = mi.pop("hmd_exposure").combine_first(mi["population"])
+    mi.loc[(mi["age_groups"] == "Not Stated"), "population"] = np.nan
+
+    # update population for provisional years using trend
+    mi = _trend_population(
+        pop_df=mi,
+        group_col=["age_groups", "gender"],
+        train_start_year=POP_TRAIN_START_YEAR,
+        train_end_year=POP_TRAIN_END_YEAR,
+    )
+
     mi["age_groups"] = pd.Categorical(
         mi["age_groups"], categories=cdc.AGE_GROUP_ORDER, ordered=True
     )
@@ -2366,7 +2403,7 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
 
     # filter the data
     filtered_mi = dh.filter_data(df=mi, callback_context=states_info)
-    mi_df = cdc.calc_mi(df=filtered_mi, rolling=ROLLING_MI_YEARS)
+    mi_df = cdc.calc_mi(df=filtered_mi, rolling=rolling_years)
 
     # chart
     if active_tab == f"{FILTER_MI_PREFIX}-tab-mi-year-chart":
@@ -2374,7 +2411,7 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
         cdc_mi_chart = charters.compare_rates(
             df=mi_df,
             x_axis="year",
-            rates=["1_year_mi_pct", f"{ROLLING_MI_YEARS}_year_mi_pct", "whl_3_pct"],
+            rates=["1_year_mi_pct", f"{rolling_years}_year_mi_pct", "whl_3_pct"],
         )
         tab_content = html.Div([dcc.Graph(figure=cdc_mi_chart)])
     # table
@@ -2400,7 +2437,7 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
         cdc_mi_chart = charters.compare_rates(
             df=mi_df[mi_df["year"] == mi_df["year"].max()],
             x_axis="age_groups_order",
-            rates=["1_year_mi_pct", f"{ROLLING_MI_YEARS}_year_mi_pct", "whl_3_pct"],
+            rates=["1_year_mi_pct", f"{rolling_years}_year_mi_pct", "whl_3_pct"],
         )
         tab_content = html.Div([dcc.Graph(figure=cdc_mi_chart)])
     else:
@@ -2433,6 +2470,62 @@ def display_cdc_mi(n_clicks, active_tab, cdc_mi_str_filters, cdc_mi_num_filters)
 #  | |_ | | | | '_ \ / __| __| |/ _ \| '_ \/ __|
 #  |  _|| |_| | | | | (__| |_| | (_) | | | \__ \
 #  |_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
+
+
+def _hmd_exposure_by_age_gender(
+    hmd_df: pd.DataFrame,
+    age_groups: list[str],
+) -> pd.DataFrame:
+    """
+    Aggregate HMD single-age exposure into CDC age groups by gender.
+
+    Parameters
+    ----------
+    hmd_df : pd.DataFrame
+        HMD DataFrame with "year", "age", "female_exposure", and
+        "male_exposure" columns.
+    age_groups : list[str]
+        CDC age group labels (e.g. "< 1 year", "1-4 years", "85+ years"),
+        excluding "Not Stated". The lower bound of each label is used as the
+        bin edge, so the labels must be contiguous.
+
+    Returns
+    -------
+    hmd_grouped : pd.DataFrame
+        DataFrame with "year", "age_groups", "gender" ("Female" / "Male"),
+        and "hmd_exposure" columns.
+
+    """
+    lower_bounds = [
+        0 if v.startswith("<") else int(v.split("-")[0].split("+")[0].split()[0])
+        for v in age_groups
+    ]
+    order = np.argsort(lower_bounds)
+    labels = [age_groups[i] for i in order]
+    bins = [lower_bounds[i] for i in order] + [np.inf]
+
+    hmd_grouped = (
+        hmd_df.assign(
+            age_groups=pd.cut(hmd_df["age"], bins=bins, labels=labels, right=False)
+        )
+        .groupby(["year", "age_groups"], observed=True, as_index=False)[
+            ["female_exposure", "male_exposure"]
+        ]
+        .sum()
+        .rename(columns={"female_exposure": "Female", "male_exposure": "Male"})
+        .melt(
+            id_vars=["year", "age_groups"],
+            value_vars=["Female", "Male"],
+            var_name="gender",
+            value_name="hmd_exposure",
+        )
+    )
+    hmd_grouped["age_groups"] = hmd_grouped["age_groups"].astype(str)
+
+    # HMD stores exposure as 0 for years without exposure yet (e.g. latest year)
+    hmd_grouped["hmd_exposure"] = hmd_grouped["hmd_exposure"].replace(0, np.nan)
+
+    return hmd_grouped
 
 
 def _trend_population(
